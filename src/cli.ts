@@ -7,6 +7,7 @@ import { loops } from './commands/loops.ts';
 import { note } from './commands/note.ts';
 import { reopen } from './commands/reopen.ts';
 import { show } from './commands/show.ts';
+import { sync } from './commands/sync.ts';
 import { ensureHome, loadConfig, resolveHome } from './config.ts';
 import { UserError } from './errors.ts';
 import type { CommandModule, Ctx } from './types.ts';
@@ -18,6 +19,7 @@ export type Io = {
 
 /** Dispatch table; each command module registers itself here. */
 export const COMMANDS: Record<string, CommandModule<unknown>> = {
+  sync,
   add,
   done,
   reopen,

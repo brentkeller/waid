@@ -164,6 +164,39 @@ export type GitClient = {
   isRepo: (dir: string) => boolean;
 };
 
+/**
+ * A pull request reduced to the fields waid renders. `gh`'s JSON carries far more and is narrowed
+ * into this shape rather than trusted, so a schema change upstream cannot reach the renderers.
+ */
+export type GhPr = {
+  number: number;
+  /** `owner/repo` — the form the signal key embeds. */
+  repository: string;
+  title: string;
+  /** Login of the PR author. */
+  author: string;
+  /**
+   * `gh search prs` exposes no review decision, so draft state is the closest thing to a review
+   * state it can report; a richer state would cost a per-PR API call.
+   */
+  isDraft: boolean;
+  state: string;
+  createdAt: string;
+  url: string;
+};
+
+/**
+ * The two account-wide GitHub queries detection needs, declared as an interface so tests inject a
+ * fake. Unlike `GitClient`, these methods may throw — `fetchGh` is what turns a failure into an
+ * unavailable result.
+ */
+export type GhClient = {
+  /** Open PRs waiting on my review. */
+  reviewRequested: () => GhPr[];
+  /** Open PRs I authored. */
+  authored: () => GhPr[];
+};
+
 /** A project and the items belonging to it, as the grouped commands render them. */
 export type ProjectGroup = {
   project: string | null;

@@ -6,6 +6,7 @@ import { list } from './commands/list.ts';
 import { loops } from './commands/loops.ts';
 import { note } from './commands/note.ts';
 import { reopen } from './commands/reopen.ts';
+import { scan } from './commands/scan.ts';
 import { show } from './commands/show.ts';
 import { sync } from './commands/sync.ts';
 import { today } from './commands/today.ts';
@@ -13,16 +14,19 @@ import { week } from './commands/week.ts';
 import { ensureHome, loadConfig, resolveHome } from './config.ts';
 import { UserError } from './errors.ts';
 import { cacheAgeMinutes, loadSessions, syncSessions } from './sessions.ts';
-import type { CachedSession, CommandModule, Config, Ctx } from './types.ts';
+import type { CachedSession, CommandModule, Config, Ctx, GhClient, GitClient } from './types.ts';
 
 export type Io = {
   out: (text: string) => void;
   err: (text: string) => void;
 };
 
-/** Injectable collaborators. Tests replace the sync; production runs with the defaults. */
+/** Injectable collaborators. Tests replace these; production runs with the defaults. */
 export type Deps = {
   syncSessions?: (cfg: Config, opts: { now: Date }) => { sessions: CachedSession[] };
+  /** Detection seams, forwarded onto `ctx` so commands never reach for a module directly. */
+  git?: GitClient;
+  gh?: GhClient;
 };
 
 /** How stale `cache/sessions.json` may be before a read command refreshes it. */
@@ -39,6 +43,7 @@ export const COMMANDS: Record<string, CommandModule<unknown>> = {
   note,
   list,
   loops,
+  scan,
   show,
   doctor,
 };
@@ -63,7 +68,16 @@ export async function run(argv: string[], io: Io = defaultIo, deps: Deps = {}): 
     const mod = COMMANDS[command];
     if (mod === undefined) throw new UserError(`unknown command: ${command}`);
 
-    const ctx: Ctx = { cfg, flags, args, cwd: process.cwd(), now: new Date(), notes: [] };
+    const ctx: Ctx = {
+      cfg,
+      flags,
+      args,
+      cwd: process.cwd(),
+      now: new Date(),
+      notes: [],
+      git: deps.git,
+      gh: deps.gh,
+    };
     if (mod.needsSessions === true) attachSessions(ctx, deps);
 
     const data = await mod.run(ctx);

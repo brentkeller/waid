@@ -256,6 +256,9 @@ export type Ctx = {
   now: Date;
   /** Harvested sessions, attached by the CLI for commands declaring `needsSessions`. */
   sessions?: CachedSession[];
+  /** Detection seams. Absent in production, where detection falls back to the real clients. */
+  git?: GitClient;
+  gh?: GhClient;
   /**
    * Non-fatal degradations noticed before dispatch, such as a failed implicit sync. The CLI renders
    * these itself, so a command only reads them when it wants them inside its own `--json` payload.

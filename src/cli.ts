@@ -1,4 +1,5 @@
 import { parseArgv } from './args.ts';
+import { add } from './commands/add.ts';
 import { ensureHome, loadConfig, resolveHome } from './config.ts';
 import { UserError } from './errors.ts';
 import type { CommandModule, Ctx } from './types.ts';
@@ -9,7 +10,7 @@ export type Io = {
 };
 
 /** Dispatch table; each command module registers itself here. */
-export const COMMANDS: Record<string, CommandModule<unknown>> = {};
+export const COMMANDS: Record<string, CommandModule<unknown>> = { add };
 
 /** Entry point: returns the process exit code. */
 export async function run(argv: string[], io: Io = defaultIo): Promise<number> {

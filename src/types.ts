@@ -153,7 +153,8 @@ export type Ctx = {
  */
 export type CommandModule<D> = {
   run: (ctx: Ctx) => Promise<D>;
-  render: (data: D, ctx: Ctx) => string;
+  /** Method syntax on purpose: bivariant parameters let the dispatch table erase `D` to `unknown`. */
+  render(data: D, ctx: Ctx): string;
   /** Set when the command needs `ctx.sessions` populated. */
   needsSessions?: boolean;
 };

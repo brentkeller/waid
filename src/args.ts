@@ -71,6 +71,19 @@ export function parseArgv(argv: string[]): ParsedArgv {
   return { command, args, flags };
 }
 
+/** Reads a flag that carries a single value, ignoring the boolean and repeated forms. */
+export function stringFlag(flags: Flags, name: string): string | undefined {
+  const value = flags[name];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/** Reads a repeatable flag as a list, tolerating the single-value form. */
+export function listFlag(flags: Flags, name: string): string[] {
+  const value = flags[name];
+  if (Array.isArray(value)) return value;
+  return typeof value === 'string' ? [value] : [];
+}
+
 function expand(name: string): string {
   return ALIASES[name] ?? name;
 }

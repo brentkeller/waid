@@ -35,7 +35,7 @@ Measured on 2026-08-14, and the numbers drove several decisions:
 | Local branches, all repos | 297 | Same. |
 | Repos with commits in last 30 days | 10 | The activity gate reduces ~360 raw signals to a usable handful. |
 | `gh` CLI | authed as `brentkeller` | GitHub signals are available without extra setup. |
-| Node | v24.11.0 | Target runtime; stdlib only. |
+| Node | v24.11.0 | Target runtime; runs TypeScript natively via type stripping, stdlib only. |
 
 ### Harvestable fields in a transcript
 
@@ -256,6 +256,28 @@ Since keys embed PR numbers and branch names, a dismissal is naturally scoped: d
 Installed globally by `npm link` from `C:\dev\waid`, exposing `waid`. Node stdlib only — no
 runtime dependencies.
 
+### Language
+
+TypeScript, run directly by Node 24's native type stripping. No build step, no bundler, no
+`dist/`: `node src/cli.ts` and `waid` both execute the sources as written. Verified on v24.11.0,
+including a `.ts` file as the `bin` entry resolved through `npm link`.
+
+Type stripping erases annotations without checking them, so correctness still needs `tsc --noEmit`.
+That puts `typescript` (plus `@types/node` if node's types don't resolve without it) in
+`devDependencies` — the shipped CLI still has **zero runtime dependencies**. The constraints it
+imposes:
+
+- **Erasable syntax only.** No `enum`, `namespace`, parameter properties, or decorators; Node
+  throws `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on any of them. `erasableSyntaxOnly` catches it at
+  typecheck time instead. Const objects with `as const` replace enums.
+- **Real extensions in import specifiers** — `from './config.ts'`, since Node resolves the actual
+  file (`allowImportingTsExtensions`).
+- **Explicit `import type`** for type-only imports, since stripping is per-file and has no type
+  information to infer erasability from (`verbatimModuleSyntax`).
+
+The payoff is that the shared shapes — `Item`, `Event`, `Session`, `Signal`, `Problem`, and the
+command `Ctx` — are enforced by the compiler rather than by prose, across every command module.
+
 ```
 waid sync [--full]                  Rebuild the derived session cache
 waid today [--date YYYY-MM-DD]      Sessions + item activity for a day
@@ -340,7 +362,13 @@ must fail silently and fast — a broken or slow waid must never block a session
 
 ## 7. Testing
 
-`node:test` with `node --test`. No test dependencies.
+`node:test` with bare `node --test`, which globs `*.test.ts` from the working directory and strips
+types the same way the CLI does. No test dependencies, no test runner, no transpile step. (Passing
+an explicit directory — `node --test test/` — does *not* pick up `.ts` files on this Node version;
+the bare form does.)
+
+Typechecking is a separate gate, `tsc --noEmit`, run alongside the tests rather than as part of
+them.
 
 - **Pure functions, unit-tested against fixtures:** the event fold (including malformed lines,
   unknown ids, unknown `ev` values), the transcript parser (missing `ai-title`, sidechain-only

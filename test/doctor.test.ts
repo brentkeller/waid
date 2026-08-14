@@ -6,6 +6,16 @@ import path from 'node:path';
 import type { DoctorResult } from '../src/commands/doctor.ts';
 import { makeHome, waid } from './helpers.ts';
 
+/**
+ * A home with no scan roots, so the repo section costs nothing and never depends on what happens
+ * to be checked out on the machine running the tests.
+ */
+function setup(): string {
+  const home = makeHome();
+  seedConfig(home, { scanRoots: [] });
+  return home;
+}
+
 /** Writes the log directly so line numbers in the report are deterministic. */
 function seedLog(home: string, lines: string[]): void {
   fs.writeFileSync(path.join(home, 'events.jsonl'), `${lines.join('\n')}\n`);
@@ -22,7 +32,7 @@ async function doctor(home: string): Promise<DoctorResult> {
 }
 
 test('a clean home reports ok with zero problems', async () => {
-  const home = makeHome();
+  const home = setup();
 
   const data = await doctor(home);
   assert.equal(data.ok, true);
@@ -37,7 +47,7 @@ test('a clean home reports ok with zero problems', async () => {
 });
 
 test('a home with items counts lines and items without reporting problems', async () => {
-  const home = makeHome();
+  const home = setup();
   seedLog(home, [
     JSON.stringify({ ts: '2026-08-10T09:00:00.000Z', ev: 'add', id: 'k3f9', title: 'One' }),
     JSON.stringify({ ts: '2026-08-11T09:00:00.000Z', ev: 'add', id: 'm7qz', title: 'Two' }),
@@ -52,7 +62,7 @@ test('a home with items counts lines and items without reporting problems', asyn
 });
 
 test('an unparseable line and an unknown-id event are reported with line numbers, exit 0', async () => {
-  const home = makeHome();
+  const home = setup();
   seedLog(home, [
     JSON.stringify({ ts: '2026-08-10T09:00:00.000Z', ev: 'add', id: 'k3f9', title: 'One' }),
     '{ not json at all',
@@ -73,8 +83,8 @@ test('an unparseable line and an unknown-id event are reported with line numbers
 });
 
 test('unknown config keys are listed and drop ok', async () => {
-  const home = makeHome();
-  seedConfig(home, { scanRoots: ['C:\\dev'], scanDepth: 4, ghUsr: 'someone' });
+  const home = setup();
+  seedConfig(home, { scanRoots: [], scanDepth: 4, ghUsr: 'someone' });
 
   const data = await doctor(home);
   assert.deepEqual(data.config.unknownKeys, ['scanDepth', 'ghUsr']);
@@ -83,8 +93,8 @@ test('unknown config keys are listed and drop ok', async () => {
 });
 
 test('gh reports unavailable when detection is skipped', async () => {
-  const home = makeHome();
-  seedConfig(home, { ghUser: 'brentkeller' });
+  const home = setup();
+  seedConfig(home, { scanRoots: [], ghUser: 'brentkeller' });
 
   const data = await doctor(home);
   assert.equal(data.gh.available, false);
@@ -92,7 +102,7 @@ test('gh reports unavailable when detection is skipped', async () => {
 });
 
 test('the session cache degrades to not-built before any sync', async () => {
-  const home = makeHome();
+  const home = setup();
 
   const data = await doctor(home);
   assert.equal(data.cache.sessions.exists, false);
@@ -101,7 +111,7 @@ test('the session cache degrades to not-built before any sync', async () => {
 });
 
 test('doctor mutates nothing', async () => {
-  const home = makeHome();
+  const home = setup();
   const log = [
     JSON.stringify({ ts: '2026-08-10T09:00:00.000Z', ev: 'add', id: 'k3f9', title: 'One' }),
     '{ not json at all',
@@ -120,7 +130,7 @@ test('doctor mutates nothing', async () => {
 });
 
 test('human doctor reports every section and lists problems', async () => {
-  const home = makeHome();
+  const home = setup();
   seedLog(home, [
     JSON.stringify({ ts: '2026-08-10T09:00:00.000Z', ev: 'add', id: 'k3f9', title: 'One' }),
     '{ not json at all',
@@ -136,12 +146,13 @@ test('human doctor reports every section and lists problems', async () => {
   assert.match(result.out, /\n {2}log {2,}/);
   assert.match(result.out, /\n {2}cache {2,}/);
   assert.match(result.out, /\n {2}gh {2,}/);
+  assert.match(result.out, /\n {2}repos {2,}/);
   assert.match(result.out, /PROBLEMS/);
   assert.match(result.out, /line 2 {2,}unparseable/);
 });
 
 test('human doctor on a clean home says it is ok', async () => {
-  const home = makeHome();
+  const home = setup();
 
   const result = await waid(home, ['doctor']);
   assert.equal(result.code, 0, result.err);

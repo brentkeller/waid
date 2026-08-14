@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { Deps } from '../src/cli.ts';
 import type { Item } from '../src/types.ts';
 import { makeHome, waid } from './helpers.ts';
 
@@ -15,6 +16,22 @@ type LoopsResult = {
 
 const DR = 'C:\\dev\\dr\\devresults';
 const WAID = 'C:\\dev\\waid';
+
+/** Detection seams that find nothing, so these tests stay about declared items only. */
+const QUIET: Deps = { gh: { reviewRequested: () => [], authored: () => [] } };
+
+/**
+ * A home with no scan roots, so detection has no repo to look at. `config.json` is written before
+ * the CLI runs, since `ensureHome` never overwrites an existing one.
+ */
+function setup(): string {
+  const dir = makeHome();
+  fs.writeFileSync(
+    path.join(dir, 'config.json'),
+    JSON.stringify({ scanRoots: [], ghUser: 'me' }),
+  );
+  return dir;
+}
 
 /** Writes the log directly so `updated` timestamps — and therefore ordering — are deterministic. */
 function seedLog(home: string, events: Record<string, unknown>[]): void {
@@ -56,7 +73,7 @@ function seed(home: string): void {
 }
 
 async function loops(home: string, argv: string[] = []): Promise<LoopsResult> {
-  const result = await waid(home, ['loops', ...argv, '--json']);
+  const result = await waid(home, ['loops', ...argv, '--no-sync', '--json'], QUIET);
   assert.equal(result.code, 0, result.err);
   return result.json() as LoopsResult;
 }
@@ -66,7 +83,7 @@ function ids(data: LoopsResult): string[] {
 }
 
 test('loops excludes done items', async () => {
-  const home = makeHome();
+  const home = setup();
   seed(home);
 
   const data = await loops(home);
@@ -75,7 +92,7 @@ test('loops excludes done items', async () => {
 });
 
 test('loops keeps waiting items alongside open ones', async () => {
-  const home = makeHome();
+  const home = setup();
   seed(home);
 
   const data = await loops(home);
@@ -88,7 +105,7 @@ test('loops keeps waiting items alongside open ones', async () => {
 });
 
 test('loops groups by project with (no project) last and oldest-updated first', async () => {
-  const home = makeHome();
+  const home = setup();
   seed(home);
 
   const data = await loops(home);
@@ -102,7 +119,7 @@ test('loops groups by project with (no project) last and oldest-updated first', 
 });
 
 test('-p narrows loops to one project', async () => {
-  const home = makeHome();
+  const home = setup();
   seed(home);
 
   const data = await loops(home, ['-p', 'waid']);
@@ -114,7 +131,7 @@ test('-p narrows loops to one project', async () => {
 });
 
 test('loops reserves the detection fields even with nothing detected', async () => {
-  const home = makeHome();
+  const home = setup();
   seed(home);
 
   const data = await loops(home);
@@ -124,30 +141,30 @@ test('loops reserves the detection fields even with nothing detected', async () 
 });
 
 test('an empty state renders a friendly no-open-loops line and exits 0', async () => {
-  const home = makeHome();
+  const home = setup();
 
-  const result = await waid(home, ['loops']);
+  const result = await waid(home, ['loops', '--no-sync'], QUIET);
   assert.equal(result.code, 0, result.err);
   assert.match(result.out, /no open loops/i);
 });
 
 test('a state of only closed items renders no open loops', async () => {
-  const home = makeHome();
+  const home = setup();
   seedLog(home, [
     { ts: '2026-08-10T09:00:00.000Z', ev: 'add', id: 'zz11', title: 'Ship the thing' },
     { ts: '2026-08-11T09:00:00.000Z', ev: 'close', id: 'zz11' },
   ]);
 
-  const result = await waid(home, ['loops']);
+  const result = await waid(home, ['loops', '--no-sync'], QUIET);
   assert.equal(result.code, 0, result.err);
   assert.match(result.out, /no open loops/i);
 });
 
 test('human loops matches the spec layout', async () => {
-  const home = makeHome();
+  const home = setup();
   seed(home);
 
-  const result = await waid(home, ['loops']);
+  const result = await waid(home, ['loops', '--no-sync'], QUIET);
   assert.equal(result.code, 0, result.err);
 
   const lines = result.out.split('\n');

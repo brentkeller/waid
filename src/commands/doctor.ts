@@ -2,8 +2,12 @@ import fs from 'node:fs';
 
 import { DEFAULTS, detectGhUser } from '../config.ts';
 import { pad, relTime } from '../format.ts';
+import { ghCacheAgeMinutes } from '../gh.ts';
+import { realGitClient } from '../git.ts';
+import { activeRepos, discoverRepos } from '../repos.ts';
+import { loadSessions } from '../sessions.ts';
 import { loadState, readEventLines } from '../store.ts';
-import type { CommandModule, Ctx, Problem } from '../types.ts';
+import type { Config, CommandModule, Ctx, Problem } from '../types.ts';
 
 export type DoctorResult = {
   home: string;
@@ -26,11 +30,21 @@ export type DoctorResult = {
       syncedAt: string | null;
       ageMinutes: number | null;
     };
+    gh: {
+      /** Null when `cache/gh.json` is absent, unreadable, or carries an unusable timestamp. */
+      ageMinutes: number | null;
+    };
   };
   gh: {
     available: boolean;
     /** The detected login, falling back to the configured one when `gh` cannot be reached. */
     user: string | null;
+  };
+  /** What detection has to work with: the repos found under the scan roots, and how many are live. */
+  repos: {
+    roots: string[];
+    discovered: number;
+    active: number;
   };
   /** False when something needs attention; the command still exits 0, since this is a report. */
   ok: boolean;
@@ -54,10 +68,28 @@ async function run(ctx: Ctx): Promise<DoctorResult> {
       items: state.items.length,
       problems: state.problems,
     },
-    cache: { sessions: inspectSessionsCache(cfg.sessionsCachePath, ctx.now) },
+    cache: {
+      sessions: inspectSessionsCache(cfg.sessionsCachePath, ctx.now),
+      gh: { ageMinutes: ghCacheAgeMinutes(cfg, ctx.now) },
+    },
     gh: { available: detected !== null, user: detected ?? cfg.ghUser },
+    repos: inspectRepos(ctx),
     ok: config.valid && config.unknownKeys.length === 0 && state.problems.length === 0,
   };
+}
+
+/**
+ * Counts what detection would see. The sessions are read from the cache rather than synced, since
+ * syncing here would make the freshness this same report prints meaningless.
+ */
+function inspectRepos(ctx: Ctx): DoctorResult['repos'] {
+  const cfg: Config = ctx.cfg;
+  const repos = discoverRepos(cfg);
+  const sessions = loadSessions(cfg).sessions;
+  const git = ctx.git ?? realGitClient();
+  const active = activeRepos(cfg, sessions, { now: ctx.now, git, repos });
+
+  return { roots: cfg.scanRoots, discovered: repos.length, active: active.length };
 }
 
 /** Re-reads `config.json` for the keys `loadConfig` discards, without ever writing to it. */
@@ -108,7 +140,10 @@ function render(data: DoctorResult, ctx: Ctx): string {
   lines.push(field('log', data.log.path));
   lines.push(field('', `${count(data.log.lines, 'line')}, ${count(data.log.items, 'item')}, ${count(data.log.problems.length, 'problem')}`));
   lines.push(field('cache', sessionsSummary(data.cache.sessions, ctx.now)));
+  lines.push(field('', ghCacheSummary(data.cache.gh)));
   lines.push(field('gh', ghSummary(data.gh)));
+  lines.push(field('repos', `${data.repos.discovered} discovered, ${data.repos.active} active`));
+  if (data.repos.roots.length > 0) lines.push(field('', `roots: ${data.repos.roots.join(', ')}`));
 
   if (data.log.problems.length > 0) {
     lines.push('', 'PROBLEMS', '');
@@ -131,6 +166,10 @@ function sessionsSummary(sessions: DoctorResult['cache']['sessions'], now: Date)
   if (!sessions.exists) return 'sessions not built';
   if (sessions.syncedAt === null) return 'sessions built, sync time unknown';
   return `sessions synced ${relTime(sessions.syncedAt, now)}`;
+}
+
+function ghCacheSummary(gh: DoctorResult['cache']['gh']): string {
+  return gh.ageMinutes === null ? 'gh not fetched' : `gh fetched ${gh.ageMinutes}m ago`;
 }
 
 function ghSummary(gh: DoctorResult['gh']): string {

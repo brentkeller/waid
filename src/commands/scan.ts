@@ -43,7 +43,7 @@ async function run(ctx: Ctx): Promise<ScanResult> {
  * The known projects a `-p` partial may match, extended with the repos detection just found. A repo
  * waid has never recorded an item or session against is still a legitimate target for `-p`.
  */
-function signalProjects(signals: readonly Signal[], known: string[]): string[] {
+export function signalProjects(signals: readonly Signal[], known: string[]): string[] {
   const projects = [...known];
   for (const signal of signals) {
     if (signal.project !== null && !projects.includes(signal.project)) projects.push(signal.project);

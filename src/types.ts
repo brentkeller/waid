@@ -203,12 +203,24 @@ export type ProjectGroup = {
   items: Item[];
 };
 
+/** The four things detection can notice, in rank order: a review blocks someone else first. */
+export type SignalKind = 'review' | 'pr' | 'ahead' | 'dirty';
+
 /**
  * A loop found in git or GitHub rather than declared. `key` is the stable identity `dismiss` and
  * `promote` address a signal by — `review:owner/repo#123`, `dirty:<repo>` and so on.
  */
 export type Signal = {
   key: string;
+  kind: SignalKind;
+  /** Human summary, good enough to become an item title when the signal is promoted. */
+  title: string;
+  /** The line rendered beside the key: state, counts, and the age where the spec shows one. */
+  detail: string;
+  /** Absolute repo path the signal belongs to; null when no local repo could be matched. */
+  project: string | null;
+  /** Compact relative age of whatever the signal is timed by — a PR's creation, a repo's HEAD. */
+  age: string;
 };
 
 /** Declared open items grouped by project, with the signals detected alongside them. */

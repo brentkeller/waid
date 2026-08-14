@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import type { Deps } from '../src/cli.ts';
 import { run } from '../src/cli.ts';
 
 /** A fresh temp home. Sets `WAID_SKIP_GH_DETECT` so `ensureHome` never shells out to `gh`. */
@@ -19,17 +20,21 @@ export type CliResult = {
 };
 
 /** Runs the CLI in-process against `home`, capturing both streams. */
-export async function waid(home: string, argv: string[]): Promise<CliResult> {
+export async function waid(home: string, argv: string[], deps: Deps = {}): Promise<CliResult> {
   let out = '';
   let err = '';
-  const code = await run(['--waid-home', home, ...argv], {
-    out: (text) => {
-      out += text;
+  const code = await run(
+    ['--waid-home', home, ...argv],
+    {
+      out: (text) => {
+        out += text;
+      },
+      err: (text) => {
+        err += text;
+      },
     },
-    err: (text) => {
-      err += text;
-    },
-  });
+    deps,
+  );
   return {
     code,
     out,

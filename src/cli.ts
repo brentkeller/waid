@@ -10,12 +10,21 @@ import { show } from './commands/show.ts';
 import { sync } from './commands/sync.ts';
 import { ensureHome, loadConfig, resolveHome } from './config.ts';
 import { UserError } from './errors.ts';
-import type { CommandModule, Ctx } from './types.ts';
+import { cacheAgeMinutes, loadSessions, syncSessions } from './sessions.ts';
+import type { CachedSession, CommandModule, Config, Ctx } from './types.ts';
 
 export type Io = {
   out: (text: string) => void;
   err: (text: string) => void;
 };
+
+/** Injectable collaborators. Tests replace the sync; production runs with the defaults. */
+export type Deps = {
+  syncSessions?: (cfg: Config, opts: { now: Date }) => { sessions: CachedSession[] };
+};
+
+/** How stale `cache/sessions.json` may be before a read command refreshes it. */
+export const SYNC_STALE_MINUTES = 5;
 
 /** Dispatch table; each command module registers itself here. */
 export const COMMANDS: Record<string, CommandModule<unknown>> = {
@@ -31,7 +40,7 @@ export const COMMANDS: Record<string, CommandModule<unknown>> = {
 };
 
 /** Entry point: returns the process exit code. */
-export async function run(argv: string[], io: Io = defaultIo): Promise<number> {
+export async function run(argv: string[], io: Io = defaultIo, deps: Deps = {}): Promise<number> {
   let json = false;
   try {
     const { command, args, flags } = parseArgv(argv);
@@ -50,13 +59,17 @@ export async function run(argv: string[], io: Io = defaultIo): Promise<number> {
     const mod = COMMANDS[command];
     if (mod === undefined) throw new UserError(`unknown command: ${command}`);
 
-    const ctx: Ctx = { cfg, flags, args, cwd: process.cwd(), now: new Date() };
+    const ctx: Ctx = { cfg, flags, args, cwd: process.cwd(), now: new Date(), notes: [] };
+    if (mod.needsSessions === true) attachSessions(ctx, deps);
+
     const data = await mod.run(ctx);
 
     if (json) {
       io.out(`${JSON.stringify(data, null, 2)}\n`);
+      // Stdout stays a single JSON document, so degradations are reported alongside it.
+      for (const note of ctx.notes) io.err(`${note}\n`);
     } else {
-      const text = mod.render(data, ctx);
+      const text = compose(mod.render(data, ctx), ctx.notes);
       if (text) io.out(text.endsWith('\n') ? text : `${text}\n`);
     }
     return 0;
@@ -71,6 +84,34 @@ export async function run(argv: string[], io: Io = defaultIo): Promise<number> {
     io.err(json ? jsonLine({ error: message, stack }) : `${stack}\n`);
     return 2;
   }
+}
+
+/**
+ * Fills `ctx.sessions` for a command that asked for them, refreshing the cache first when it is
+ * missing or stale. A sync that fails is not worth failing the command over: the cached sessions
+ * are still useful, so the command runs on them and the reason is noted.
+ */
+function attachSessions(ctx: Ctx, deps: Deps): void {
+  if (ctx.flags['no-sync'] !== true) {
+    const age = cacheAgeMinutes(ctx.cfg, ctx.now);
+    if (age === null || age >= SYNC_STALE_MINUTES) {
+      const sync = deps.syncSessions ?? syncSessions;
+      try {
+        ctx.sessions = sync(ctx.cfg, { now: ctx.now }).sessions;
+        return;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        ctx.notes.push(`session sync failed (${reason}); using the cached sessions`);
+      }
+    }
+  }
+
+  ctx.sessions = loadSessions(ctx.cfg).sessions;
+}
+
+/** Joins rendered output and CLI-level notes into one block, dropping the empty parts. */
+function compose(rendered: string, notes: string[]): string {
+  return [rendered.replace(/\n+$/, ''), ...notes].filter((part) => part !== '').join('\n');
 }
 
 function jsonLine(payload: unknown): string {

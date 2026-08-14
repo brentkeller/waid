@@ -193,7 +193,12 @@ export type Ctx = {
   cwd: string;
   now: Date;
   /** Harvested sessions, attached by the CLI for commands declaring `needsSessions`. */
-  sessions?: unknown[];
+  sessions?: CachedSession[];
+  /**
+   * Non-fatal degradations noticed before dispatch, such as a failed implicit sync. The CLI renders
+   * these itself, so a command only reads them when it wants them inside its own `--json` payload.
+   */
+  notes: string[];
 };
 
 /**

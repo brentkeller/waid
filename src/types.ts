@@ -122,6 +122,30 @@ export type State = {
   problems: Problem[];
 };
 
+/** A project and the items belonging to it, as the grouped commands render them. */
+export type ProjectGroup = {
+  project: string | null;
+  items: Item[];
+};
+
+/**
+ * A loop found in git or GitHub rather than declared. `key` is the stable identity `dismiss` and
+ * `promote` address a signal by — `review:owner/repo#123`, `dirty:<repo>` and so on.
+ */
+export type Signal = {
+  key: string;
+};
+
+/** Declared open items grouped by project, with the signals detected alongside them. */
+export type LoopsResult = {
+  groups: ProjectGroup[];
+  detected: Signal[];
+  /** Signals suppressed because their key was dismissed. */
+  dismissedCount: number;
+  /** Non-fatal degradations — an unavailable `gh`, a failed detection pass — to show beneath. */
+  notes: string[];
+};
+
 /** Parsed command-line flags. Boolean flags are present only when passed. */
 export type Flags = {
   json?: boolean;

@@ -2,6 +2,7 @@ import { parseArgv } from './args.ts';
 import { add } from './commands/add.ts';
 import { done } from './commands/done.ts';
 import { list } from './commands/list.ts';
+import { loops } from './commands/loops.ts';
 import { note } from './commands/note.ts';
 import { reopen } from './commands/reopen.ts';
 import { show } from './commands/show.ts';
@@ -21,6 +22,7 @@ export const COMMANDS: Record<string, CommandModule<unknown>> = {
   reopen,
   note,
   list,
+  loops,
   show,
 };
 

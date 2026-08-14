@@ -1,5 +1,7 @@
 import { UserError } from './errors.ts';
-import type { Item, State } from './types.ts';
+import type { Item, ProjectGroup, State } from './types.ts';
+
+export type { ProjectGroup };
 
 /** A bare filesystem root — `/`, `C:` or `C:\` — where the trailing separator carries meaning. */
 const BARE_ROOT = /^(?:[\\/]+|[A-Za-z]:[\\/]*)$/;
@@ -61,12 +63,6 @@ export function resolveProject(
   }
   throw new UserError(`ambiguous project: ${value}`, { candidates: matches });
 }
-
-/** A project and the items belonging to it, as the grouped commands render them. */
-export type ProjectGroup = {
-  project: string | null;
-  items: Item[];
-};
 
 /**
  * Groups items by project in first-seen order, with the project-less group last. Item order inside

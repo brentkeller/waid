@@ -1,5 +1,5 @@
 import { UserError } from './errors.ts';
-import type { State } from './types.ts';
+import type { Item, State } from './types.ts';
 
 /** A bare filesystem root — `/`, `C:` or `C:\` — where the trailing separator carries meaning. */
 const BARE_ROOT = /^(?:[\\/]+|[A-Za-z]:[\\/]*)$/;
@@ -60,4 +60,33 @@ export function resolveProject(
     throw new UserError(`no known project matches: ${value}`);
   }
   throw new UserError(`ambiguous project: ${value}`, { candidates: matches });
+}
+
+/** A project and the items belonging to it, as the grouped commands render them. */
+export type ProjectGroup = {
+  project: string | null;
+  items: Item[];
+};
+
+/**
+ * Groups items by project in first-seen order, with the project-less group last. Item order inside
+ * each group is the order given.
+ */
+export function groupByProject(items: readonly Item[]): ProjectGroup[] {
+  const groups = new Map<string, ProjectGroup>();
+  const orphans: ProjectGroup = { project: null, items: [] };
+
+  for (const item of items) {
+    if (item.project === null) {
+      orphans.items.push(item);
+      continue;
+    }
+    const group = groups.get(item.project) ?? { project: item.project, items: [] };
+    group.items.push(item);
+    groups.set(item.project, group);
+  }
+
+  const ordered = [...groups.values()];
+  if (orphans.items.length > 0) ordered.push(orphans);
+  return ordered;
 }

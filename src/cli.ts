@@ -8,6 +8,7 @@ import { note } from './commands/note.ts';
 import { reopen } from './commands/reopen.ts';
 import { show } from './commands/show.ts';
 import { sync } from './commands/sync.ts';
+import { today } from './commands/today.ts';
 import { ensureHome, loadConfig, resolveHome } from './config.ts';
 import { UserError } from './errors.ts';
 import { cacheAgeMinutes, loadSessions, syncSessions } from './sessions.ts';
@@ -29,6 +30,7 @@ export const SYNC_STALE_MINUTES = 5;
 /** Dispatch table; each command module registers itself here. */
 export const COMMANDS: Record<string, CommandModule<unknown>> = {
   sync,
+  today,
   add,
   done,
   reopen,

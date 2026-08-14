@@ -1,5 +1,6 @@
 import { parseArgv } from './args.ts';
 import { add } from './commands/add.ts';
+import { doctor } from './commands/doctor.ts';
 import { done } from './commands/done.ts';
 import { list } from './commands/list.ts';
 import { loops } from './commands/loops.ts';
@@ -24,6 +25,7 @@ export const COMMANDS: Record<string, CommandModule<unknown>> = {
   list,
   loops,
   show,
+  doctor,
 };
 
 /** Entry point: returns the process exit code. */

@@ -147,6 +147,23 @@ export type CachedSession = Session & {
   };
 };
 
+/**
+ * The git subprocess surface detection needs, declared as an interface so tests inject a fake with
+ * a compiler-checked shape. No method throws: a failed or absent `git` reads as null / zero / false.
+ */
+export type GitClient = {
+  /** Commit date of HEAD; null when the repo has no commits or is not a repo. */
+  headCommitDate: (repo: string) => Date | null;
+  /** Checked-out branch; null on a detached HEAD or an unborn branch. */
+  currentBranch: (repo: string) => string | null;
+  /** Commits on HEAD that the upstream lacks; null when the branch has no upstream. */
+  aheadCount: (repo: string) => number | null;
+  /** Files reported by `git status --porcelain`, tracked or not. */
+  dirtyFileCount: (repo: string) => number;
+  /** Whether `dir` sits inside a git work tree. */
+  isRepo: (dir: string) => boolean;
+};
+
 /** A project and the items belonging to it, as the grouped commands render them. */
 export type ProjectGroup = {
   project: string | null;

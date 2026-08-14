@@ -1,10 +1,12 @@
 import { parseArgv } from './args.ts';
 import { add } from './commands/add.ts';
+import { dismiss } from './commands/dismiss.ts';
 import { doctor } from './commands/doctor.ts';
 import { done } from './commands/done.ts';
 import { list } from './commands/list.ts';
 import { loops } from './commands/loops.ts';
 import { note } from './commands/note.ts';
+import { promote } from './commands/promote.ts';
 import { reopen } from './commands/reopen.ts';
 import { scan } from './commands/scan.ts';
 import { show } from './commands/show.ts';
@@ -44,6 +46,8 @@ export const COMMANDS: Record<string, CommandModule<unknown>> = {
   list,
   loops,
   scan,
+  promote,
+  dismiss,
   show,
   doctor,
 };

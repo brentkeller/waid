@@ -122,6 +122,31 @@ export type State = {
   problems: Problem[];
 };
 
+/** One Claude Code session, distilled from its transcript file. */
+export type Session = {
+  /** Claude Code session id; the transcript file is named after it. */
+  id: string;
+  title: string;
+  /** Absolute path the session ran in. */
+  project: string | null;
+  branch: string | null;
+  /** ISO timestamp of the first record, including sidechains. */
+  started: string | null;
+  /** ISO timestamp of the last record, including sidechains. */
+  ended: string | null;
+  /** User messages that were neither sidechain nor meta. */
+  prompts: number;
+};
+
+/** A `Session` plus the transcript stat fields that let a sync skip re-reading an unchanged file. */
+export type CachedSession = Session & {
+  _file: {
+    path: string;
+    mtimeMs: number;
+    size: number;
+  };
+};
+
 /** A project and the items belonging to it, as the grouped commands render them. */
 export type ProjectGroup = {
   project: string | null;

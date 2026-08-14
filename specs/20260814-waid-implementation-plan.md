@@ -21,6 +21,7 @@
 - **Import specifiers carry the real extension** — `from './config.ts'`, never `./config` or `./config.js`.
 - **Type-only imports use `import type`** — stripping is per-file and cannot infer erasability.
 - **Test command is bare `node --test`.** Passing an explicit directory does not pick up `.ts` files on this Node version.
+- **Data directory:** `$WAID_HOME` defaults to `C:\data\waid`, which already exists and is a git repo. `ensureHome` must be idempotent against a populated home — it never clobbers an existing `config.json`, `events.jsonl`, `.gitignore`, or `.git` — and `cache/` must end up gitignored.
 - **Writes:** only `$WAID_HOME/events.jsonl`, `config.json`, `.gitignore`, and `cache/*`. Nothing else on the machine is modified.
 - **`events.jsonl` is append-only.** No command ever rewrites or truncates it.
 - **Fold ordering:** file order is authoritative; `ts` is display metadata and is never used for ordering.
@@ -94,12 +95,12 @@ C:\dev\waid\
 - `src/types.ts`: `Config` (every default key plus derived `home`, `configPath`, `eventsPath`, `cacheDir`, `sessionsCachePath`, `ghCachePath`), `Flags`, `Ctx = {cfg, flags, args, cwd, now, sessions}`, `CommandModule<D>`.
 - `UserError(message, opts?: {candidates?: string[] | null})` — the only error class mapping to exit 1.
 - `DEFAULTS: Omit<Config, 'home' | 'configPath' | 'eventsPath' | 'cacheDir' | 'sessionsCachePath' | 'ghCachePath'>`.
-- `resolveHome(override?: string): string` — override, else `WAID_HOME`, else `~/.waid`.
+- `resolveHome(override?: string): string` — override, else `WAID_HOME`, else `C:\data\waid`.
 - `ensureHome(home: string, opts?: {detectUser?: () => string | null}): void` — idempotent first-run init.
 - `loadConfig(home: string): Config`.
 - `detectGhUser(): string | null` — `gh api user -q .login`, swallowing all failure; skipped when `WAID_SKIP_GH_DETECT` is set.
 
-- [ ] **Step 1 — Write the failing tests.** Cover: `resolveHome` precedence across all three sources; `ensureHome` creates `cache/`, `.gitignore` containing `cache/`, an empty `events.jsonl`, and a `config.json` seeded with the detected gh user; `ensureHome` never overwrites an existing `config.json`; `loadConfig` fills missing keys from defaults and derives every path; `loadConfig` throws `UserError` naming `config.json` on invalid JSON.
+- [ ] **Step 1 — Write the failing tests.** Cover: `resolveHome` precedence across all three sources; `ensureHome` creates `cache/`, `.gitignore` containing `cache/`, an empty `events.jsonl`, and a `config.json` seeded with the detected gh user; `ensureHome` never overwrites an existing `config.json`; `loadConfig` fills missing keys from defaults and derives every path; `loadConfig` throws `UserError` naming `config.json` on invalid JSON; `ensureHome` against a pre-existing populated home (a git repo with `config.json`, a non-empty `events.jsonl`, and a `.gitignore`) leaves all of them byte-identical and only adds `cache/` to `.gitignore` if it is missing.
 - [ ] **Step 2 — Run and confirm failure** (`node --test`, module not found).
 - [ ] **Step 3 — Implement** the scaffold, `tsconfig.json`, `src/types.ts`, and `src/config.ts`. `bin/waid.ts` only imports `run` from `src/cli.ts` and sets `process.exitCode` — it holds no logic.
 - [ ] **Step 4 — Run and confirm pass**, then `npm run typecheck` clean.
@@ -435,7 +436,7 @@ Ranked in that order; ties broken by age descending. Keys in the folded `dismiss
 
 **Files:** create `README.md`; test `test/smoke.test.ts`.
 
-**Behaviour:** `npm link` from `C:\dev\waid` exposes `waid`. The README documents install, every command, the config keys, the `WAID_HOME` layout, and the fact that there is no build step — sources run as written.
+**Behaviour:** `npm link` from `C:\dev\waid` exposes `waid`. The README documents install, every command, the config keys, the `WAID_HOME` layout (default `C:\data\waid`, itself a git repo), and the fact that there is no build step — sources run as written.
 
 This task is where the TypeScript decision gets its real proof. `npm link` symlinks the package into the global `node_modules`, and Node refuses to strip types for files that genuinely live under `node_modules` — it works here only because symlink realpath resolution puts the entry back at `C:\dev\waid`. Verified working on v24.11.0 with a `.ts` `bin` entry, but confirm it on the real package rather than assuming.
 
@@ -490,5 +491,5 @@ A scheduled agent that runs `waid week --json` and writes a digest. Deferred unt
 
 ## Open questions carried from the spec
 
-1. **Does `$WAID_HOME` become its own git repo?** Leaning yes, but nothing in this plan depends on it. Decide after Phase 1 is in daily use.
+1. ~~**Does `$WAID_HOME` become its own git repo?**~~ Settled: yes. `C:\data\waid` is the home and is already a git repo, so `ensureHome` treats a populated home as the normal case.
 2. **Does `events.jsonl` ever need compaction?** Not at projected volume. Revisit only if fold time becomes noticeable, and then via a `waid compact` that archives closed items older than N months.

@@ -51,8 +51,11 @@ a shortcut but is never required and is never trusted over the transcript.
 
 ## 1. Storage and configuration
 
-Root directory comes from the `WAID_HOME` environment variable, defaulting to `~/.waid`.
-Whether that directory is a git repo is the user's choice; waid neither requires nor creates one.
+Root directory comes from the `WAID_HOME` environment variable, defaulting to `C:\data\waid`.
+That directory is a git repo, giving the log history and backup for free. waid neither requires nor
+creates one — but first-run init must treat an already-populated home as the normal case: it never
+overwrites an existing `config.json`, `events.jsonl`, or `.gitignore`, and only ensures `cache/` is
+ignored.
 
 ```
 $WAID_HOME/
@@ -395,8 +398,8 @@ Stage 5 is explicitly a nice-to-have follow-up, not part of the initial build.
 
 ## 9. Open questions
 
-1. **Does `$WAID_HOME` become its own git repo?** Leaning yes, for history and backup, but the
-   decision can wait until stage 1 is in use. Nothing in the design depends on it.
+1. ~~**Does `$WAID_HOME` become its own git repo?**~~ Settled: yes. The home is `C:\data\waid`,
+   already a git repo, for history and backup.
 2. **Does `events.jsonl` ever need compaction?** Not at the projected volume. Revisit only if fold
    time becomes noticeable, and only then via a `waid compact` that rewrites closed items older
    than N months into an archive file.

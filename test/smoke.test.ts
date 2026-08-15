@@ -61,6 +61,18 @@ test('an item added through the real binary comes back from loops --json', () =>
   assert.deepEqual(titles, ['ship the README']);
 });
 
+test('-i refuses to run when the real process has piped stdio', () => {
+  const home = makeHome();
+
+  // spawnSync pipes stdin and stdout, so the child sees exactly what a script or a pipeline gives
+  // it: the guard has to fire off the real `process.stdin.isTTY`, not off an injected seam.
+  const result = waid(home, ['scan', '-i']);
+
+  assert.equal(result.code, 1);
+  assert.equal(result.out, '');
+  assert.equal(result.err, '-i requires an interactive terminal\n');
+});
+
 test('--json puts a single parseable document on stdout and nothing else', () => {
   const home = makeHome();
   waid(home, ['add', 'only item']);

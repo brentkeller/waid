@@ -41,8 +41,8 @@ Without linking, every command below works as `node C:\dev\waid\bin\waid.ts <com
 | `waid sync [--full]` | Rebuild the derived session cache. Incremental unless `--full`. |
 | `waid today [--date YYYY-MM-DD]` | Sessions and item activity for a day, grouped by project. |
 | `waid week [--last]` | Rollup by project for this week, or the previous one. |
-| `waid loops [-p <project>]` | Declared open items, then detected signals. The default view. |
-| `waid scan [-p <project>]` | Detected signals only. |
+| `waid loops [-p <project>] [-i]` | Declared open items, then detected signals. The default view. |
+| `waid scan [-p <project>] [-i]` | Detected signals only. |
 | `waid list [--status s] [--project p] [--tag t] [--all]` | Declared items. Hides done unless `--all` or `--status done`. |
 | `waid add "<title>" [-p <project>] [--waiting-on <who>] [--tag <t>] [--session <id>]` | Record an item. |
 | `waid done <id>` / `waid reopen <id>` | Close or reopen an item. |
@@ -56,6 +56,7 @@ Without linking, every command below works as `node C:\dev\waid\bin\waid.ts <com
 
 | Flag | Effect |
 | --- | --- |
+| `-i`, `--interactive` | Triage the rows in place. `loops` and `scan` only. |
 | `--json` | Print a single JSON document to stdout. Degradations go to stderr. |
 | `--no-sync` | Skip the implicit session sync. |
 | `--waid-home <path>` | Override `$WAID_HOME` for one invocation. |
@@ -89,6 +90,42 @@ those with activity in the last `activeWindowDays`:
 They rank by kind in that order, then oldest first. `promote` and `dismiss` both take the key.
 GitHub signals need `ghUser` set and an authenticated `gh`; without them the git signals still
 work and a note explains the gap.
+
+### Interactive triage (`-i`)
+
+`waid loops -i` and `waid scan -i` open the same screen the command would have printed, with a
+cursor on it. Marking is separate from applying: keys stage a decision in the gutter, and **nothing
+is written until `Enter`**. `q`, `Esc` and end-of-input cancel the whole batch and write nothing,
+which is a success — declining to triage is a valid outcome, not a failure.
+
+| Key | Effect |
+| --- | --- |
+| `j` `k` `↑` `↓` | Move the cursor. Headings are skipped. |
+| `g` / `G` | First / last row. |
+| `p` | Promote a detected signal. |
+| `d` | Dismiss a detected signal. |
+| `x` | Mark a declared item done. |
+| `w` | Mark a declared item waiting on someone, opening the editor for the name. |
+| `e` | Edit the mark's text — a promote title, or who an item waits on. |
+| `u` | Unmark the row. Pressing the same action key twice does the same. |
+| `Enter` | Apply every mark and exit. |
+| `q`, `Esc` | Cancel; write nothing. |
+| `Ctrl-C` | Cancel; exit `130`. |
+| `?` | Toggle the full key table. |
+
+`p` and `d` only apply to detected signals, `x` and `w` only to declared items; the wrong key on the
+wrong row stages nothing and says why in the footer. While the editor is open every key belongs to
+it, so `Enter` saves the field rather than applying the batch, and `Esc` reverts it.
+
+Applying writes the same events the individual commands write, in row order, and prints one receipt
+line per mark once the terminal is restored — so the trace lands in the real scrollback. **Apply
+does not re-detect.** Every decision is applied against the rows as they were shown: a signal that
+disappeared while you were deciding still promotes, rather than failing on a race.
+
+`-i` is a user error, exit `1`, in three cases, all checked before any detection runs: combined with
+`--json`, on a command that has no interactive screen (`list does not support -i`), or when stdin or
+stdout is not a terminal. A screen with nothing selectable does not open the picker — it prints
+exactly what the plain command prints and exits `0`.
 
 ### Sessions
 

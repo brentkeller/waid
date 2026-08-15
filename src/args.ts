@@ -2,10 +2,19 @@ import { UserError } from './errors.ts';
 import type { Flags } from './types.ts';
 
 /** Flags that never take a value, so they cannot swallow the argument that follows them. */
-const BOOLEAN_FLAGS = new Set(['json', 'no-sync', 'full', 'last', 'all', 'help', 'version']);
+const BOOLEAN_FLAGS = new Set([
+  'json',
+  'no-sync',
+  'full',
+  'last',
+  'all',
+  'help',
+  'version',
+  'interactive',
+]);
 
 /** Short forms, expanded to their long name before anything else looks at them. */
-const ALIASES: Record<string, string> = { p: 'project', t: 'tag', h: 'help' };
+const ALIASES: Record<string, string> = { p: 'project', t: 'tag', h: 'help', i: 'interactive' };
 
 /** Flags that collect every occurrence into an array instead of overwriting. */
 const REPEATABLE = new Set(['tag']);

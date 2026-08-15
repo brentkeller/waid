@@ -242,6 +242,7 @@ export type Flags = {
   all?: boolean;
   help?: boolean;
   version?: boolean;
+  interactive?: boolean;
   project?: string;
   tag?: string[];
   [key: string]: string | string[] | boolean | undefined;

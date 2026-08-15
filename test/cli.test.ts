@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { COMMANDS } from '../src/cli.ts';
 import { UserError } from '../src/errors.ts';
-import type { CommandModule } from '../src/types.ts';
+import type { CommandModule, PickRow, Plan, Signal } from '../src/types.ts';
 import { makeHome, waid } from './helpers.ts';
 
 /** Registers a command for the duration of `body`, then removes it again. */
@@ -159,4 +159,110 @@ test('a flag parse failure exits 1 before any command runs', async () => {
 
   assert.equal(result.code, 1);
   assert.match(result.err, /requires a value/);
+});
+
+const SIGNAL: Signal = {
+  key: 'dirty:C:\\dev\\waid',
+  kind: 'dirty',
+  title: '6 uncommitted files in waid',
+  detail: '6 files · 20m',
+  project: 'C:\\dev\\waid',
+  age: '20m',
+};
+
+/** A `-i`-capable command whose rows are fixed, so the CLI wiring is what is under test. */
+function pickable(rows: PickRow[]): CommandModule<unknown> {
+  return {
+    run: async () => ({ ok: true }),
+    render: () => 'plain output',
+    rows: () => rows,
+  };
+}
+
+test('-i with --json exits 1 without running the command', async () => {
+  const home = makeHome();
+  let ran = false;
+  const mod: CommandModule<unknown> = {
+    ...pickable([]),
+    run: async () => {
+      ran = true;
+      return {};
+    },
+  };
+
+  await withCommand('stub', mod, async () => {
+    const result = await waid(home, ['stub', '-i', '--json'], { isTty: () => true });
+    assert.equal(result.code, 1);
+    assert.equal(result.out, '');
+    assert.match((result.json() as { error: string }).error, /-i cannot be combined with --json/);
+    assert.equal(ran, false, 'the guard must fire before the command runs');
+  });
+});
+
+test('-i without a TTY on both ends exits 1', async () => {
+  const home = makeHome();
+  await withCommand('stub', pickable([]), async () => {
+    const result = await waid(home, ['stub', '-i'], { isTty: () => false });
+    assert.equal(result.code, 1);
+    assert.equal(result.out, '');
+    assert.equal(result.err.trim(), '-i requires an interactive terminal');
+  });
+});
+
+test('-i on a command with no rows() exits 1 naming the command', async () => {
+  const home = makeHome();
+  const result = await waid(home, ['list', '-i'], { isTty: () => true });
+
+  assert.equal(result.code, 1);
+  assert.equal(result.out, '');
+  assert.equal(result.err.trim(), 'list does not support -i');
+});
+
+test('-i with nothing selectable prints the plain output and never opens the picker', async () => {
+  const home = makeHome();
+  const headings: PickRow[] = [{ kind: 'heading', text: 'nothing detected' }];
+  await withCommand('stub', pickable(headings), async () => {
+    let opened = false;
+    const pick = async (): Promise<Plan | null> => {
+      opened = true;
+      return null;
+    };
+
+    const plain = await waid(home, ['stub'], { isTty: () => true });
+    const result = await waid(home, ['stub', '-i'], { isTty: () => true, pick });
+
+    assert.equal(result.code, 0);
+    assert.equal(result.err, '');
+    assert.equal(result.out, plain.out);
+    assert.equal(opened, false, '-i must not enter raw mode with nothing to select');
+  });
+});
+
+test('-i applies the confirmed plan and prints its receipts', async () => {
+  const home = makeHome();
+  const row: PickRow = { kind: 'signal', id: SIGNAL.key, text: '  dirty', signal: SIGNAL };
+  await withCommand('stub', pickable([row]), async () => {
+    const pick = async (rows: PickRow[]): Promise<Plan> => [
+      { row: rows[0] as PickRow, mark: { action: 'dismiss' } },
+    ];
+
+    const result = await waid(home, ['stub', '-i'], { isTty: () => true, pick });
+
+    assert.equal(result.code, 0);
+    assert.equal(result.out, `dismissed ${SIGNAL.key}\n`);
+    const log = fs.readFileSync(path.join(home, 'events.jsonl'), 'utf8').trim();
+    assert.equal((JSON.parse(log) as { ev: string; key: string }).key, SIGNAL.key);
+  });
+});
+
+test('-i cancelled writes nothing and exits 0', async () => {
+  const home = makeHome();
+  const row: PickRow = { kind: 'signal', id: SIGNAL.key, text: '  dirty', signal: SIGNAL };
+  await withCommand('stub', pickable([row]), async () => {
+    const result = await waid(home, ['stub', '-i'], { isTty: () => true, pick: async () => null });
+
+    assert.equal(result.code, 0);
+    assert.equal(result.out, '');
+    assert.equal(fs.readFileSync(path.join(home, 'events.jsonl'), 'utf8'), '');
+  });
 });

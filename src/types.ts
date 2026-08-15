@@ -267,6 +267,63 @@ export type Ctx = {
 };
 
 /**
+ * One line of an interactive screen. Headings are rows so the interactive layout reproduces the
+ * printed one exactly; the cursor skips them. `id` is unique within a screen and is what a mark is
+ * keyed by — a signal's key, an item's id.
+ */
+export type PickRow =
+  | { kind: 'heading'; text: string }
+  | { kind: 'signal'; id: string; text: string; signal: Signal }
+  | { kind: 'item'; id: string; text: string; item: Item };
+
+/**
+ * A decision recorded against a row, applied only when the batch is confirmed. Two of the four
+ * carry an editable text field, which is what makes the inline editor one feature rather than two.
+ */
+export type Mark =
+  | { action: 'promote'; title: string }
+  | { action: 'dismiss' }
+  | { action: 'done' }
+  | { action: 'waiting'; waitingOn: string };
+
+/** Every mark the user confirmed, in row order. */
+export type Plan = { row: PickRow; mark: Mark }[];
+
+/** The line editor, open over the text field of the mark on one row. */
+export type Editing = {
+  /** `PickRow.id` of the row whose mark is being edited. */
+  rowId: string;
+  /** Buffer being typed into; committed to the mark on `Enter`. */
+  value: string;
+  /** Field value as it stood when the editor opened, restored on `Esc`. */
+  original: string;
+};
+
+/** The slice of `rows` currently on screen. */
+export type Viewport = {
+  /** Index into `rows` of the first visible row. */
+  top: number;
+  /** Rows the terminal has room for, chrome excluded. */
+  height: number;
+};
+
+/** The whole interactive screen. Held by `reduce`, which takes no config, no clock, and no I/O. */
+export type PickState = {
+  rows: PickRow[];
+  /** Index into `rows`; always a selectable row when one exists. */
+  cursor: number;
+  /** Marks by `PickRow.id`. */
+  marks: Record<string, Mark>;
+  /** The open line editor, or null when keys go to the picker. */
+  editing: Editing | null;
+  viewport: Viewport;
+  /** Transient footer message, such as a key that does not apply to the row under the cursor. */
+  hint: string | null;
+  /** Whether the full key table is shown in place of the short legend. */
+  legend: boolean;
+};
+
+/**
  * A command module. `run` returns plain data so `--json` prints it directly and `render` turns
  * the same data into human output; the two can never diverge.
  */
@@ -274,6 +331,8 @@ export type CommandModule<D> = {
   run: (ctx: Ctx) => Promise<D>;
   /** Method syntax on purpose: bivariant parameters let the dispatch table erase `D` to `unknown`. */
   render(data: D, ctx: Ctx): string;
+  /** Selectable rows for `-i`. Absent means the command does not support `-i`. */
+  rows?(data: D, ctx: Ctx): PickRow[];
   /** Set when the command needs `ctx.sessions` populated. */
   needsSessions?: boolean;
 };

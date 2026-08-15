@@ -71,6 +71,15 @@ export function paint(state: PickState, color = true): string[] {
   return [...lines, '', ...footer(state, color)];
 }
 
+/**
+ * Lines `paint` adds beneath the viewport slice. The caller subtracts this from the terminal
+ * height to size the viewport, so the footer growing — `?` opening the key table, the editor
+ * opening — shrinks the list rather than pushing the footer off the screen.
+ */
+export function chromeHeight(state: PickState): number {
+  return 1 + footer(state, false).length;
+}
+
 function paintRow(
   row: PickRow,
   isCursor: boolean,

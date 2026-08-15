@@ -324,6 +324,14 @@ export type PickState = {
 };
 
 /**
+ * A keystroke as the picker understands it, after the decoder has folded escape sequences into
+ * names. `char` carries the printable character itself, which is what the line editor types.
+ */
+export type Key =
+  | { name: 'up' | 'down' | 'enter' | 'esc' | 'backspace' | 'ctrl-c' }
+  | { name: 'char'; value: string };
+
+/**
  * A command module. `run` returns plain data so `--json` prints it directly and `render` turns
  * the same data into human output; the two can never diverge.
  */

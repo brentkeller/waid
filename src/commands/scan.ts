@@ -3,7 +3,7 @@ import { detectSignals } from '../detect.ts';
 import { pad } from '../format.ts';
 import { knownProjects, resolveProject } from '../projects.ts';
 import { loadState } from '../store.ts';
-import type { CommandModule, Ctx, Signal } from '../types.ts';
+import type { CommandModule, Ctx, PickRow, Signal } from '../types.ts';
 
 export type ScanResult = {
   signals: Signal[];
@@ -65,12 +65,52 @@ export function detectedSection(signals: readonly Signal[], dismissedCount: numb
   return lines;
 }
 
-function render(data: ScanResult): string {
-  const section = detectedSection(data.signals, data.dismissedCount);
-  const lines = section.length > 0 ? section : ['nothing detected'];
+/** Lines `detectedSection` puts above the signals: the header and the blank beneath it. */
+const DETECTED_HEADER_LINES = 2;
 
-  for (const note of data.notes) lines.push('', `  ${note}`);
-  return lines.join('\n');
+/** A line the cursor skips. */
+export function heading(text: string): PickRow {
+  return { kind: 'heading', text };
 }
 
-export const scan: CommandModule<ScanResult> = { run, render, needsSessions: true };
+/**
+ * The degradation notes as rows, in the shape both commands print them.
+ */
+export function noteRows(notes: readonly string[]): PickRow[] {
+  return notes.flatMap((note) => [heading(''), heading(`  ${note}`)]);
+}
+
+/**
+ * The `DETECTED` block as rows, shared with `loops`. The lines come from `detectedSection`, so a
+ * signal row's text is exactly the line the non-interactive command prints for it.
+ */
+export function signalRows(signals: readonly Signal[], dismissedCount: number): PickRow[] {
+  const lines = detectedSection(signals, dismissedCount);
+  if (lines.length === 0) return [];
+
+  return [
+    ...lines.slice(0, DETECTED_HEADER_LINES).map(heading),
+    ...signals.map((signal, index) => ({
+      kind: 'signal' as const,
+      id: signal.key,
+      text: lines[DETECTED_HEADER_LINES + index] ?? '',
+      signal,
+    })),
+    ...lines.slice(DETECTED_HEADER_LINES + signals.length).map(heading),
+  ];
+}
+
+function rows(data: ScanResult): PickRow[] {
+  const section = signalRows(data.signals, data.dismissedCount);
+  const body = section.length > 0 ? section : [heading('nothing detected')];
+  return [...body, ...noteRows(data.notes)];
+}
+
+// Derived from `rows` so the printed screen and the interactive one are the same screen.
+function render(data: ScanResult): string {
+  return rows(data)
+    .map((row) => row.text)
+    .join('\n');
+}
+
+export const scan: CommandModule<ScanResult> = { run, render, rows, needsSessions: true };

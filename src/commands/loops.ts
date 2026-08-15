@@ -2,9 +2,9 @@ import { stringFlag } from '../args.ts';
 import { detectSignals } from '../detect.ts';
 import { groupByProject, knownProjects, resolveProject } from '../projects.ts';
 import { loadState } from '../store.ts';
-import type { CommandModule, Ctx, Item, LoopsResult, State } from '../types.ts';
+import type { CommandModule, Ctx, Item, LoopsResult, PickRow, State } from '../types.ts';
 import { itemLine } from './list.ts';
-import { detectedSection, signalProjects } from './scan.ts';
+import { heading, noteRows, signalProjects, signalRows } from './scan.ts';
 
 type Detection = Pick<LoopsResult, 'detected' | 'dismissedCount' | 'notes'>;
 
@@ -61,26 +61,35 @@ function isOpen(item: Item): boolean {
   return item.status !== 'done';
 }
 
-function render(data: LoopsResult, ctx: Ctx): string {
-  const lines: string[] = [];
+function rows(data: LoopsResult, ctx: Ctx): PickRow[] {
+  const rows: PickRow[] = [];
 
   if (data.groups.length === 0) {
-    lines.push('no open loops');
+    rows.push(heading('no open loops'));
   } else {
-    lines.push('OPEN LOOPS');
+    rows.push(heading('OPEN LOOPS'));
     for (const group of data.groups) {
-      lines.push('', `  ${group.project ?? '(no project)'}`);
-      for (const item of group.items) lines.push(itemLine(item, ctx.now));
+      rows.push(heading(''), heading(`  ${group.project ?? '(no project)'}`));
+      for (const item of group.items) {
+        rows.push({ kind: 'item', id: item.id, text: itemLine(item, ctx.now), item });
+      }
     }
   }
 
   // Detected signals stay a section of their own: they are guesses, and merging them into the
   // declared items would blur which is which.
-  const detected = detectedSection(data.detected, data.dismissedCount);
-  if (detected.length > 0) lines.push('', ...detected);
+  const detected = signalRows(data.detected, data.dismissedCount);
+  if (detected.length > 0) rows.push(heading(''), ...detected);
 
-  for (const note of data.notes) lines.push('', `  ${note}`);
-  return lines.join('\n');
+  rows.push(...noteRows(data.notes));
+  return rows;
 }
 
-export const loops: CommandModule<LoopsResult> = { run, render, needsSessions: true };
+// Derived from `rows` so the printed screen and the interactive one are the same screen.
+function render(data: LoopsResult, ctx: Ctx): string {
+  return rows(data, ctx)
+    .map((row) => row.text)
+    .join('\n');
+}
+
+export const loops: CommandModule<LoopsResult> = { run, render, rows, needsSessions: true };

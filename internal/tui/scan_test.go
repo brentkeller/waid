@@ -69,11 +69,12 @@ func scanFixture() detect.Result {
 	}
 }
 
-// offline pins the detection seam and the clock, so a model under test never reaches git or gh and
-// the ages it prints do not move between runs.
+// offline pins the read seams and the clock, so a model under test never reaches the filesystem, git
+// or gh, and the ages it prints do not move between runs.
 func offline(m Model, result detect.Result) Model {
 	m.clock = func() time.Time { return scanNow }
 	m.scan.load = func() tea.Msg { return scanLoadedMsg{result: result, at: scannedAt} }
+	m.review.load = func() tea.Msg { return reviewLoadedMsg{at: scannedAt} }
 	return m
 }
 

@@ -115,6 +115,7 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"R"}, "R", "resume in claude"},
 		{[]string{"o"}, "o", "open repo"},
 		{[]string{"y"}, "y", "copy the session id"},
+		{[]string{"s"}, "s", "cycle the range"},
 	},
 }
 
@@ -157,6 +158,9 @@ type Model struct {
 	// scan is the Scan tab's own state: the last good detection pass and the filters over it.
 	scan scanModel
 
+	// review is the Review tab's own state: the harvested history and the window over it.
+	review reviewModel
+
 	// clock is the app's present. It advances while the app runs, so the age of what is on screen
 	// keeps counting; Options.Now is only the instant the app started.
 	clock func() time.Time
@@ -169,16 +173,21 @@ func New(opts Options) Model {
 	m.scan.load = scanLoader(opts)
 	m.scan.loading = true
 	m.progress = m.spinnerText()
+	m.review.load = reviewLoader(opts)
 	return m
 }
 
-// Init issues the first read. Nothing loads inside New, so a model can be built and inspected
-// without touching git or the network.
+// Init issues the first reads. Nothing loads inside New, so a model can be built and inspected
+// without touching the filesystem, git or the network.
 func (m Model) Init() tea.Cmd {
-	if m.scan.load == nil {
-		return nil
+	var cmds []tea.Cmd
+	if m.scan.load != nil {
+		cmds = append(cmds, m.scan.load, spinnerTick())
 	}
-	return tea.Batch(m.scan.load, spinnerTick())
+	if m.review.load != nil {
+		cmds = append(cmds, m.review.load)
+	}
+	return tea.Batch(cmds...)
 }
 
 // now is the instant the views measure ages against.
@@ -208,6 +217,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.key(msg)
 	case scanLoadedMsg:
 		return m.scanLoaded(msg), nil
+	case reviewLoadedMsg:
+		return m.reviewLoaded(msg), nil
 	case spinnerTickMsg:
 		// The spinner stops with the work it is reporting, so nothing ticks while the app is idle.
 		if !m.scan.loading {
@@ -266,8 +277,11 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // tabKey offers a press to the live tab. It reports whether the tab dealt with the key, which
 // includes a key that was inert for a reason the tab left in the footer (§4).
 func (m Model) tabKey(pressed string) (Model, tea.Cmd, bool) {
-	if m.tab == tabScan {
+	switch m.tab {
+	case tabScan:
 		return m.scanKey(pressed)
+	case tabReview:
+		return m.reviewKey(pressed)
 	}
 	return m, nil, false
 }
@@ -401,8 +415,11 @@ func (m Model) body(width int) string {
 	if m.showKeys {
 		return m.keyTable()
 	}
-	if m.tab == tabScan {
+	switch m.tab {
+	case tabScan:
 		return m.scanBody(width)
+	case tabReview:
+		return m.reviewBody(width)
 	}
 	return m.theme.Dim.Render("  " + tabEmpty[m.tab])
 }

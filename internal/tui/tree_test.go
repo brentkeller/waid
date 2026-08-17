@@ -299,3 +299,35 @@ func TestEmptyGroupKeepsASelectableFold(t *testing.T) {
 		t.Errorf("cursor is on %+v, want the empty group", group)
 	}
 }
+
+// Focus puts the cursor on the row holding a named item, wherever the list has since sorted it, and
+// leaves the cursor alone when the item is no longer in the list at all.
+func TestFocusFindsAnItemWhereverItSits(t *testing.T) {
+	tree := fixture()
+	tree.First()
+
+	if !tree.Focus(func(item string) bool { return item == "b2" }) {
+		t.Fatal("Focus did not find an item the tree holds")
+	}
+	if item, _ := tree.SelectedItem(); item != "b2" {
+		t.Errorf("Focus left the cursor on %q, want b2", item)
+	}
+
+	at := tree.Cursor
+	if tree.Focus(func(item string) bool { return item == "gone" }) {
+		t.Error("Focus reported finding an item the tree does not hold")
+	}
+	if tree.Cursor != at {
+		t.Errorf("a failed Focus moved the cursor to %d, want it left at %d", tree.Cursor, at)
+	}
+}
+
+// A collapsed group hides its children from the cursor, so Focus cannot land on one.
+func TestFocusSkipsTheChildrenOfAClosedGroup(t *testing.T) {
+	tree := fixture()
+	tree.SetExpanded("dr", false)
+
+	if tree.Focus(func(item string) bool { return item == "b2" }) {
+		t.Error("Focus landed on a row the cursor cannot reach")
+	}
+}

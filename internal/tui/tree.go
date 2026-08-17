@@ -164,6 +164,22 @@ func (t *Tree[T]) Toggle() {
 	t.clamp()
 }
 
+// Focus puts the cursor on the first child the predicate accepts, reporting whether it found one. A
+// write re-anchors with it: the row it acted on carries a fresh timestamp and sorts elsewhere, and a
+// cursor left on an index would be pointing at whatever moved into the place.
+func (t *Tree[T]) Focus(match func(item T) bool) bool {
+	for i, pos := range t.positions() {
+		if pos.item == onFold {
+			continue
+		}
+		if match(t.Groups[pos.group].Items[pos.item]) {
+			t.Cursor = i
+			return true
+		}
+	}
+	return false
+}
+
 // OnHeading reports whether the cursor is resting on a fold rather than a child. The tabs use it to
 // leave a key inert with a reason in the footer when it has no meaning for a project (§4).
 func (t Tree[T]) OnHeading() bool {

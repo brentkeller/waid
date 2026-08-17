@@ -154,6 +154,11 @@ type Model struct {
 	// undos are the inverses of the writes this session made, newest last and bounded (§3).
 	undos []undoEntry
 
+	// reversible is whether the last write left an inverse behind. A note does not — the log holds no
+	// event that removes one — so the footer stops offering the undo rather than offering one that
+	// would reverse the write before it.
+	reversible bool
+
 	// receipts are the writes this session made, in order. The last one is what the footer shows,
 	// and the whole log is replayed to the restored terminal on quit (§3.1).
 	receipts []receipt

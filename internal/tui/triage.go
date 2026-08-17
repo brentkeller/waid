@@ -64,18 +64,34 @@ func (m Model) rename(id, prior, title string) (Model, tea.Cmd) {
 	}
 
 	event := events.UpdateEvent{Ev: "update", Id: id, Title: &title}
-	if _, err := events.Append(m.opts.Cfg.EventsPath, event, m.now()); err != nil {
+	ts, err := events.Append(m.opts.Cfg.EventsPath, event, m.now())
+	if err != nil {
 		m.hint = writeFailed("rename", err)
 		return m, nil
 	}
 
-	m = m.pushUndo(undoRetitle(id, prior))
+	// A title corrected on Loops is a row on screen; one corrected on Scan belongs to an item the log
+	// has not been re-read for, so the loaded list is moved only where it holds the item.
+	inverse := undoRetitle(id, prior)
+	if item, loaded := m.loadedItem(id); loaded {
+		retitled := item
+		retitled.Title, retitled.Updated = title, ts
+		m, inverse = m.applyItem(retitled), inverse.restoring(item)
+	}
+
+	m = m.pushUndo(inverse)
 	return m.record(receipt{verb: verbRetitled, subject: id, detail: title}), nil
 }
 
 // renameTarget is the item the footer is offering `e` for: the promotion the last write made, or the
 // correction of one, so a title can be corrected twice.
 func (m Model) renameTarget() (receipt, bool) {
+	// Loops binds `e` to the item under the cursor, so the receipt's rename is offered only where the
+	// key is free to mean it.
+	if m.tab != tabScan {
+		return receipt{}, false
+	}
+
 	last, written := m.lastReceipt()
 	if !written || (last.verb != verbPromoted && last.verb != verbRetitled) {
 		return receipt{}, false
@@ -135,6 +151,7 @@ func (m Model) unhide(key string) Model {
 // The two reasons an action found nothing at all to act on, which is not the same as finding the
 // wrong kind of row.
 const (
+	noItems    = "there are no items here"
 	noSignals  = "there are no signals to triage"
 	noSessions = "there are no sessions here"
 )

@@ -128,6 +128,14 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 	case "r":
 		m, cmd := m.refreshLoops()
 		return m, cmd, true
+	case "x":
+		return m.doneSelected(tree)
+	case "w":
+		return m.waitingSelected(tree)
+	case "e":
+		return m.editSelected(tree)
+	case "n":
+		return m.noteSelected(tree)
 	default:
 		return m, nil, false
 	}

@@ -83,7 +83,7 @@ func TestUndoOfAPromoteClosesTheItemAndRestoresTheKey(t *testing.T) {
 func TestUndoOfADoneAppendsAReopen(t *testing.T) {
 	m, path := triaging(t)
 
-	m = m.pushUndo(undoDone(events.Item{Id: "sga9", Title: "Design template"}))
+	m = m.pushUndo(undoDone(events.Item{Id: "sga9", Title: "Design template", Status: events.StatusOpen}))
 	m, _ = press(t, m, "u")
 
 	assertLog(t, path, []string{`{"ts":"` + stamped() + `","ev":"reopen","id":"sga9"}`})
@@ -137,7 +137,7 @@ func TestTheUndoStackIsBounded(t *testing.T) {
 	m, path := triaging(t)
 
 	for i := range undoLimit + 2 {
-		m = m.pushUndo(undoDone(events.Item{Id: fmt.Sprintf("id%02d", i), Title: "an item"}))
+		m = m.pushUndo(undoDone(events.Item{Id: fmt.Sprintf("id%02d", i), Title: "an item", Status: events.StatusOpen}))
 	}
 	if len(m.undos) != undoLimit {
 		t.Fatalf("the stack holds %d entries, want it capped at %d", len(m.undos), undoLimit)

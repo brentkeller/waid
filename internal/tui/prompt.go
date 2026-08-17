@@ -13,6 +13,8 @@ type promptKind int
 const (
 	promptNone promptKind = iota
 	promptRename
+	promptWaiting
+	promptNote
 )
 
 // prompt is the inline input the footer takes text in. It holds the keyboard the way the filter does,
@@ -62,6 +64,10 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 	switch answered.kind {
 	case promptRename:
 		return m.rename(answered.subject, answered.prior, value)
+	case promptWaiting:
+		return m.waitOn(answered.subject, value)
+	case promptNote:
+		return m.addNote(answered.subject, value)
 	}
 	return m, nil
 }

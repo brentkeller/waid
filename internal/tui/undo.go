@@ -27,6 +27,16 @@ type undoEntry struct {
 
 	// key is the signal a retired row is restored by, empty for a write no signal was retired by.
 	key string
+
+	// item is the loaded copy of the item as it stood before the write, put back beside the log so the
+	// row moves in the frame the undo was pressed in. A write on an item no tab has loaded leaves it nil.
+	item *events.Item
+}
+
+// restoring attaches the item a write acted on, so undoing it moves the list as well as the log.
+func (e undoEntry) restoring(item events.Item) undoEntry {
+	e.item = &item
+	return e
 }
 
 // undoDismiss restores a hidden key.
@@ -54,16 +64,29 @@ func undoPromote(promotion triage.Promotion) undoEntry {
 // undoDone reopens a closed item. item is the item as it stood before the write.
 func undoDone(item events.Item) undoEntry {
 	return undoEntry{
-		events:  []events.WaidEvent{events.ReopenEvent{Ev: "reopen", Id: item.Id}},
+		events:  restore(item),
 		receipt: receipt{verb: "reopened", subject: item.Id, detail: item.Title},
+		item:    &item,
 	}
 }
 
-// undoWaiting puts back the status and the waiting-on the item held before the write. reopen leads
-// because it is the only event that clears waitingOn — an update omits the field when it carries no
-// name, which would leave the name the undone write set. Anything the reopen then overshoots is put
-// back by the update behind it.
+// undoWaiting puts back the status and the waiting-on the item held before the write.
 func undoWaiting(item events.Item) undoEntry {
+	return undoEntry{
+		events:  restore(item),
+		receipt: receipt{verb: "restored", subject: item.Id, detail: item.Title},
+		item:    &item,
+	}
+}
+
+// restore is the events that put an item back in the state it was written out of, which is the same
+// pair for either write that takes one out of it: a close and a waiting both end at a status the log
+// reaches through reopen.
+//
+// reopen leads because it is the only event that clears waitingOn — an update omits the field when it
+// carries no name, which would leave the name standing. An item that was waiting on someone needs
+// that put back by the update behind it; anything else the reopen already lands on.
+func restore(item events.Item) []events.WaidEvent {
 	inverse := []events.WaidEvent{events.ReopenEvent{Ev: "reopen", Id: item.Id}}
 	if item.Status != events.StatusOpen || item.WaitingOn != nil {
 		inverse = append(inverse, events.UpdateEvent{
@@ -73,8 +96,7 @@ func undoWaiting(item events.Item) undoEntry {
 			WaitingOn: item.WaitingOn,
 		})
 	}
-
-	return undoEntry{events: inverse, receipt: receipt{verb: "restored", subject: item.Id, detail: item.Title}}
+	return inverse
 }
 
 // undoRetitle puts back the title an item carried before it was edited.
@@ -95,6 +117,7 @@ func (m Model) pushUndo(entry undoEntry) Model {
 	}
 
 	m.undos = stack
+	m.reversible = true
 	return m
 }
 
@@ -109,16 +132,27 @@ func (m Model) undo() (Model, tea.Cmd) {
 	entry := m.undos[len(m.undos)-1]
 	m.undos = m.undos[:len(m.undos)-1]
 
+	ts := ""
 	for _, event := range entry.events {
-		if _, err := events.Append(m.opts.Cfg.EventsPath, event, m.now()); err != nil {
+		stamped, err := events.Append(m.opts.Cfg.EventsPath, event, m.now())
+		if err != nil {
 			m.hint = writeFailed("undo", err)
 			return m, nil
 		}
+		ts = stamped
 	}
 
 	if entry.key != "" {
 		m = m.unhide(entry.key)
 	}
+	if entry.item != nil {
+		restored := *entry.item
+		restored.Updated = ts
+		m = m.applyItem(restored)
+	}
+
+	// The entry below is a write of this session's too, so it is offered in turn.
+	m.reversible = len(m.undos) > 0
 	return m.record(entry.receipt), nil
 }
 
@@ -126,7 +160,7 @@ func (m Model) undo() (Model, tea.Cmd) {
 // action carrying text — an item title read for weeks afterwards — so the rename sits beside the undo
 // and the correction stays one key away (§3).
 func (m Model) undoAffordance() string {
-	if len(m.undos) == 0 {
+	if len(m.undos) == 0 || !m.reversible {
 		return ""
 	}
 	if _, ok := m.renameTarget(); ok {

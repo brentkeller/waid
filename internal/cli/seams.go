@@ -5,17 +5,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brentkeller/waid/internal/gh"
 	"github.com/brentkeller/waid/internal/ids"
 )
 
-// Environment seams that pin the two sources of non-determinism a spawned waid would otherwise
-// carry. They exist so the differential harness can diff two processes byte for byte; a normal run
-// leaves them unset and takes the system clock and cryptographic randomness.
+// Environment seams that pin the sources of non-determinism a spawned waid would otherwise carry.
+// They exist so the differential harness can diff two processes byte for byte; a normal run leaves
+// them unset and takes the system clock, cryptographic randomness and the network.
 const (
 	// EnvNow pins the clock to an RFC 3339 instant.
 	EnvNow = "WAID_NOW"
 	// EnvIds pins the id generator to a comma-separated sequence, consumed in order.
 	EnvIds = "WAID_IDS"
+	// EnvGhFixture points at a recorded GitHub response served in place of a live query.
+	EnvGhFixture = "WAID_GH_FIXTURE"
 )
 
 // Now returns the instant the run should treat as the present: the value pinned in EnvNow when it
@@ -45,4 +48,14 @@ func IdGenerator() ids.Generator {
 		return ids.New
 	}
 	return ids.Sequence(pinned...)
+}
+
+// GhClient returns the GitHub client the run should query: one served from the recorded response
+// EnvGhFixture names when it is set, otherwise nil, which leaves detection to reach for the real gh.
+func GhClient() gh.Client {
+	path := strings.TrimSpace(os.Getenv(EnvGhFixture))
+	if path == "" {
+		return nil
+	}
+	return gh.Fixture(path)
 }

@@ -55,6 +55,44 @@ export type GhResult = {
   cachedAt: string | null;
 };
 
+/** Names a file of recorded `gh` responses served in place of a live query. */
+export const GH_FIXTURE_ENV = 'WAID_GH_FIXTURE';
+
+/**
+ * The client the run should query: one served from the recorded responses `GH_FIXTURE_ENV` names
+ * when it is set, otherwise undefined, which leaves detection to reach for the real `gh`.
+ */
+export function pinnedGhClient(): GhClient | undefined {
+  const path = (process.env[GH_FIXTURE_ENV] ?? '').trim();
+  return path === '' ? undefined : fixtureGhClient(path);
+}
+
+/**
+ * A `GhClient` served from a recorded response file rather than the network, so detection can be
+ * diffed against fixed data. The file holds a recorded `gh api graphql` response per query:
+ *
+ *     {"reviewRequested": {"data": …}, "authored": {"data": …}}
+ *
+ * An `error` key instead records a `gh` that could not answer, so the degraded path is reachable.
+ */
+export function fixtureGhClient(file: string): GhClient {
+  return {
+    reviewRequested: () => fixtureQuery(file, 'reviewRequested'),
+    authored: () => fixtureQuery(file, 'authored'),
+  };
+}
+
+function fixtureQuery(file: string, name: 'reviewRequested' | 'authored'): GhPr[] {
+  const document: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!isRecord(document)) throw new Error(`the gh fixture at ${file} is not a JSON object`);
+
+  const recorded = document['error'];
+  if (typeof recorded === 'string') throw Object.assign(new Error(recorded), { stderr: recorded });
+  if (!(name in document)) throw new Error(`the gh fixture at ${file} records no ${name} response`);
+
+  return narrowPrs(searchNodes(document[name]));
+}
+
 /** The production `GhClient`, backed by `gh api graphql`. Throws when `gh` cannot answer. */
 export function realGhClient(): GhClient {
   return {

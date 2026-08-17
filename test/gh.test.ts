@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { loadConfig } from '../src/config.ts';
-import { GH_CACHE_VERSION, fetchGh } from '../src/gh.ts';
+import { GH_CACHE_VERSION, fetchGh, fixtureGhClient, pinnedGhClient, GH_FIXTURE_ENV } from '../src/gh.ts';
 import type { Config, GhClient, GhPr } from '../src/types.ts';
 
 const NOW = new Date('2026-08-14T12:00:00.000Z');
@@ -247,4 +247,78 @@ test('cached entries that are not pull requests are dropped rather than trusted'
     [1],
   );
   assert.deepEqual(result.authored, []);
+});
+
+/** Writes a recorded fixture and returns its path. */
+function writeFixture(contents: unknown): string {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'waid-gh-fixture-')), 'gh.json');
+  fs.writeFileSync(file, JSON.stringify(contents));
+  return file;
+}
+
+test('the fixture client serves the recorded queries', () => {
+  const file = writeFixture({
+    reviewRequested: {
+      data: {
+        search: {
+          nodes: [
+            {
+              number: 41,
+              title: 'Tighten the retry budget',
+              headRefName: 'retry-budget',
+              isDraft: false,
+              state: 'OPEN',
+              createdAt: '2026-08-11T16:04:12Z',
+              url: 'https://github.com/octo/widgets/pull/41',
+              repository: { nameWithOwner: 'octo/widgets' },
+              author: { login: 'octocat' },
+            },
+            {},
+          ],
+        },
+      },
+    },
+    authored: { data: { search: { nodes: [] } } },
+  });
+
+  const client = fixtureGhClient(file);
+
+  assert.deepEqual(client.reviewRequested(), [
+    {
+      number: 41,
+      repository: 'octo/widgets',
+      title: 'Tighten the retry budget',
+      author: 'octocat',
+      isDraft: false,
+      state: 'OPEN',
+      createdAt: '2026-08-11T16:04:12Z',
+      url: 'https://github.com/octo/widgets/pull/41',
+      branch: 'retry-budget',
+    },
+  ]);
+  assert.deepEqual(client.authored(), []);
+});
+
+test('a fixture can record a failure, so the degraded path is reachable', () => {
+  const cfg = config();
+  const file = writeFixture({ error: 'gh: not logged in' });
+
+  const result = fetchGh(cfg, { client: fixtureGhClient(file), now: NOW });
+
+  assert.equal(result.available, false);
+  assert.equal(result.reason, 'gh: not logged in');
+});
+
+test('the pinned client is absent unless the fixture env var names one', (t) => {
+  const previous = process.env[GH_FIXTURE_ENV];
+  t.after(() => {
+    if (previous === undefined) delete process.env[GH_FIXTURE_ENV];
+    else process.env[GH_FIXTURE_ENV] = previous;
+  });
+
+  delete process.env[GH_FIXTURE_ENV];
+  assert.equal(pinnedGhClient(), undefined);
+
+  process.env[GH_FIXTURE_ENV] = writeFixture({ authored: { data: { search: { nodes: [] } } } });
+  assert.deepEqual(pinnedGhClient()?.authored(), []);
 });

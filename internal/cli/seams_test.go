@@ -1,6 +1,8 @@
 package cli_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -85,5 +87,37 @@ func TestIdGeneratorDefaultsToRandomIds(t *testing.T) {
 	}
 	if len(id) != 4 {
 		t.Fatalf("id = %q, want 4 characters", id)
+	}
+}
+
+func TestGhClientServesThePinnedFixture(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gh.json")
+	recorded := `{"reviewRequested": {"data": {"search": {"nodes": [
+	  {"number": 3, "title": "one", "repository": {"nameWithOwner": "octo/widgets"}}
+	]}}}}`
+	if err := os.WriteFile(path, []byte(recorded), 0o644); err != nil {
+		t.Fatalf("writing the fixture: %v", err)
+	}
+	t.Setenv(cli.EnvGhFixture, path)
+
+	client := cli.GhClient()
+	if client == nil {
+		t.Fatal("GhClient() = nil, want the fixture client")
+	}
+
+	prs, err := client.ReviewRequested()
+	if err != nil {
+		t.Fatalf("ReviewRequested: %v", err)
+	}
+	if len(prs) != 1 || prs[0].Number != 3 {
+		t.Fatalf("reviewRequested = %+v, want the one recorded pull request", prs)
+	}
+}
+
+func TestGhClientIsAbsentWithoutAFixture(t *testing.T) {
+	t.Setenv(cli.EnvGhFixture, "")
+
+	if client := cli.GhClient(); client != nil {
+		t.Fatalf("GhClient() = %v, want nil so detection reaches for the real gh", client)
 	}
 }

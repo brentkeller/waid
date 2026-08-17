@@ -86,6 +86,7 @@ func execute(argv []string, out Io, registry Registry, asJson *bool) error {
 		Cwd:   workingDir(),
 		Now:   Now(),
 		Ids:   IdGenerator(),
+		Gh:    GhClient(),
 	}
 	if command.wantsSessions() {
 		attachSessions(ctx)

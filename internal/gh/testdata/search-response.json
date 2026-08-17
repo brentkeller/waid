@@ -1,0 +1,30 @@
+{
+  "data": {
+    "search": {
+      "nodes": [
+        {
+          "number": 41,
+          "title": "Tighten the retry budget",
+          "headRefName": "retry-budget",
+          "isDraft": false,
+          "state": "OPEN",
+          "createdAt": "2026-08-11T16:04:12Z",
+          "url": "https://github.com/octo/widgets/pull/41",
+          "repository": { "nameWithOwner": "octo/widgets" },
+          "author": { "login": "octocat" }
+        },
+        {
+          "number": 42,
+          "title": "Draft: split the scanner",
+          "isDraft": true,
+          "state": "OPEN",
+          "createdAt": "2026-08-13T08:30:00Z",
+          "url": "https://github.com/octo/gadgets/pull/42",
+          "repository": { "nameWithOwner": "octo/gadgets" },
+          "author": { "login": "hubber" }
+        },
+        {}
+      ]
+    }
+  }
+}

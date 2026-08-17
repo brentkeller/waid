@@ -15,6 +15,7 @@ import { today } from './commands/today.ts';
 import { week } from './commands/week.ts';
 import { ensureHome, loadConfig, resolveHome } from './config.ts';
 import { UserError } from './errors.ts';
+import { pinnedGhClient } from './gh.ts';
 import { cacheAgeMinutes, loadSessions, syncSessions } from './sessions.ts';
 import { applyPlan } from './tui/apply.ts';
 import { pick } from './tui/run.ts';
@@ -98,7 +99,7 @@ export async function run(argv: string[], io: Io = defaultIo, deps: Deps = {}): 
       now: pinnedNow(),
       notes: [],
       git: deps.git,
-      gh: deps.gh,
+      gh: deps.gh ?? pinnedGhClient(),
     };
     if (mod.needsSessions === true) attachSessions(ctx, deps);
 

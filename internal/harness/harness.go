@@ -25,10 +25,6 @@ import (
 	"github.com/brentkeller/waid/internal/events"
 )
 
-// EnvGhFixture points at the recorded GitHub response served in place of a query, so detection is
-// diffed against fixed data rather than the network.
-const EnvGhFixture = "WAID_GH_FIXTURE"
-
 // EnvRealHome overrides the data directory RealHome copies from.
 const EnvRealHome = "WAID_REAL_HOME"
 
@@ -49,7 +45,8 @@ type Invocation struct {
 	Ids []string
 	// Cwd is the working directory the command runs in, defaulting to the repo root.
 	Cwd string
-	// GhFixture is the recorded GitHub response to serve instead of querying gh.
+	// GhFixture is the path to the recorded GitHub response served instead of querying gh, so
+	// detection is diffed against fixed data rather than the network.
 	GhFixture string
 }
 
@@ -225,7 +222,7 @@ func environment(inv Invocation) []string {
 		"WAID_SKIP_GH_DETECT": "1",
 		cli.EnvNow:            events.FormatTs(nowOr(inv.Now)),
 		cli.EnvIds:            strings.Join(inv.Ids, ","),
-		EnvGhFixture:          inv.GhFixture,
+		cli.EnvGhFixture:      inv.GhFixture,
 	}
 
 	environment := []string{}

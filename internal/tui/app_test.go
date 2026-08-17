@@ -9,6 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/teatest"
+
+	"github.com/brentkeller/waid/internal/detect"
 )
 
 // key builds the message a keypress arrives as, so the tests press keys the way a terminal sends
@@ -225,8 +227,11 @@ func TestGoldenChromeAt140Columns(t *testing.T) { goldenChrome(t, 140) }
 func goldenChrome(t *testing.T, width int) {
 	t.Helper()
 
-	tm := teatest.NewTestModel(t, New(Options{}), teatest.WithInitialTermSize(width, 24))
+	// The detection seam is stubbed and the pass is delivered explicitly, so the snapshot does not
+	// depend on whether the one Init issued landed before the program was told to quit.
+	tm := teatest.NewTestModel(t, offline(New(Options{}), detect.Result{}), teatest.WithInitialTermSize(width, 24))
 	tm.Send(key("2"))
+	tm.Send(scanLoadedMsg{at: scannedAt})
 	tm.Send(key("q"))
 
 	final := tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second)).(Model)

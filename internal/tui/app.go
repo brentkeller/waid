@@ -94,6 +94,7 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"p"}, "p", "promote"},
 		{[]string{"d"}, "d", "dismiss"},
 		{[]string{"o"}, "o", "open in browser"},
+		{[]string{"s"}, "s", "cycle the kind filter"},
 	},
 	tabReview: {
 		{[]string{" "}, "space", "preview"},
@@ -127,12 +128,50 @@ type Model struct {
 	// behind for the footer.
 	showKeys bool
 	hint     string
+
+	// scan is the Scan tab's own state: the last good detection pass and the filters over it.
+	scan scanModel
+
+	// clock is the app's present. It advances while the app runs, so the age of what is on screen
+	// keeps counting; Options.Now is only the instant the app started.
+	clock func() time.Time
 }
 
-// New builds the root model.
-func New(opts Options) Model { return Model{opts: opts, theme: NewTheme()} }
+// New builds the root model with the first detection pass already claimed, so the tab bar is turning
+// from the moment the program starts rather than from the moment the pass is issued.
+func New(opts Options) Model {
+	m := Model{opts: opts, theme: NewTheme(), clock: time.Now}
+	m.scan.load = scanLoader(opts)
+	m.scan.loading = true
+	m.progress = m.spinnerText()
+	return m
+}
 
-func (m Model) Init() tea.Cmd { return nil }
+// Init issues the first read. Nothing loads inside New, so a model can be built and inspected
+// without touching git or the network.
+func (m Model) Init() tea.Cmd {
+	if m.scan.load == nil {
+		return nil
+	}
+	return tea.Batch(m.scan.load, spinnerTick())
+}
+
+// now is the instant the views measure ages against.
+func (m Model) now() time.Time {
+	if m.clock == nil {
+		return time.Now()
+	}
+	return m.clock()
+}
+
+// viewWidth is the columns the views lay out in, standing in a default until the first resize
+// arrives.
+func (m Model) viewWidth() int {
+	if m.width <= 0 {
+		return 80
+	}
+	return m.width
+}
 
 // Update is pure: every read runs as a tea.Cmd off the update loop and returns a message, so
 // Update never waits on the filesystem or the network.
@@ -142,6 +181,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 	case tea.KeyMsg:
 		return m.key(msg)
+	case scanLoadedMsg:
+		return m.scanLoaded(msg), nil
+	case spinnerTickMsg:
+		// The spinner stops with the work it is reporting, so nothing ticks while the app is idle.
+		if !m.scan.loading {
+			return m, nil
+		}
+		m.scan.spinner++
+		m.progress = m.spinnerText()
+		return m, spinnerTick()
 	}
 	return m, nil
 }
@@ -171,11 +220,23 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.showKeys, m.filter = false, ""
 	default:
+		if next, cmd, handled := m.tabKey(pressed); handled {
+			return next, cmd
+		}
 		if !boundOn(m.tab, pressed) {
 			m.hint = inertHint(m.tab, pressed)
 		}
 	}
 	return m, nil
+}
+
+// tabKey offers a press to the live tab. It reports whether the tab dealt with the key, which
+// includes a key that was inert for a reason the tab left in the footer (§4).
+func (m Model) tabKey(pressed string) (Model, tea.Cmd, bool) {
+	if m.tab == tabScan {
+		return m.scanKey(pressed)
+	}
+	return m, nil, false
 }
 
 // filterKey edits the query. esc abandons it, enter applies it and hands the keyboard back.
@@ -233,16 +294,13 @@ func keyLabel(pressed string) string {
 }
 
 func (m Model) View() string {
-	width, height := m.width, m.height
-	if width <= 0 {
-		width = 80
-	}
+	width, height := m.viewWidth(), m.height
 
 	bar := m.tabBar(width)
 	divider := m.theme.Divider.Render(strings.Repeat("─", width))
 	footer := m.footer()
 
-	body := m.body()
+	body := m.body(width)
 	if height > 0 {
 		body = padLines(body, height-lines(bar)-lines(divider)-lines(footer))
 	}
@@ -304,9 +362,12 @@ func (m Model) tabCell(t tab) string {
 
 // body is what sits between the bar and the footer: the key table when it is open, otherwise the
 // active tab's list.
-func (m Model) body() string {
+func (m Model) body(width int) string {
 	if m.showKeys {
 		return m.keyTable()
+	}
+	if m.tab == tabScan {
+		return m.scanBody(width)
 	}
 	return m.theme.Dim.Render("  " + tabEmpty[m.tab])
 }

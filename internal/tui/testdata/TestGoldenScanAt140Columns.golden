@@ -1,0 +1,24 @@
+        ╭─────────╮
+│ Loops │ Scan  4 │ Review │
+┴───────┴─────────┴────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ‹all›  review  pr  ahead  dirty                                                                         4 signals · 1 dismissed · ⏱ 2m ago
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▾ DevResults/DevResults                                                                                                           2 signals
+   ▸ review  #6886  Add SharedDashboards role to non-owners                                                     @copilot                 15w
+     pr      #5862  Activity Compendium prototype                                                               compendium-spike · open   1y
+ ▾ C:\dev\waid                                                                                                                     2 signals
+     ahead   tui    1 commit ahead                                                                              tui                       4m
+     dirty   tui    3 uncommitted files                                                                         tui                       4m
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+ p promote · d dismiss · o open in browser · r refresh · / filter · ? keys

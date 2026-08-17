@@ -11,7 +11,7 @@ import (
 	"github.com/brentkeller/waid/internal/harness"
 )
 
-// TestMain drops what the harness materialized once for the whole suite — the built Go arm and the
+// TestMain drops what the harness materialized once for the whole suite — the built binary and the
 // transcript snapshot — which no single test's cleanup can own.
 func TestMain(m *testing.M) {
 	code := m.Run()
@@ -114,8 +114,8 @@ func TestGoldenHomeResolvesTheClaudeDirectory(t *testing.T) {
 	}
 }
 
-func TestRunGoReportsStderrAndExitCode(t *testing.T) {
-	out := harness.RunGo(t, harness.GoldenHome(t), harness.Invocation{Args: []string{"nonsense"}})
+func TestRunReportsStderrAndExitCode(t *testing.T) {
+	out := harness.Run(t, harness.GoldenHome(t), harness.Invocation{Args: []string{"nonsense"}})
 
 	if out.Code != 1 {
 		t.Errorf("code = %d, want 1", out.Code)
@@ -128,10 +128,12 @@ func TestRunGoReportsStderrAndExitCode(t *testing.T) {
 	}
 }
 
-func TestRunNodePinsTheClockAndTheIdGenerator(t *testing.T) {
+// The clock and the id generator reach the spawned process, which is what makes a run repeatable:
+// without them, every appended line would carry the wall clock and a random id.
+func TestRunPinsTheClockAndTheIdGenerator(t *testing.T) {
 	home := harness.GoldenHome(t)
 
-	out := harness.RunNode(t, home, harness.Invocation{
+	out := harness.Run(t, home, harness.Invocation{
 		Args: []string{"add", "harness pinned"},
 		Now:  time.Date(2026, 8, 17, 15, 32, 4, 642_000_000, time.UTC),
 		Ids:  []string{"z9z9"},
@@ -146,15 +148,6 @@ func TestRunNodePinsTheClockAndTheIdGenerator(t *testing.T) {
 	if got := lines[len(lines)-1]; got != want {
 		t.Errorf("appended line:\n got %s\nwant %s", got, want)
 	}
-}
-
-func TestCompareReadMatchesOnAnUnknownCommand(t *testing.T) {
-	harness.CompareRead(t, harness.GoldenHome, harness.Invocation{Args: []string{"nonsense"}})
-	harness.CompareRead(t, harness.GoldenHome, harness.Invocation{Args: []string{"nonsense", "--json"}})
-}
-
-func TestCompareWriteMatchesOnAnUnknownCommand(t *testing.T) {
-	harness.CompareWrite(t, harness.GoldenHome, harness.Invocation{Args: []string{"nonsense"}})
 }
 
 func TestRealHomeIsCopiedNeverUsedInPlace(t *testing.T) {
@@ -185,35 +178,6 @@ func TestRealHomeIsCopiedNeverUsedInPlace(t *testing.T) {
 	}
 	if string(after) != string(original) {
 		t.Fatal("the real log was modified; the harness must never run in place")
-	}
-}
-
-func TestCompareReadRunsAgainstTheRealHome(t *testing.T) {
-	harness.CompareRead(t, harness.RealHome, harness.Invocation{Args: []string{"nonsense"}})
-}
-
-func TestDiffOutputsReportsEveryDifferingStream(t *testing.T) {
-	goArm := harness.Output{Stdout: "one\ntwo\n", Stderr: "", Code: 0}
-	node := harness.Output{Stdout: "one\nthree\n", Stderr: "note\n", Code: 1}
-
-	differences := harness.DiffOutputs(node, goArm)
-
-	joined := strings.Join(differences, "\n")
-	for _, want := range []string{"stdout", "stderr", "exit code"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("differences do not mention %s:\n%s", want, joined)
-		}
-	}
-	if !strings.Contains(joined, "two") || !strings.Contains(joined, "three") {
-		t.Errorf("the stdout difference does not show the differing lines:\n%s", joined)
-	}
-}
-
-func TestDiffOutputsIsSilentWhenBothArmsAgree(t *testing.T) {
-	same := harness.Output{Stdout: "one\n", Stderr: "two\n", Code: 1}
-
-	if differences := harness.DiffOutputs(same, same); len(differences) != 0 {
-		t.Errorf("differences = %v, want none", differences)
 	}
 }
 

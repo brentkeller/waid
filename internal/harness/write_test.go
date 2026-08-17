@@ -1,13 +1,18 @@
 package harness_test
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/brentkeller/waid/internal/cli"
+	"github.com/brentkeller/waid/internal/events"
 	"github.com/brentkeller/waid/internal/harness"
 )
 
-// writeInvocations are diffed against Node by the log they leave behind, which is the only artifact
-// that outlives the run.
+// writeInvocations are judged by the log they leave behind, which is the only artifact that
+// outlives the run.
 func writeInvocations() map[string]harness.Invocation {
 	return map[string]harness.Invocation{
 		"add": {
@@ -55,19 +60,25 @@ func writeInvocations() map[string]harness.Invocation {
 		"promote with a blank key":   {Args: []string{"promote", "   ", "--json"}},
 		"promote an undetected key":  {Args: []string{"promote", "pr:octo/widgets#41"}},
 		"promote an undetected json": {Args: []string{"promote", "pr:octo/widgets#41", "--json"}},
+		// The fixture log dismisses this key and never restores it.
+		"undismiss":                  {Args: []string{"undismiss", "review:DevResults/DevResults#6886"}},
+		"undismiss with json":        {Args: []string{"undismiss", "review:DevResults/DevResults#6886", "--json"}},
+		"undismiss an unknown key":   {Args: []string{"undismiss", "pr:octo/widgets#41"}},
+		"undismiss without a key":    {Args: []string{"undismiss"}},
+		"undismiss with a blank key": {Args: []string{"undismiss", "   ", "--json"}},
 	}
 }
 
-func TestWriteCommandsMatchNode(t *testing.T) {
+func TestWriteCommandsLeaveAReadableLog(t *testing.T) {
 	for name, invocation := range writeInvocations() {
 		t.Run(name, func(t *testing.T) {
-			harness.CompareWrite(t, harness.GoldenHome, invocation)
+			exerciseWrite(t, harness.GoldenHome(t), invocation)
 		})
 	}
 }
 
-// promoteInvocations are diffed on the detection home, because the signal they name has to still be
-// detectable before either build will write anything at all.
+// promoteInvocations run on the detection home, because the signal they name has to still be
+// detectable before anything is written at all.
 func promoteInvocations(fixture string) map[string]harness.Invocation {
 	return map[string]harness.Invocation{
 		"promote":           {Args: []string{"promote", "review:octo/widgets#41"}, Ids: []string{"9xk2"}, GhFixture: fixture},
@@ -85,10 +96,58 @@ func promoteInvocations(fixture string) map[string]harness.Invocation {
 	}
 }
 
-func TestPromoteMatchesNode(t *testing.T) {
+func TestPromoteLeavesAReadableLog(t *testing.T) {
 	for name, invocation := range promoteInvocations(ghFixture(t)) {
 		t.Run(name, func(t *testing.T) {
-			harness.CompareWrite(t, detectionHome, invocation)
+			exerciseWrite(t, detectionHome(t), invocation)
 		})
 	}
+}
+
+// exerciseWrite is exercise with the two rules that govern the log itself: a run that reports a user
+// error appends nothing, and every line a run does append folds cleanly — a malformed append would
+// show up as a new problem the next time the log is read, long after the run that wrote it.
+func exerciseWrite(t *testing.T, home string, inv harness.Invocation) {
+	t.Helper()
+
+	before := logState(t, home)
+	out := exercise(t, home, inv)
+	after := logState(t, home)
+
+	if out.Code == cli.ExitUser && after.lines != before.lines {
+		t.Errorf(
+			"waid %s reported a user error but appended %d line(s)",
+			strings.Join(inv.Args, " "), after.lines-before.lines,
+		)
+	}
+	if after.lines < before.lines {
+		t.Errorf("waid %s shortened the log; it is append-only", strings.Join(inv.Args, " "))
+	}
+	if after.problems != before.problems {
+		t.Errorf(
+			"waid %s left the log with %d problems, up from %d",
+			strings.Join(inv.Args, " "), after.problems, before.problems,
+		)
+	}
+}
+
+type logSummary struct {
+	lines    int
+	problems int
+}
+
+func logState(t *testing.T, home string) logSummary {
+	t.Helper()
+
+	path := filepath.Join(home, "events.jsonl")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return logSummary{}
+		}
+		t.Fatalf("reading %s: %v", path, err)
+	}
+
+	lines := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+	return logSummary{lines: len(lines), problems: len(events.Load(path).Problems)}
 }

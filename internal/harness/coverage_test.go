@@ -9,19 +9,14 @@ import (
 	"github.com/brentkeller/waid/internal/harness"
 )
 
-// goOnlyCommands are the commands the port adds, which Node has no counterpart for and so cannot be
-// diffed against it. They are covered by internal/command's own tests, and by the usage diff, which
-// records them as expected Go-only lines.
-var goOnlyCommands = []string{"transcript", "undismiss"}
-
-// writeCommands are the commands that append to events.jsonl. They are diffed by the log they leave
+// writeCommands are the commands that append to events.jsonl. They are judged by the log they leave
 // behind rather than by what they print, since the log is the artifact that outlives the run.
-var writeCommands = []string{"add", "done", "reopen", "note", "dismiss", "promote"}
+var writeCommands = []string{"add", "done", "reopen", "note", "dismiss", "promote", "undismiss"}
 
-// Every command in the dispatch table is diffed against Node somewhere in this package. A command
-// added without a comparison is the failure this guards against: the port is only verified where the
-// two builds are actually run side by side.
-func TestEveryCommandIsDiffedAgainstNode(t *testing.T) {
+// Every command in the dispatch table is run by this package as a real process somewhere. A command
+// added without an invocation is the failure this guards against: unit tests exercise a command's
+// own package, and only these runs put the whole binary over a populated data directory.
+func TestEveryCommandIsExercised(t *testing.T) {
 	covered := commandsIn(
 		goldenReadInvocations(),
 		detectionInvocations(ghFixture(t)),
@@ -30,40 +25,37 @@ func TestEveryCommandIsDiffedAgainstNode(t *testing.T) {
 	)
 
 	for name := range command.Registry {
-		if slices.Contains(goOnlyCommands, name) {
-			continue
-		}
 		if !slices.Contains(covered, name) {
-			t.Errorf("%s is in the dispatch table but is never diffed against Node", name)
+			t.Errorf("%s is in the dispatch table but is never run by the harness", name)
 		}
 	}
 }
 
-// Every read command is additionally diffed against a copy of the real data directory, where the
+// Every read command is additionally run against a copy of the real data directory, where the
 // inputs are the ones on this machine rather than the ones a fixture author thought of.
-func TestEveryReadCommandIsDiffedOnTheRealHome(t *testing.T) {
+func TestEveryReadCommandIsExercisedOnTheRealHome(t *testing.T) {
 	covered := commandsIn(realHomeInvocations(t))
 
 	for name := range command.Registry {
-		if slices.Contains(goOnlyCommands, name) || slices.Contains(writeCommands, name) {
+		if slices.Contains(writeCommands, name) {
 			continue
 		}
 		if !slices.Contains(covered, name) {
-			t.Errorf("%s is never diffed against the real data directory", name)
+			t.Errorf("%s is never run against the real data directory", name)
 		}
 	}
 }
 
-// Every write command is diffed by the log it leaves behind, in fixture-home mode.
-func TestEveryWriteCommandIsDiffedByItsLog(t *testing.T) {
+// Every write command has the log it leaves behind checked, in fixture-home mode.
+func TestEveryWriteCommandHasItsLogChecked(t *testing.T) {
 	covered := commandsIn(writeInvocations(), promoteInvocations(ghFixture(t)))
 
 	for _, name := range writeCommands {
 		if _, known := command.Registry[name]; !known {
-			t.Errorf("%s is diffed as a write command but is not in the dispatch table", name)
+			t.Errorf("%s is exercised as a write command but is not in the dispatch table", name)
 		}
 		if !slices.Contains(covered, name) {
-			t.Errorf("%s never has its log diffed against Node", name)
+			t.Errorf("%s never has the log it leaves behind checked", name)
 		}
 	}
 }

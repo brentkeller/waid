@@ -29,8 +29,8 @@ func ghFixture(t testing.TB) string {
 	return filepath.Join(harness.RepoRoot(t), "internal", "gh", "testdata", "fixture.json")
 }
 
-// goldenReadInvocations are the read commands diffed against the fixture home, in both the machine
-// and the human shape, since the two are views of the same value and either one can drift alone.
+// goldenReadInvocations are the read commands run against the fixture home, in both the machine and
+// the human shape, since the two are views of the same value and either one can break alone.
 func goldenReadInvocations() map[string]harness.Invocation {
 	return map[string]harness.Invocation{
 		"list":                          {Args: []string{"list"}},
@@ -69,19 +69,27 @@ func goldenReadInvocations() map[string]harness.Invocation {
 		"sync":                          {Args: []string{"sync"}},
 		"sync json":                     {Args: []string{"sync", "--json"}},
 		"sync full json":                {Args: []string{"sync", "--full", "--json"}},
+		"transcript":                    {Args: []string{"transcript", goldenSessionId}},
+		"transcript json":               {Args: []string{"transcript", goldenSessionId, "--json"}},
+		"transcript unknown id":         {Args: []string{"transcript", "no-such-session"}},
+		"transcript unknown id json":    {Args: []string{"transcript", "no-such-session", "--json"}},
+		"transcript without an id":      {Args: []string{"transcript"}},
 	}
 }
 
-func TestReadCommandsMatchNode(t *testing.T) {
+// goldenSessionId is a session the fixture transcript directory carries.
+const goldenSessionId = "aaaa1111-2222-3333-4444-555555555555"
+
+func TestReadCommandsRunOnTheFixtureHome(t *testing.T) {
 	for name, invocation := range goldenReadInvocations() {
 		t.Run(name, func(t *testing.T) {
-			harness.CompareRead(t, harness.GoldenHome, invocation)
+			exercise(t, harness.GoldenHome(t), invocation)
 		})
 	}
 }
 
-// detectionInvocations are diffed separately, because both builds have to be served the same
-// recorded GitHub response and told to look at a GitHub user before either produces a signal at all.
+// detectionInvocations are held separately, because the run has to be served the recorded GitHub
+// response and told to look at a GitHub user before detection produces a signal at all.
 func detectionInvocations(fixture string) map[string]harness.Invocation {
 	return map[string]harness.Invocation{
 		"scan":                        {Args: []string{"scan"}, GhFixture: fixture},
@@ -98,17 +106,17 @@ func detectionInvocations(fixture string) map[string]harness.Invocation {
 	}
 }
 
-func TestDetectionCommandsMatchNode(t *testing.T) {
+func TestDetectionCommandsRunOnTheFixtureHome(t *testing.T) {
 	for name, invocation := range detectionInvocations(ghFixture(t)) {
 		t.Run(name, func(t *testing.T) {
-			harness.CompareRead(t, detectionHome, invocation)
+			exercise(t, detectionHome(t), invocation)
 		})
 	}
 }
 
 // The same two commands on the golden home as it stands, where no GitHub user is configured and the
 // signals degrade to a note.
-func TestDetectionCommandsMatchNodeWithoutAGhUser(t *testing.T) {
+func TestDetectionCommandsRunWithoutAGhUser(t *testing.T) {
 	invocations := map[string]harness.Invocation{
 		"scan":       {Args: []string{"scan"}},
 		"scan json":  {Args: []string{"scan", "--json"}},
@@ -118,7 +126,7 @@ func TestDetectionCommandsMatchNodeWithoutAGhUser(t *testing.T) {
 
 	for name, invocation := range invocations {
 		t.Run(name, func(t *testing.T) {
-			harness.CompareRead(t, harness.GoldenHome, invocation)
+			exercise(t, harness.GoldenHome(t), invocation)
 		})
 	}
 }
@@ -144,13 +152,19 @@ func typoConfigHome(t testing.TB) string {
 	return home
 }
 
-func TestDoctorReportsUnknownConfigKeysLikeNode(t *testing.T) {
+func TestDoctorRunsOnAHomeWithUnknownConfigKeys(t *testing.T) {
 	for name, invocation := range map[string]harness.Invocation{
 		"doctor":      {Args: []string{"doctor"}},
 		"doctor json": {Args: []string{"doctor", "--json"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			harness.CompareRead(t, typoConfigHome, invocation)
+			out := exercise(t, typoConfigHome(t), invocation)
+
+			for _, key := range []string{"scanDepth", "ghUsr"} {
+				if !strings.Contains(out.Stdout, key) {
+					t.Errorf("doctor does not report the unknown key %s:\n%s", key, out.Stdout)
+				}
+			}
 		})
 	}
 }

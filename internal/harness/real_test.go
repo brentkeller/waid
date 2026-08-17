@@ -3,15 +3,17 @@ package harness_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/brentkeller/waid/internal/config"
 	"github.com/brentkeller/waid/internal/events"
 	"github.com/brentkeller/waid/internal/harness"
 )
 
-// realHomeInvocations is every read command run against a copy of the real data directory, where the
-// notes carry characters no synthetic fixture thought to include, the project paths hold spaces, and
-// the transcripts are the ones actually on this machine.
+// realHomeInvocations is every read command run against a copy of the real data directory, where
+// the notes carry characters no synthetic fixture thought to include, the project paths hold spaces,
+// and the transcripts are the ones actually on this machine.
 //
 // The ids and project names the invocations address are read out of the real log rather than
 // written down here, so the set keeps working as items are added and closed.
@@ -50,20 +52,24 @@ func realHomeInvocations(t testing.TB) map[string]harness.Invocation {
 		invocations["list by project"] = harness.Invocation{Args: []string{"list", "-p", project}}
 		invocations["list by project json"] = harness.Invocation{Args: []string{"list", "-p", project, "--json"}}
 	}
+	if session := realSessionId(t); session != "" {
+		invocations["transcript"] = harness.Invocation{Args: []string{"transcript", session}}
+		invocations["transcript json"] = harness.Invocation{Args: []string{"transcript", session, "--json"}}
+	}
 	return invocations
 }
 
-func TestReadCommandsMatchNodeOnTheRealHome(t *testing.T) {
+func TestReadCommandsRunOnTheRealHome(t *testing.T) {
 	for name, invocation := range realHomeInvocations(t) {
 		t.Run(name, func(t *testing.T) {
-			harness.CompareRead(t, harness.RealHomePinned, invocation)
+			exercise(t, harness.RealHomePinned(t), invocation)
 		})
 	}
 }
 
 // The detection commands again, this time discovering and probing the real working trees under the
 // configured scan roots. Opt-in: see harness.RealHomeLiveRepos.
-func TestDetectionMatchesNodeAgainstLiveRepos(t *testing.T) {
+func TestDetectionRunsAgainstLiveRepos(t *testing.T) {
 	fixture := ghFixture(t)
 	invocations := map[string]harness.Invocation{
 		"scan":       {Args: []string{"scan"}, GhFixture: fixture},
@@ -75,7 +81,7 @@ func TestDetectionMatchesNodeAgainstLiveRepos(t *testing.T) {
 
 	for name, invocation := range invocations {
 		t.Run(name, func(t *testing.T) {
-			harness.CompareRead(t, harness.RealHomeLiveRepos, invocation)
+			exercise(t, harness.RealHomeLiveRepos(t), invocation)
 		})
 	}
 }
@@ -110,7 +116,25 @@ func realProjectName(t testing.TB) string {
 	return ""
 }
 
-// realState folds the real log where it lies. It is only ever read: the copies the comparison runs
+// realSessionId is a transcript on this machine, named by the file that holds it. The snapshot the
+// pinned home reads is a copy of this directory, so an id found here is one the run can resolve. It
+// is empty when the transcript directory holds nothing.
+func realSessionId(t testing.TB) string {
+	t.Helper()
+
+	cfg, err := config.Load(harness.RealHomePath())
+	if err != nil {
+		t.Skipf("reading the real config: %v", err)
+	}
+
+	transcripts, err := filepath.Glob(filepath.Join(cfg.ClaudeDir, "projects", "*", "*.jsonl"))
+	if err != nil || len(transcripts) == 0 {
+		return ""
+	}
+	return strings.TrimSuffix(filepath.Base(transcripts[0]), ".jsonl")
+}
+
+// realState folds the real log where it lies. It is only ever read: the copies the commands run
 // against are made by the harness.
 func realState(t testing.TB) events.State {
 	t.Helper()

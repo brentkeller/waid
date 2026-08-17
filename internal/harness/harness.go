@@ -1,22 +1,20 @@
-// Package harness runs both waid builds against the same data and diffs what they produce. Read
-// commands are compared by their output, write commands by the log they leave behind, so the port
-// is verified against the implementation it replaces rather than against a description of it.
+// Package harness runs the built waid binary as a real process against a data directory it
+// materializes, so every command is exercised end to end over data no unit test constructs: the
+// checked-in fixture home, which carries one of every event type and one of every problem, and a
+// copy of the real data directory on this machine.
 //
-// Every run is pinned: the clock and the id generator come from the environment seams both builds
-// honour, and neither build is ever pointed at a home it could damage — the checked-in fixture and
-// the real data directory are copied first.
+// Every run is pinned: the clock, the id generator and the GitHub response come from the
+// environment seams the binary honours, and the binary is never pointed at a home it could damage —
+// both sources are copied first, and the originals are only ever read.
 //
-// Four differences are accepted rather than reported, and nothing else is:
+// Two inputs live outside the copied home and move on their own: the transcript directory, which an
+// agent session appends to while the suite runs, and the scan roots, whose working trees follow
+// whatever is being edited. RealHomePinned replaces the first with a snapshot and empties the
+// second; RealHomeLiveRepos restores the roots for a run that wants them.
 //
-//   - The home path. Each arm is given its own copy so neither can see the other's writes, which
-//     makes the path the one thing they are meant to disagree on; normalizeHome takes it out of both
-//     streams before they are compared.
-//   - cache/. It is derived, disposable, and rebuilt by whichever build runs — the copies never
-//     carry it, and the write comparison diffs events.jsonl alone.
-//   - The transcript directory and the scan roots, for comparisons against the real data directory.
-//     Both live outside the copied home and move on their own; see RealHomePinned.
-//   - transcript and undismiss, which Node cannot answer at all, and the usage lines that name them.
-//     They are covered by internal/command's tests and recorded in usage_test.go's line lists.
+// The package began as a differential harness that ran this binary and the Node build it replaced
+// side by side and diffed both. That comparison was retired with the Node tree once the port was
+// verified; what remains is the half that outlives it.
 package harness
 
 import (
@@ -41,19 +39,15 @@ import (
 // EnvRealHome overrides the data directory RealHome copies from.
 const EnvRealHome = "WAID_REAL_HOME"
 
-// EnvLiveRepos opts a run into the comparison that probes the real working trees under the
+// EnvLiveRepos opts a run into the detection pass that probes the real working trees under the
 // configured scan roots. See RealHomeLiveRepos for why it is not on by default.
 const EnvLiveRepos = "WAID_HARNESS_LIVE_REPOS"
 
 // DefaultNow is the instant a run is pinned to when the caller pins none.
 var DefaultNow = time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 
-// maxReportedLines caps how much of a differing stream is printed, so one wrong header does not
-// bury the failure under the whole document.
-const maxReportedLines = 5
-
-// homeToken stands in for each arm's own copy of the data directory in the output being diffed, and
-// is the placeholder the fixture config.json carries.
+// homeToken stands in for the materialized data directory, and is the placeholder the fixture
+// config.json carries.
 const homeToken = "{{home}}"
 
 // Invocation is one command line, with everything non-deterministic about it pinned.
@@ -67,7 +61,7 @@ type Invocation struct {
 	// Cwd is the working directory the command runs in, defaulting to the repo root.
 	Cwd string
 	// GhFixture is the path to the recorded GitHub response served instead of querying gh, so
-	// detection is diffed against fixed data rather than the network.
+	// detection runs against fixed data rather than the network.
 	GhFixture string
 }
 
@@ -82,7 +76,7 @@ type Output struct {
 type HomeSource func(t testing.TB) string
 
 // GoldenHome copies the checked-in fixture home into a fresh temp directory and returns it. Each
-// call yields its own copy, so two arms of the same comparison can never see each other's writes.
+// call yields its own copy, so a run that writes cannot reach the fixture or another run's home.
 func GoldenHome(t testing.TB) string {
 	t.Helper()
 
@@ -123,23 +117,23 @@ func RealHome(t testing.TB) string {
 // RealHomePinned is RealHome with the two inputs that live outside the copied directory pinned: the
 // transcript directory is replaced by a snapshot taken once per test binary, and the scan roots are
 // emptied. Both move on their own — an agent session appends to its transcript while the suite runs,
-// and a working tree's dirty count follows whatever is being edited — so a difference the two arms
-// found there would report the filesystem rather than the port. RealHomeLiveRepos restores the roots
-// for a run that wants them.
+// and a working tree's dirty count follows whatever is being edited — so a run that read them would
+// be reporting the filesystem rather than the binary. RealHomeLiveRepos restores the roots for a run
+// that wants them.
 func RealHomePinned(t testing.TB) string {
 	t.Helper()
 	return pinnedRealHome(t, false)
 }
 
 // RealHomeLiveRepos is RealHomePinned with the configured scan roots left in place, so detection
-// discovers and probes the real working trees. It runs only when EnvLiveRepos is set, because a
-// working tree that changes between the two arms fails the comparison for a reason that has nothing
-// to do with either build.
+// discovers and probes the real working trees. It runs only when EnvLiveRepos is set: the run costs
+// a git subprocess per active repo, and what it reads is whatever the machine's working trees happen
+// to hold at the time.
 func RealHomeLiveRepos(t testing.TB) string {
 	t.Helper()
 
 	if strings.TrimSpace(os.Getenv(EnvLiveRepos)) == "" {
-		t.Skipf("set %s to diff against the real working trees", EnvLiveRepos)
+		t.Skipf("set %s to run against the real working trees", EnvLiveRepos)
 	}
 	return pinnedRealHome(t, true)
 }
@@ -191,7 +185,7 @@ func PatchConfig(t testing.TB, home string, mutate func(settings map[string]any)
 // claudeSnapshot copies the transcripts under source once per test binary and returns a directory
 // that can stand in for the Claude data directory. Only projects/ is copied, since that is the only
 // subtree the harvester reads, and the copy is shared by every home the suite materializes: it is
-// large enough that copying it per comparison would dominate the run.
+// large enough that copying it per home would dominate the run.
 var claudeSnapshot = func() func(t testing.TB, source string) string {
 	var once sync.Once
 	var root string
@@ -218,7 +212,7 @@ var claudeSnapshot = func() func(t testing.TB, source string) string {
 	}
 }()
 
-// Release removes what the harness materializes once per test binary — the built Go arm and the
+// Release removes what the harness materializes once per test binary — the built binary and the
 // transcript snapshot. TestMain calls it once the suite is done; the directories are outside any
 // t.TempDir precisely so they outlive the test that created them.
 func Release() {
@@ -242,91 +236,17 @@ func releasable(path string) {
 	releasePaths = append(releasePaths, path)
 }
 
-// GoBinary builds cmd/waid once per test binary and returns the path to it, so a test that drives
-// the real process rather than a comparison spawns the same build the harness diffs.
+// GoBinary builds cmd/waid once per test binary and returns the path to it, so a test that spawns
+// the process itself uses the same build every other run in this package does.
 func GoBinary(t testing.TB) string {
 	t.Helper()
 	return goBinary(t)
 }
 
-// RunGo runs the Go build against home.
-func RunGo(t testing.TB, home string, inv Invocation) Output {
+// Run runs the built binary against home.
+func Run(t testing.TB, home string, inv Invocation) Output {
 	t.Helper()
-	return run(t, goBinary(t), nil, home, inv)
-}
-
-// RunNode runs the Node build against home, skipping the test when that build is not there to run —
-// an absent Node arm retires the comparison rather than failing it.
-func RunNode(t testing.TB, home string, inv Invocation) Output {
-	t.Helper()
-
-	node, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("node is not on PATH")
-	}
-	entry := filepath.Join(RepoRoot(t), "bin", "waid.ts")
-	if _, err := os.Stat(entry); err != nil {
-		t.Skipf("no Node build at %s", entry)
-	}
-	return run(t, node, []string{entry}, home, inv)
-}
-
-// CompareRead runs inv against both builds, each on its own copy of the home, and reports every
-// difference in stdout, stderr and the exit code.
-func CompareRead(t testing.TB, source HomeSource, inv Invocation) {
-	t.Helper()
-
-	nodeHome := source(t)
-	goHome := source(t)
-
-	node := normalizeHome(RunNode(t, nodeHome, inv), nodeHome)
-	built := normalizeHome(RunGo(t, goHome, inv), goHome)
-
-	reportDifferences(t, inv, DiffOutputs(node, built))
-}
-
-// normalizeHome rewrites a run's own copy of the home out of its output. The two arms are given
-// separate copies so neither can see the other's writes, which makes the path itself the one thing
-// they are expected to disagree on; a command that reports where it read from is diffed on
-// everything else.
-func normalizeHome(out Output, home string) Output {
-	// The escaped form is listed first so a JSON document's `\\` is consumed before the raw path.
-	replace := strings.NewReplacer(
-		strings.ReplaceAll(home, `\`, `\\`), homeToken,
-		home, homeToken,
-	).Replace
-
-	return Output{Stdout: replace(out.Stdout), Stderr: replace(out.Stderr), Code: out.Code}
-}
-
-// CompareWrite runs inv against both builds on separate copies of the home and additionally diffs
-// the log each one left behind, byte for byte.
-func CompareWrite(t testing.TB, source HomeSource, inv Invocation) {
-	t.Helper()
-
-	nodeHome := source(t)
-	goHome := source(t)
-
-	node := RunNode(t, nodeHome, inv)
-	built := RunGo(t, goHome, inv)
-
-	differences := DiffOutputs(node, built)
-	differences = append(differences, diffText(
-		"events.jsonl",
-		readLog(t, nodeHome),
-		readLog(t, goHome),
-	)...)
-	reportDifferences(t, inv, differences)
-}
-
-// DiffOutputs describes every way the two runs disagree, in the order the streams are produced.
-func DiffOutputs(node, built Output) []string {
-	differences := diffText("stdout", node.Stdout, built.Stdout)
-	differences = append(differences, diffText("stderr", node.Stderr, built.Stderr)...)
-	if node.Code != built.Code {
-		differences = append(differences, fmt.Sprintf("exit code: node %d, go %d", node.Code, built.Code))
-	}
-	return differences
+	return run(t, goBinary(t), home, inv)
 }
 
 // RepoRoot is the directory holding go.mod, located from this file rather than the working
@@ -352,13 +272,12 @@ func RepoRoot(t testing.TB) string {
 	}
 }
 
-// run executes one build and captures both streams and the exit code. A command that fails to
-// start is a harness fault, not a difference, so it fails the test outright.
-func run(t testing.TB, program string, prefix []string, home string, inv Invocation) Output {
+// run executes the binary and captures both streams and the exit code. A command that fails to
+// start is a harness fault rather than a result, so it fails the test outright.
+func run(t testing.TB, program string, home string, inv Invocation) Output {
 	t.Helper()
 
-	args := append(append([]string{}, prefix...), "--waid-home", home)
-	args = append(args, inv.Args...)
+	args := append([]string{"--waid-home", home}, inv.Args...)
 
 	command := exec.Command(program, args...)
 	command.Dir = inv.Cwd
@@ -434,7 +353,7 @@ var goBinary = func() func(t testing.TB) string {
 			}
 		})
 		if buildErr != nil {
-			t.Fatalf("building the Go arm: %v", buildErr)
+			t.Fatalf("building cmd/waid: %v", buildErr)
 		}
 		return path
 	}
@@ -512,60 +431,5 @@ func expandHomeToken(t testing.TB, path, home string) {
 	}
 	if err := os.WriteFile(path, []byte(expanded), 0o644); err != nil {
 		t.Fatalf("writing %s: %v", path, err)
-	}
-}
-
-func readLog(t testing.TB, home string) string {
-	t.Helper()
-
-	raw, err := os.ReadFile(filepath.Join(home, "events.jsonl"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return ""
-		}
-		t.Fatalf("reading the log in %s: %v", home, err)
-	}
-	return string(raw)
-}
-
-// diffText compares one stream or file, naming the first differing lines rather than printing both
-// documents in full.
-func diffText(label, node, built string) []string {
-	if node == built {
-		return nil
-	}
-
-	nodeLines := strings.Split(node, "\n")
-	builtLines := strings.Split(built, "\n")
-	differences := []string{}
-
-	for index := 0; index < max(len(nodeLines), len(builtLines)); index++ {
-		left, right := lineAt(nodeLines, index), lineAt(builtLines, index)
-		if left == right {
-			continue
-		}
-		if len(differences) == maxReportedLines {
-			differences = append(differences, fmt.Sprintf("%s: further differences suppressed", label))
-			break
-		}
-		differences = append(differences, fmt.Sprintf(
-			"%s line %d:\n  node: %q\n  go:   %q", label, index+1, left, right,
-		))
-	}
-	return differences
-}
-
-func lineAt(lines []string, index int) string {
-	if index >= len(lines) {
-		return ""
-	}
-	return lines[index]
-}
-
-func reportDifferences(t testing.TB, inv Invocation, differences []string) {
-	t.Helper()
-
-	for _, difference := range differences {
-		t.Errorf("waid %s\n%s", strings.Join(inv.Args, " "), difference)
 	}
 }

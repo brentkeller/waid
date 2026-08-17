@@ -8,7 +8,31 @@ import (
 	"github.com/brentkeller/waid/internal/gh"
 	"github.com/brentkeller/waid/internal/git"
 	"github.com/brentkeller/waid/internal/ids"
+	"github.com/brentkeller/waid/internal/sessions"
 )
+
+// SyncStaleMinutes is how stale cache/sessions.json may be before a command needing sessions
+// refreshes it.
+const SyncStaleMinutes = 5
+
+// attachSessions fills ctx.Sessions, refreshing the cache first when it is missing or stale. A sync
+// that fails is not worth failing the command over: the cached sessions are still useful, so the
+// command runs on them and the reason is noted.
+func attachSessions(ctx *Ctx) {
+	if !ctx.Flags.Bool("no-sync") {
+		age := sessions.CacheAgeMinutes(ctx.Cfg, ctx.Now)
+		if age == nil || *age >= SyncStaleMinutes {
+			result, err := sessions.Sync(ctx.Cfg, sessions.SyncOptions{Now: ctx.Now})
+			if err == nil {
+				ctx.Sessions = result.Sessions
+				return
+			}
+			ctx.Note(fmt.Sprintf("session sync failed (%s); using the cached sessions", err))
+		}
+	}
+
+	ctx.Sessions = sessions.Load(ctx.Cfg).Sessions
+}
 
 // Ctx is everything a command needs to run.
 type Ctx struct {
@@ -21,6 +45,9 @@ type Ctx struct {
 	Now time.Time
 	// Ids is the generator new items draw from, pinned through EnvIds for a reproducible run.
 	Ids ids.Generator
+	// Sessions are the harvested sessions, attached by dispatch for a command declaring
+	// NeedsSessions.
+	Sessions []sessions.CachedSession
 	// Git and Gh are the detection seams. Nil outside tests, where detection reaches for the real
 	// clients instead.
 	Git git.Client
@@ -41,6 +68,7 @@ type Registry map[string]Command
 type Command interface {
 	run(ctx *Ctx) (any, error)
 	render(data any, ctx *Ctx) string
+	wantsSessions() bool
 }
 
 // Module pairs the data a command produces with the text that data renders as. Splitting them is
@@ -50,9 +78,13 @@ type Module[D any] struct {
 	Run func(ctx *Ctx) (D, error)
 	// Render turns that same result into the human output.
 	Render func(data D, ctx *Ctx) string
+	// NeedsSessions asks dispatch to fill Ctx.Sessions before the command runs.
+	NeedsSessions bool
 }
 
 func (m Module[D]) run(ctx *Ctx) (any, error) { return m.Run(ctx) }
+
+func (m Module[D]) wantsSessions() bool { return m.NeedsSessions }
 
 func (m Module[D]) render(data any, ctx *Ctx) string {
 	typed, ok := data.(D)

@@ -87,6 +87,9 @@ func execute(argv []string, out Io, registry Registry, asJson *bool) error {
 		Now:   Now(),
 		Ids:   IdGenerator(),
 	}
+	if command.wantsSessions() {
+		attachSessions(ctx)
+	}
 
 	data, err := command.run(ctx)
 	if err != nil {

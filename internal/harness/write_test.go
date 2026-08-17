@@ -6,10 +6,10 @@ import (
 	"github.com/brentkeller/waid/internal/harness"
 )
 
-// The four write commands are diffed against Node by the log they leave behind, which is the only
-// artifact that outlives the run.
-func TestWriteCommandsMatchNode(t *testing.T) {
-	invocations := map[string]harness.Invocation{
+// writeInvocations are diffed against Node by the log they leave behind, which is the only artifact
+// that outlives the run.
+func writeInvocations() map[string]harness.Invocation {
+	return map[string]harness.Invocation{
 		"add": {
 			Args: []string{"add", "Chart legend overflows", "-p", `C:\dev\waid`, "--tag", "bug", "--tag", "ui", "--session", "sess-1"},
 			Ids:  []string{"9xk2"},
@@ -56,19 +56,20 @@ func TestWriteCommandsMatchNode(t *testing.T) {
 		"promote an undetected key":  {Args: []string{"promote", "pr:octo/widgets#41"}},
 		"promote an undetected json": {Args: []string{"promote", "pr:octo/widgets#41", "--json"}},
 	}
+}
 
-	for name, invocation := range invocations {
+func TestWriteCommandsMatchNode(t *testing.T) {
+	for name, invocation := range writeInvocations() {
 		t.Run(name, func(t *testing.T) {
 			harness.CompareWrite(t, harness.GoldenHome, invocation)
 		})
 	}
 }
 
-// promote is diffed on the detection home, because the signal it names has to still be detectable
-// before either build will write anything at all.
-func TestPromoteMatchesNode(t *testing.T) {
-	fixture := ghFixture(t)
-	invocations := map[string]harness.Invocation{
+// promoteInvocations are diffed on the detection home, because the signal they name has to still be
+// detectable before either build will write anything at all.
+func promoteInvocations(fixture string) map[string]harness.Invocation {
+	return map[string]harness.Invocation{
 		"promote":           {Args: []string{"promote", "review:octo/widgets#41"}, Ids: []string{"9xk2"}, GhFixture: fixture},
 		"promote with json": {Args: []string{"promote", "review:octo/widgets#41", "--json"}, Ids: []string{"9xk2"}, GhFixture: fixture},
 		"promote a draft":   {Args: []string{"promote", "review:octo/gadgets#42", "--json"}, Ids: []string{"9xk2"}, GhFixture: fixture},
@@ -82,8 +83,10 @@ func TestPromoteMatchesNode(t *testing.T) {
 			GhFixture: fixture,
 		},
 	}
+}
 
-	for name, invocation := range invocations {
+func TestPromoteMatchesNode(t *testing.T) {
+	for name, invocation := range promoteInvocations(ghFixture(t)) {
 		t.Run(name, func(t *testing.T) {
 			harness.CompareWrite(t, detectionHome, invocation)
 		})

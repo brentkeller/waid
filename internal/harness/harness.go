@@ -5,10 +5,23 @@
 // Every run is pinned: the clock and the id generator come from the environment seams both builds
 // honour, and neither build is ever pointed at a home it could damage — the checked-in fixture and
 // the real data directory are copied first.
+//
+// Four differences are accepted rather than reported, and nothing else is:
+//
+//   - The home path. Each arm is given its own copy so neither can see the other's writes, which
+//     makes the path the one thing they are meant to disagree on; normalizeHome takes it out of both
+//     streams before they are compared.
+//   - cache/. It is derived, disposable, and rebuilt by whichever build runs — the copies never
+//     carry it, and the write comparison diffs events.jsonl alone.
+//   - The transcript directory and the scan roots, for comparisons against the real data directory.
+//     Both live outside the copied home and move on their own; see RealHomePinned.
+//   - transcript and undismiss, which Node cannot answer at all, and the usage lines that name them.
+//     They are covered by internal/command's tests and recorded in usage_test.go's line lists.
 package harness
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -27,6 +40,10 @@ import (
 
 // EnvRealHome overrides the data directory RealHome copies from.
 const EnvRealHome = "WAID_REAL_HOME"
+
+// EnvLiveRepos opts a run into the comparison that probes the real working trees under the
+// configured scan roots. See RealHomeLiveRepos for why it is not on by default.
+const EnvLiveRepos = "WAID_HARNESS_LIVE_REPOS"
 
 // DefaultNow is the instant a run is pinned to when the caller pins none.
 var DefaultNow = time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
@@ -101,6 +118,128 @@ func RealHome(t testing.TB) string {
 		return root == "cache" || root == ".git"
 	})
 	return home
+}
+
+// RealHomePinned is RealHome with the two inputs that live outside the copied directory pinned: the
+// transcript directory is replaced by a snapshot taken once per test binary, and the scan roots are
+// emptied. Both move on their own — an agent session appends to its transcript while the suite runs,
+// and a working tree's dirty count follows whatever is being edited — so a difference the two arms
+// found there would report the filesystem rather than the port. RealHomeLiveRepos restores the roots
+// for a run that wants them.
+func RealHomePinned(t testing.TB) string {
+	t.Helper()
+	return pinnedRealHome(t, false)
+}
+
+// RealHomeLiveRepos is RealHomePinned with the configured scan roots left in place, so detection
+// discovers and probes the real working trees. It runs only when EnvLiveRepos is set, because a
+// working tree that changes between the two arms fails the comparison for a reason that has nothing
+// to do with either build.
+func RealHomeLiveRepos(t testing.TB) string {
+	t.Helper()
+
+	if strings.TrimSpace(os.Getenv(EnvLiveRepos)) == "" {
+		t.Skipf("set %s to diff against the real working trees", EnvLiveRepos)
+	}
+	return pinnedRealHome(t, true)
+}
+
+func pinnedRealHome(t testing.TB, keepScanRoots bool) string {
+	t.Helper()
+
+	home := RealHome(t)
+	cfg, err := config.Load(home)
+	if err != nil {
+		t.Fatalf("reading the copied config: %v", err)
+	}
+
+	PatchConfig(t, home, func(settings map[string]any) {
+		settings["claudeDir"] = claudeSnapshot(t, cfg.ClaudeDir)
+		if !keepScanRoots {
+			settings["scanRoots"] = []string{}
+		}
+	})
+	return home
+}
+
+// PatchConfig rewrites config.json in a materialized home. The keys are re-encoded rather than
+// edited in place, so a caller that depends on their stored order patches the text itself.
+func PatchConfig(t testing.TB, home string, mutate func(settings map[string]any)) {
+	t.Helper()
+
+	path := filepath.Join(home, "config.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+
+	settings := map[string]any{}
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		t.Fatalf("decoding %s: %v", path, err)
+	}
+	mutate(settings)
+
+	patched, err := json.Marshal(settings)
+	if err != nil {
+		t.Fatalf("encoding %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, patched, 0o644); err != nil {
+		t.Fatalf("writing %s: %v", path, err)
+	}
+}
+
+// claudeSnapshot copies the transcripts under source once per test binary and returns a directory
+// that can stand in for the Claude data directory. Only projects/ is copied, since that is the only
+// subtree the harvester reads, and the copy is shared by every home the suite materializes: it is
+// large enough that copying it per comparison would dominate the run.
+var claudeSnapshot = func() func(t testing.TB, source string) string {
+	var once sync.Once
+	var root string
+	var snapshotErr error
+
+	return func(t testing.TB, source string) string {
+		t.Helper()
+		once.Do(func() {
+			root, snapshotErr = os.MkdirTemp("", "waid-harness-claude-")
+			if snapshotErr != nil {
+				return
+			}
+			releasable(root)
+			snapshotErr = copyDir(
+				filepath.Join(source, "projects"),
+				filepath.Join(root, "projects"),
+				nil,
+			)
+		})
+		if snapshotErr != nil {
+			t.Fatalf("snapshotting %s: %v", source, snapshotErr)
+		}
+		return root
+	}
+}()
+
+// Release removes what the harness materializes once per test binary — the built Go arm and the
+// transcript snapshot. TestMain calls it once the suite is done; the directories are outside any
+// t.TempDir precisely so they outlive the test that created them.
+func Release() {
+	releaseMu.Lock()
+	defer releaseMu.Unlock()
+
+	for _, path := range releasePaths {
+		os.RemoveAll(path)
+	}
+	releasePaths = nil
+}
+
+var (
+	releaseMu    sync.Mutex
+	releasePaths []string
+)
+
+func releasable(path string) {
+	releaseMu.Lock()
+	defer releaseMu.Unlock()
+	releasePaths = append(releasePaths, path)
 }
 
 // GoBinary builds cmd/waid once per test binary and returns the path to it, so a test that drives
@@ -286,6 +425,7 @@ var goBinary = func() func(t testing.TB) string {
 				buildErr = err
 				return
 			}
+			releasable(dir)
 			path = filepath.Join(dir, "waid"+exeSuffix())
 			build := exec.Command("go", "build", "-o", path, "./cmd/waid")
 			build.Dir = RepoRoot(t)
@@ -312,7 +452,14 @@ func exeSuffix() string {
 func copyTree(t testing.TB, src, dst string, skip func(rel string) bool) {
 	t.Helper()
 
-	err := filepath.WalkDir(src, func(path string, entry os.DirEntry, err error) error {
+	if err := copyDir(src, dst, skip); err != nil {
+		t.Fatalf("copying %s: %v", src, err)
+	}
+}
+
+// copyDir is copyTree without a test to fail, for the callers that carry their own error.
+func copyDir(src, dst string, skip func(rel string) bool) error {
+	return filepath.WalkDir(src, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -343,9 +490,6 @@ func copyTree(t testing.TB, src, dst string, skip func(rel string) bool) {
 		}
 		return os.WriteFile(target, raw, 0o644)
 	})
-	if err != nil {
-		t.Fatalf("copying %s: %v", src, err)
-	}
 }
 
 // expandHomeToken rewrites the {{home}} placeholder the fixture config carries, which is how a

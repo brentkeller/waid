@@ -1,7 +1,6 @@
 package harness_test
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,25 +16,9 @@ func detectionHome(t testing.TB) string {
 	t.Helper()
 
 	home := harness.GoldenHome(t)
-	path := filepath.Join(home, "config.json")
-
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("reading %s: %v", path, err)
-	}
-	settings := map[string]any{}
-	if err := json.Unmarshal(raw, &settings); err != nil {
-		t.Fatalf("decoding %s: %v", path, err)
-	}
-	settings["ghUser"] = "octocat"
-
-	patched, err := json.Marshal(settings)
-	if err != nil {
-		t.Fatalf("encoding %s: %v", path, err)
-	}
-	if err := os.WriteFile(path, patched, 0o644); err != nil {
-		t.Fatalf("writing %s: %v", path, err)
-	}
+	harness.PatchConfig(t, home, func(settings map[string]any) {
+		settings["ghUser"] = "octocat"
+	})
 	return home
 }
 
@@ -46,10 +29,10 @@ func ghFixture(t testing.TB) string {
 	return filepath.Join(harness.RepoRoot(t), "internal", "gh", "testdata", "fixture.json")
 }
 
-// The read commands are diffed against Node by what they print, in both the machine and the human
-// shape, since the two are views of the same value and either one can drift alone.
-func TestReadCommandsMatchNode(t *testing.T) {
-	invocations := map[string]harness.Invocation{
+// goldenReadInvocations are the read commands diffed against the fixture home, in both the machine
+// and the human shape, since the two are views of the same value and either one can drift alone.
+func goldenReadInvocations() map[string]harness.Invocation {
+	return map[string]harness.Invocation{
 		"list":                          {Args: []string{"list"}},
 		"list json":                     {Args: []string{"list", "--json"}},
 		"list all":                      {Args: []string{"list", "--all"}},
@@ -87,19 +70,20 @@ func TestReadCommandsMatchNode(t *testing.T) {
 		"sync json":                     {Args: []string{"sync", "--json"}},
 		"sync full json":                {Args: []string{"sync", "--full", "--json"}},
 	}
+}
 
-	for name, invocation := range invocations {
+func TestReadCommandsMatchNode(t *testing.T) {
+	for name, invocation := range goldenReadInvocations() {
 		t.Run(name, func(t *testing.T) {
 			harness.CompareRead(t, harness.GoldenHome, invocation)
 		})
 	}
 }
 
-// Detection is diffed separately, because both builds have to be served the same recorded GitHub
-// response and told to look at a GitHub user before either produces a signal at all.
-func TestDetectionCommandsMatchNode(t *testing.T) {
-	fixture := ghFixture(t)
-	invocations := map[string]harness.Invocation{
+// detectionInvocations are diffed separately, because both builds have to be served the same
+// recorded GitHub response and told to look at a GitHub user before either produces a signal at all.
+func detectionInvocations(fixture string) map[string]harness.Invocation {
+	return map[string]harness.Invocation{
 		"scan":                        {Args: []string{"scan"}, GhFixture: fixture},
 		"scan json":                   {Args: []string{"scan", "--json"}, GhFixture: fixture},
 		"scan by project":             {Args: []string{"scan", "-p", "waid"}, GhFixture: fixture},
@@ -112,8 +96,10 @@ func TestDetectionCommandsMatchNode(t *testing.T) {
 		"loops by project json":       {Args: []string{"loops", "-p", "waid", "--json"}, GhFixture: fixture},
 		"loops by empty project json": {Args: []string{"loops", "-p", "demo project", "--json"}, GhFixture: fixture},
 	}
+}
 
-	for name, invocation := range invocations {
+func TestDetectionCommandsMatchNode(t *testing.T) {
+	for name, invocation := range detectionInvocations(ghFixture(t)) {
 		t.Run(name, func(t *testing.T) {
 			harness.CompareRead(t, detectionHome, invocation)
 		})
@@ -165,22 +151,6 @@ func TestDoctorReportsUnknownConfigKeysLikeNode(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			harness.CompareRead(t, typoConfigHome, invocation)
-		})
-	}
-}
-
-// The same commands against a copy of the real data directory, where the notes carry characters no
-// synthetic fixture thought to include.
-func TestReadCommandsMatchNodeOnTheRealHome(t *testing.T) {
-	invocations := map[string]harness.Invocation{
-		"list":      {Args: []string{"list"}},
-		"list json": {Args: []string{"list", "--json"}},
-		"list all":  {Args: []string{"list", "--all"}},
-	}
-
-	for name, invocation := range invocations {
-		t.Run(name, func(t *testing.T) {
-			harness.CompareRead(t, harness.RealHome, invocation)
 		})
 	}
 }

@@ -11,6 +11,14 @@ import (
 	"github.com/brentkeller/waid/internal/harness"
 )
 
+// TestMain drops what the harness materialized once for the whole suite — the built Go arm and the
+// transcript snapshot — which no single test's cleanup can own.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	harness.Release()
+	os.Exit(code)
+}
+
 func TestGoldenHomeExercisesEveryEventType(t *testing.T) {
 	lines := goldenLines(t)
 

@@ -103,6 +103,13 @@ func RealHome(t testing.TB) string {
 	return home
 }
 
+// GoBinary builds cmd/waid once per test binary and returns the path to it, so a test that drives
+// the real process rather than a comparison spawns the same build the harness diffs.
+func GoBinary(t testing.TB) string {
+	t.Helper()
+	return goBinary(t)
+}
+
 // RunGo runs the Go build against home.
 func RunGo(t testing.TB, home string, inv Invocation) Output {
 	t.Helper()

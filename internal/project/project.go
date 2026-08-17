@@ -27,6 +27,25 @@ type Group struct {
 	Items   []events.Item `json:"items"`
 }
 
+// CompareNames orders two project paths the way Node's localeCompare does for the paths waid
+// stores: case is ignored first, so `C:\Dev` and `C:\dev` sit together rather than a drive letter's
+// case splitting a listing, and only an otherwise exact tie falls back to a byte comparison. The
+// project-less group sorts as the empty name, which is where Node's null coalescing puts it.
+func CompareNames(left, right *string) int {
+	a, b := derefOr(left, ""), derefOr(right, "")
+	if folded := strings.Compare(strings.ToLower(a), strings.ToLower(b)); folded != 0 {
+		return folded
+	}
+	return strings.Compare(a, b)
+}
+
+func derefOr(value *string, fallback string) string {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
 // NormalizePath trims a project path and drops trailing separators, leaving bare roots intact.
 func NormalizePath(p string) string {
 	trimmed := strings.TrimSpace(p)

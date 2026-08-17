@@ -1,0 +1,7 @@
+{"type":"user","isSidechain":false,"isMeta":true,"cwd":"C:\\dev\\waid","sessionId":"aaaa1111-2222-3333-4444-555555555555","gitBranch":"tui","timestamp":"2026-08-17T13:00:00.000Z","message":{"role":"user","content":"<command-name>/clear</command-name>"}}
+{"type":"user","isSidechain":false,"isMeta":false,"cwd":"C:\\dev\\waid","sessionId":"aaaa1111-2222-3333-4444-555555555555","gitBranch":"tui","timestamp":"2026-08-17T13:00:05.000Z","message":{"role":"user","content":"Port today and week to Go"}}
+{"type":"assistant","sessionId":"aaaa1111-2222-3333-4444-555555555555","timestamp":"2026-08-17T13:00:09.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Reading the Node commands now."}]}}
+{"type":"user","isSidechain":true,"isMeta":false,"cwd":"C:\\dev\\elsewhere","sessionId":"aaaa1111-2222-3333-4444-555555555555","gitBranch":"sidechain","timestamp":"2026-08-17T13:02:00.000Z","message":{"role":"user","content":"Search the repo for the rollup helpers."}}
+{"type":"user","isSidechain":false,"isMeta":false,"cwd":"C:\\dev\\waid","sessionId":"aaaa1111-2222-3333-4444-555555555555","gitBranch":"tui","timestamp":"2026-08-17T13:05:00.000Z","message":{"role":"user","content":[{"type":"text","text":"Now add the tests."}]}}
+{"type":"ai-title","aiTitle":"Port the day and week rollups","sessionId":"aaaa1111-2222-3333-4444-555555555555"}
+{"type":"assistant","sessionId":"aaaa1111-2222-3333-4444-555555555555","timestamp":"2026-08-17T14:30:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Tests added."}]}}

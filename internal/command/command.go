@@ -19,6 +19,8 @@ var Registry = cli.Registry{
 	"note":   cli.Module[NoteResult]{Run: runNote, Render: renderNote},
 	"list":   cli.Module[ListResult]{Run: runList, Render: renderList},
 	"show":   cli.Module[ShowResult]{Run: runShow, Render: renderShow},
+	"today":  cli.Module[TodayResult]{Run: runToday, Render: renderToday, NeedsSessions: true},
+	"week":   cli.Module[WeekResult]{Run: runWeek, Render: renderWeek, NeedsSessions: true},
 }
 
 // requiredId reads the item id a mutation operates on from the first positional.

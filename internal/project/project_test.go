@@ -249,3 +249,32 @@ func itemIds(group Group) []string {
 	}
 	return ids
 }
+
+func TestCompareNamesIgnoresCaseBeforeFallingBackToBytes(t *testing.T) {
+	cases := []struct {
+		left, right *string
+		want        int
+	}{
+		{ptr(`C:\dev\dr\devresults`), ptr(`C:\dev\waid`), -1},
+		{ptr(`C:\dev\waid`), ptr(`C:\dev\dr\devresults`), 1},
+		{ptr(`C:\Dev\Waid`), ptr(`C:\dev\zebra`), -1},
+		{ptr(`C:\dev\waid`), ptr(`C:\dev\waid`), 0},
+		{ptr(`C:\Dev\waid`), ptr(`C:\dev\waid`), -1},
+		// The project-less group sorts as the empty name.
+		{nil, ptr(`C:\dev\waid`), -1},
+		{nil, nil, 0},
+	}
+
+	for _, c := range cases {
+		if got := CompareNames(c.left, c.right); got != c.want {
+			t.Errorf("CompareNames(%v, %v) = %d, want %d", deref(c.left), deref(c.right), got, c.want)
+		}
+	}
+}
+
+func deref(value *string) string {
+	if value == nil {
+		return "<nil>"
+	}
+	return *value
+}

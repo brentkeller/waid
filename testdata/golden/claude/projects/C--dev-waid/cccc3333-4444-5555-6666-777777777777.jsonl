@@ -1,0 +1,4 @@
+{"type":"user","isSidechain":false,"isMeta":false,"cwd":"C:\\dev\\waid","sessionId":"cccc3333-4444-5555-6666-777777777777","gitBranch":"main","timestamp":"2026-08-13T14:00:00.000Z","message":{"role":"user","content":"Write the differential harness"}}
+{"type":"assistant","sessionId":"cccc3333-4444-5555-6666-777777777777","timestamp":"2026-08-13T14:00:20.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Starting on it."}]}}
+{"type":"ai-title","aiTitle":"Differential harness skeleton","sessionId":"cccc3333-4444-5555-6666-777777777777"}
+{"type":"user","isSidechain":false,"isMeta":false,"cwd":"C:\\dev\\waid","sessionId":"cccc3333-4444-5555-6666-777777777777","gitBranch":"main","timestamp":"2026-08-13T15:20:00.000Z","message":{"role":"user","content":"Add the write mode too"}}

@@ -13,6 +13,8 @@ import (
 // Registry is the dispatch table: every command waid answers to is listed here, and anything absent
 // from it is an unknown command.
 var Registry = cli.Registry{
+	"sync":   cli.Module[SyncResult]{Run: runSync, Render: renderSync},
+	"doctor": cli.Module[DoctorResult]{Run: runDoctor, Render: renderDoctor},
 	"add":    cli.Module[AddResult]{Run: runAdd, Render: renderAdd},
 	"done":   cli.Module[DoneResult]{Run: runDone, Render: renderDone},
 	"reopen": cli.Module[ReopenResult]{Run: runReopen, Render: renderReopen},

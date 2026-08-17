@@ -153,6 +153,30 @@ func TestEnsureHomeSeedsConfigInNodesShape(t *testing.T) {
 	}
 }
 
+// The keys doctor measures a config against are the keys a seeded config carries, in the same
+// order, so a new setting can never be reported to its author as a typo.
+func TestKnownKeysAreTheKeysASeededConfigCarries(t *testing.T) {
+	home := t.TempDir()
+	ensureHome(t, home, user("octocat"))
+	raw := readFile(t, filepath.Join(home, "config.json"))
+
+	at := -1
+	for _, key := range KnownKeys() {
+		index := strings.Index(raw, `"`+key+`":`)
+		if index <= at {
+			t.Fatalf("key %s is missing or out of order in %q", key, raw)
+		}
+		at = index
+	}
+	stored := map[string]any{}
+	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
+		t.Fatalf("decoding the seeded config: %v", err)
+	}
+	if len(KnownKeys()) != len(stored) {
+		t.Errorf("KnownKeys has %d entries, but the seeded config carries %d", len(KnownKeys()), len(stored))
+	}
+}
+
 func TestEnsureHomeCreatesTheHomeDirectory(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "nested", "waid")
 	ensureHome(t, home, noUser)

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -64,6 +65,20 @@ func Defaults() Settings {
 		GhCacheTtlMinutes: 15,
 		ScanMaxDepth:      4,
 	}
+}
+
+// KnownKeys are the keys config.json is allowed to carry, in the order Settings declares them.
+// Read from the struct tags rather than restated, so a new setting cannot be reported as a typo.
+func KnownKeys() []string {
+	fields := reflect.VisibleFields(reflect.TypeOf(Settings{}))
+	keys := make([]string, 0, len(fields))
+	for _, field := range fields {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		if name != "" && name != "-" {
+			keys = append(keys, name)
+		}
+	}
+	return keys
 }
 
 // ResolveHome resolves the data directory: explicit override, then WAID_HOME, then DefaultHome.

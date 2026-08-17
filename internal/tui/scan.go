@@ -44,6 +44,9 @@ type scanLoadedMsg struct {
 	result detect.Result
 	// at is when the pass ran, which is what the header's age counts from.
 	at time.Time
+	// err is a pass that did not finish. The last good result stays on screen and the failure moves to
+	// the tab bar, since a refresh that failed costs the refresh and nothing else (§7).
+	err error
 }
 
 // spinnerTickMsg advances the spinner. It is issued alongside a refresh and re-issued until the
@@ -72,6 +75,10 @@ type scanModel struct {
 	loading bool
 	spinner int
 
+	// failure is why the last pass did not land, standing until one does. The result above it is
+	// whatever was last read successfully.
+	failure string
+
 	// load is the detection seam. It runs off the update loop and comes back as a scanLoadedMsg.
 	load func() tea.Msg
 }
@@ -79,7 +86,7 @@ type scanModel struct {
 // scanLoader is the real read: the folded log and the harvested sessions, handed to detection the
 // same way every command hands them to it.
 func scanLoader(opts Options) func() tea.Msg {
-	return func() tea.Msg {
+	return guarded(func() scanLoadedMsg {
 		now := time.Now()
 		state := events.Load(opts.Cfg.EventsPath)
 		result := detect.Signals(opts.Cfg, detect.Deps{
@@ -88,6 +95,20 @@ func scanLoader(opts Options) func() tea.Msg {
 			Now:      now,
 		})
 		return scanLoadedMsg{result: result, at: now}
+	})
+}
+
+// guarded turns a pass that panics into a pass that failed. Detection reaches git and the network, so
+// it is the one read that can fail outright, and the CLI already treats that as a note rather than a
+// crash; the app keeps its last good data and moves the failure to the tab bar (§7).
+func guarded(pass func() scanLoadedMsg) func() tea.Msg {
+	return func() (msg tea.Msg) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				msg = scanLoadedMsg{err: fmt.Errorf("detection failed (%v)", recovered)}
+			}
+		}()
+		return pass()
 	}
 }
 
@@ -114,10 +135,19 @@ func (m Model) spinnerText() string {
 
 // scanLoaded takes a finished pass. The tab's count and the age both move with it, and the cursor is
 // pulled back into range in case the pass returned fewer signals than the list was showing.
+//
+// A pass that failed changes nothing but the tab bar: the list, the counts and the age stay as the
+// last pass that landed left them (§7).
 func (m Model) scanLoaded(msg scanLoadedMsg) Model {
-	m.scan.result, m.scan.loadedAt, m.scan.loading = msg.result, msg.at, false
-	m.scan.triaged = nil
+	m.scan.loading = false
 	m.progress = ""
+	if msg.err != nil {
+		m.scan.failure = msg.err.Error()
+		return m
+	}
+
+	m.scan.result, m.scan.loadedAt, m.scan.failure = msg.result, msg.at, ""
+	m.scan.triaged = nil
 	m.counts[tabScan] = m.scanCount()
 
 	tree := m.scanTree(m.viewWidth())
@@ -418,9 +448,15 @@ func (m Model) scanBody(width int) string {
 
 	tree := m.scanTree(width)
 	if tree.Len() == 0 {
-		return strings.Join(append(body, m.theme.Dim.Render("  "+tabEmpty[tabScan])), "\n")
+		body = append(body, m.theme.Dim.Render("  "+tabEmpty[tabScan]))
+	} else {
+		body = append(body, tree.View(width, m.theme))
 	}
-	return strings.Join(append(body, tree.View(width, m.theme)), "\n")
+
+	if strip := m.noteStrip(m.scan.result.Notes); strip != "" {
+		body = append(body, strip)
+	}
+	return strings.Join(body, "\n")
 }
 
 // scanHeader is the segmented kind row with the counts opposite it (§1.2).

@@ -31,11 +31,17 @@ type Options struct {
 // The receipts are replayed once the terminal is back, which is what leaves a triage pass in real
 // scrollback rather than losing it with the screen (§3.1).
 func Run(opts Options) error {
-	final, err := tea.NewProgram(New(opts), tea.WithAltScreen()).Run()
+	final, err := start(New(opts))
 	if m, ok := final.(Model); ok {
 		replayTo(os.Stdout, m.receipts)
 	}
 	return err
+}
+
+// start runs a model on the alternate screen until it quits. The extra options are the seam the
+// panic test drives the same program through without a terminal to attach to.
+func start(model tea.Model, extra ...tea.ProgramOption) (tea.Model, error) {
+	return tea.NewProgram(model, append([]tea.ProgramOption{tea.WithAltScreen()}, extra...)...).Run()
 }
 
 // tab is one of the three sections the app switches between. They are tabs rather than lazygit's
@@ -122,8 +128,9 @@ type Model struct {
 	// tab is the focus: exactly one section is live, and the global keys act on it.
 	tab tab
 
-	// counts are the badges on the tab labels, and progress is the bar's right-hand slot — the one
-	// place slow work is visible, since detection runs off the update loop (§1).
+	// counts are the badges on the tab labels, and progress is the work in flight — the one place slow
+	// work is visible, since detection runs off the update loop (§1). It is what the bar's right-hand
+	// slot shows while there is any; barSlot decides what shows there otherwise.
 	counts   [numTabs]int
 	progress string
 
@@ -362,8 +369,10 @@ func (m Model) tabBar(width int) string {
 	}
 
 	labels := bar.String()
-	if gap := width - column - lipgloss.Width(m.progress); m.progress != "" && gap >= 2 {
-		labels += strings.Repeat(" ", gap) + m.theme.Progress.Render(m.progress)
+	if slot := m.barSlot(); slot != "" {
+		if gap := width - column - lipgloss.Width(slot); gap >= 2 {
+			labels += strings.Repeat(" ", gap) + m.theme.Progress.Render(slot)
+		}
 	}
 
 	top := strings.Repeat(" ", activeStart) + "╭" + strings.Repeat("─", activeEnd-activeStart-1) + "╮"

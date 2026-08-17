@@ -468,13 +468,7 @@ func (m Model) scanBody(width int) string {
 // scanHeader is the segmented kind row with the counts opposite it (§1.2).
 func (m Model) scanHeader(width int) string {
 	row, rowWidth := m.scanFilterRow()
-	counts := m.scanCounts()
-
-	gap := width - rowWidth - lipgloss.Width(counts) - 1
-	if gap < 1 {
-		gap = 1
-	}
-	return row + strings.Repeat(" ", gap) + m.theme.Count.Render(counts)
+	return m.headerLine(row, rowWidth, m.scanCounts(), width)
 }
 
 // scanFilterRow draws the segments and returns the printed width alongside them, since the styling

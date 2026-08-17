@@ -812,13 +812,7 @@ func cut(lines []string, height int, theme Theme) []string {
 // reviewHeader is the segmented range row with the window's totals opposite it (§1.3).
 func (m Model) reviewHeader(width int) string {
 	row, rowWidth := m.reviewRangeRow()
-	totals := m.reviewTotals()
-
-	gap := width - rowWidth - lipgloss.Width(totals) - 1
-	if gap < 1 {
-		gap = 1
-	}
-	return row + strings.Repeat(" ", gap) + m.theme.Count.Render(totals)
+	return m.headerLine(row, rowWidth, m.reviewTotals(), width)
 }
 
 // reviewRangeRow draws the segments and returns the printed width alongside them, since the styling

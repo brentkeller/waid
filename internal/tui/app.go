@@ -155,6 +155,9 @@ type Model struct {
 	// and the whole log is replayed to the restored terminal on quit (§3.1).
 	receipts []receipt
 
+	// loops is the Loops tab's own state: the folded log and the tree over it.
+	loops loopsModel
+
 	// scan is the Scan tab's own state: the last good detection pass and the filters over it.
 	scan scanModel
 
@@ -170,6 +173,7 @@ type Model struct {
 // from the moment the program starts rather than from the moment the pass is issued.
 func New(opts Options) Model {
 	m := Model{opts: opts, theme: NewTheme(), clock: time.Now}
+	m.loops.load = loopsLoader(opts)
 	m.scan.load = scanLoader(opts)
 	m.scan.loading = true
 	m.progress = m.spinnerText()
@@ -182,6 +186,9 @@ func New(opts Options) Model {
 // without touching the filesystem, git or the network.
 func (m Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
+	if m.loops.load != nil {
+		cmds = append(cmds, m.loops.load)
+	}
 	if m.scan.load != nil {
 		cmds = append(cmds, m.scan.load, spinnerTick())
 	}
@@ -216,6 +223,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 	case tea.KeyMsg:
 		return m.key(msg)
+	case loopsLoadedMsg:
+		return m.loopsLoaded(msg), nil
 	case scanLoadedMsg:
 		return m.scanLoaded(msg), nil
 	case reviewLoadedMsg:
@@ -285,6 +294,8 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // includes a key that was inert for a reason the tab left in the footer (§4).
 func (m Model) tabKey(pressed string) (Model, tea.Cmd, bool) {
 	switch m.tab {
+	case tabLoops:
+		return m.loopsKey(pressed)
 	case tabScan:
 		return m.scanKey(pressed)
 	case tabReview:
@@ -430,6 +441,8 @@ func (m Model) body(width, height int) string {
 		return m.keyTable()
 	}
 	switch m.tab {
+	case tabLoops:
+		return m.loopsBody(width)
 	case tabScan:
 		return m.scanBody(width)
 	case tabReview:
@@ -522,6 +535,17 @@ func (m Model) withAffordance(line string) string {
 		return line
 	}
 	return line + strings.Repeat(" ", gap) + m.theme.Dim.Render(keys) + " "
+}
+
+// headerLine is the line above every tab's rule: whatever segmented row the tab draws on the left,
+// and its counts hung against the right edge. The row's printed width is passed rather than measured
+// because the styling makes the string longer than the columns it occupies.
+func (m Model) headerLine(row string, rowWidth int, counts string, width int) string {
+	gap := width - rowWidth - lipgloss.Width(counts) - 1
+	if gap < 1 {
+		gap = 1
+	}
+	return row + strings.Repeat(" ", gap) + m.theme.Count.Render(counts)
 }
 
 // lines counts the printed lines in a rendered block.

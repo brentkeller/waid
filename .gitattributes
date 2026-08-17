@@ -1,5 +1,9 @@
 # gofmt emits LF; a CRLF checkout reads as unformatted.
 *.go text eol=lf
 
+# The go tool rewrites these with LF, so a CRLF checkout is dirty the moment it is touched.
+go.mod text eol=lf
+go.sum text eol=lf
+
 # Fixtures encode exact line endings; git must not rewrite them.
 testdata/** -text

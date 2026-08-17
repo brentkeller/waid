@@ -5,6 +5,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -26,8 +27,14 @@ type Options struct {
 // Run starts the app on the alternate screen and blocks until it quits. Bubble Tea restores the
 // terminal from a deferred call, so a panic mid-render still leaves the alt screen before the stack
 // reaches the restored one.
+//
+// The receipts are replayed once the terminal is back, which is what leaves a triage pass in real
+// scrollback rather than losing it with the screen (§3.1).
 func Run(opts Options) error {
-	_, err := tea.NewProgram(New(opts), tea.WithAltScreen()).Run()
+	final, err := tea.NewProgram(New(opts), tea.WithAltScreen()).Run()
+	if m, ok := final.(Model); ok {
+		replayTo(os.Stdout, m.receipts)
+	}
 	return err
 }
 
@@ -128,6 +135,10 @@ type Model struct {
 	// behind for the footer.
 	showKeys bool
 	hint     string
+
+	// receipts are the writes this session made, in order. The last one is what the footer shows,
+	// and the whole log is replayed to the restored terminal on quit (§3.1).
+	receipts []receipt
 
 	// scan is the Scan tab's own state: the last good detection pass and the filters over it.
 	scan scanModel
@@ -404,20 +415,39 @@ func (m Model) keyTable() string {
 	return strings.TrimRight(out.String(), "\n")
 }
 
-// footer is two lines: the status line, where the filter being typed and the reason for an inert
-// key take turns, and the tab's key hints. It keeps its height either way so the list above it does
-// not shift as messages come and go.
+// footer is two lines: the status line and the tab's key hints. It keeps its height whether or not
+// it has anything to say, so the list above it does not shift as messages come and go.
 func (m Model) footer() string {
-	status := ""
-	switch {
-	case m.filtering:
-		status = m.theme.FilterActive.Render(" /" + m.filter + "▏")
-	case m.filter != "":
-		status = m.theme.FilterActive.Render(" /"+m.filter) + m.theme.Dim.Render("  esc clears")
-	case m.hint != "":
-		status = m.theme.Dim.Render(" " + m.hint)
+	return m.status() + "\n" + m.theme.Footer.Render(" "+tabFooters[m.tab])
+}
+
+// status is the footer's upper line. A query being typed holds it alone, since the cursor is in it;
+// otherwise the filter in force sits beside the freshest thing the app has to say — the reason a key
+// was inert, or the receipt for the last write (§3.1).
+func (m Model) status() string {
+	if m.filtering {
+		return m.theme.FilterActive.Render(" /" + m.filter + "▏")
 	}
-	return status + "\n" + m.theme.Footer.Render(" "+tabFooters[m.tab])
+
+	var parts []string
+	if m.filter != "" {
+		parts = append(parts, m.theme.FilterActive.Render("/"+m.filter))
+	}
+
+	last, written := m.lastReceipt()
+	switch {
+	case m.hint != "":
+		parts = append(parts, m.theme.Dim.Render(m.hint))
+	case written:
+		parts = append(parts, m.theme.Receipt.Render(last.line()))
+	case m.filter != "":
+		parts = append(parts, m.theme.Dim.Render("esc clears"))
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return " " + strings.Join(parts, "  ")
 }
 
 // lines counts the printed lines in a rendered block.

@@ -194,7 +194,7 @@ func TestInertKeyLeavesAFooterHint(t *testing.T) {
 		t.Errorf("hint for an unbound key is %q, want it to name the tab it was pressed on", unbound.hint)
 	}
 
-	acted, _ := press(t, unbound, "d")
+	acted, _ := press(t, unbound, "s")
 	if acted.hint != "" {
 		t.Errorf("a key bound on the tab left the hint %q, want it cleared", acted.hint)
 	}

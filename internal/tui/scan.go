@@ -63,6 +63,11 @@ type scanModel struct {
 	cursor   int
 	expanded map[string]bool
 
+	// triaged are the keys promoted or dismissed since the pass ran. They are held here rather than
+	// removed from the result so the pass stays the thing detection returned, and a fresh pass clears
+	// them — detection already excludes a dismissed key from the next one.
+	triaged map[string]bool
+
 	// loading is a pass in flight, and spinner is the frame the tab bar is showing for it.
 	loading bool
 	spinner int
@@ -111,12 +116,26 @@ func (m Model) spinnerText() string {
 // pulled back into range in case the pass returned fewer signals than the list was showing.
 func (m Model) scanLoaded(msg scanLoadedMsg) Model {
 	m.scan.result, m.scan.loadedAt, m.scan.loading = msg.result, msg.at, false
+	m.scan.triaged = nil
 	m.progress = ""
-	m.counts[tabScan] = len(msg.result.Signals)
+	m.counts[tabScan] = m.scanCount()
 
 	tree := m.scanTree(m.viewWidth())
 	m.scan.cursor = tree.Cursor
 	return m
+}
+
+// scanCount is the badge on the tab: everything the pass returned, less what has been triaged away
+// since it ran. It is the whole pass rather than the filtered list, since a filter narrows the view
+// and not the work.
+func (m Model) scanCount() int {
+	count := 0
+	for _, signal := range m.scan.result.Signals {
+		if !m.scan.triaged[signal.Key] {
+			count++
+		}
+	}
+	return count
 }
 
 // scanKey handles the keys the chrome does not own while Scan is the live tab. It reports whether
@@ -144,6 +163,10 @@ func (m Model) scanKey(pressed string) (Model, tea.Cmd, bool) {
 		return m, cmd, true
 	case "o":
 		return m.openSelected(tree)
+	case "p":
+		return m.promoteSelected(tree)
+	case "d":
+		return m.dismissSelected(tree)
 	default:
 		return m, nil, false
 	}
@@ -190,6 +213,9 @@ func (m Model) scanVisible() []detect.Signal {
 
 	var kept []detect.Signal
 	for _, signal := range m.scan.result.Signals {
+		if m.scan.triaged[signal.Key] {
+			continue
+		}
 		if m.scan.kind != "" && signal.Kind != m.scan.kind {
 			continue
 		}
@@ -443,8 +469,10 @@ func scanKindLabel(kind detect.Kind) string {
 // the pass is.
 func (m Model) scanCounts() string {
 	parts := []string{plural(len(m.scanVisible()), "signal")}
-	if m.scan.result.DismissedCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d dismissed", m.scan.result.DismissedCount))
+	// The keys triaged since the pass ran carry a dismiss each, so they count where a refresh would
+	// count them.
+	if dismissed := m.scan.result.DismissedCount + len(m.scan.triaged); dismissed > 0 {
+		parts = append(parts, fmt.Sprintf("%d dismissed", dismissed))
 	}
 	if age := m.scanAge(); age != "" {
 		parts = append(parts, age)

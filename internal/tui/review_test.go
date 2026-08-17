@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/teatest"
 
 	"github.com/brentkeller/waid/internal/detect"
@@ -22,6 +24,13 @@ func stamp(day, hour, minute int) *string {
 	return text(events.FormatTs(time.Date(2026, 8, day, hour, minute, 0, 0, time.Local)))
 }
 
+// The transcripts the fixture's two Review sessions were parsed from. The preview reads a session by
+// the path the cache recorded for it, so the fixture carries them the way a real read would.
+const (
+	wirePath   = `C:\transcripts\wire-i.jsonl`
+	pickerPath = `C:\transcripts\picker.jsonl`
+)
+
 // reviewFixture is a history spanning two projects and two weeks: four sessions today, one in the
 // week before, and one that recorded no prompts at all.
 func reviewFixture() reviewLoadedMsg {
@@ -29,6 +38,10 @@ func reviewFixture() reviewLoadedMsg {
 	devresults := `C:\dev\dr\devresults\devresults`
 
 	return reviewLoadedMsg{
+		paths: map[string]string{
+			"017516d6-7c60-4081-961e-f2120aa11111": wirePath,
+			"017516d6-7c60-4081-961e-f2120aa22222": pickerPath,
+		},
 		sessions: []sessions.Session{
 			{
 				Id: "017516d6-7c60-4081-961e-f2120aa11111", Title: "Wire -i into the CLI",
@@ -233,6 +246,191 @@ func TestReviewRefreshRereadsTheHistory(t *testing.T) {
 	}
 	if !found {
 		t.Error("r on Review produced no reviewLoadedMsg, want the history re-read")
+	}
+}
+
+// transcripts are the turns the preview's read seam hands back, keyed by the path the cache recorded
+// for a session. A session with no entry here has no transcript on record, which is the state a file
+// moved or deleted since the last sync leaves behind.
+var transcripts = map[string][]sessions.Turn{
+	wirePath: {
+		{Role: "user", Text: "Add the terminal I/O layer now — raw mode, the alternate screen, and a resize handler that survives a narrow terminal."},
+		{Role: "assistant", Text: "Starting with term.ts, the only file touching stdin."},
+	},
+	pickerPath: {
+		{Role: "user", Text: "Wire the picker into the CLI behind -i."},
+	},
+}
+
+// previewing is a Review model with the transcript seam faked and the cursor resting on the first
+// session of the first project, which is the row the preview reads.
+func previewing(t *testing.T, width int) Model {
+	t.Helper()
+
+	m := reviewed(t, width, reviewFixture())
+	m.review.readTurns = func(path string) ([]sessions.Turn, error) {
+		turns, recorded := transcripts[path]
+		if !recorded {
+			return nil, fmt.Errorf("cannot read %s", path)
+		}
+		return turns, nil
+	}
+
+	m, _ = press(t, m, "j", "enter")
+	return m
+}
+
+// deliver runs a command and feeds everything it produced back through Update, which is what the
+// program does with the read a keypress started.
+func deliver(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+
+	for _, msg := range messages(cmd) {
+		next, _ := m.Update(msg)
+		m = next.(Model)
+	}
+	return m
+}
+
+// space opens the pane and closes it again, and the transcript behind it is read off the update loop
+// like every other read (§6).
+func TestReviewSpaceTogglesThePreview(t *testing.T) {
+	m := previewing(t, 140)
+	if view := plain(m.View()); strings.Contains(view, "raw mode") {
+		t.Fatalf("the preview is showing before space was pressed:\n%s", view)
+	}
+
+	opened, cmd := press(t, m, " ")
+	if cmd == nil {
+		t.Fatal("space issued no command, want the transcript read off the update loop")
+	}
+
+	opened = deliver(t, opened, cmd)
+	if view := plain(opened.View()); !strings.Contains(view, "raw mode") {
+		t.Errorf("the preview does not carry the transcript after space:\n%s", view)
+	}
+
+	closed, _ := press(t, opened, " ")
+	if view := plain(closed.View()); strings.Contains(view, "raw mode") {
+		t.Errorf("space did not close the preview:\n%s", view)
+	}
+}
+
+// The pane identifies the session and then prints its turns by role, named the way the conversation
+// reads rather than the way the transcript stores it (§1.3).
+func TestReviewPreviewRendersTheTurnsWithTheirRoles(t *testing.T) {
+	m, cmd := press(t, previewing(t, 140), " ")
+	view := plain(deliver(t, m, cmd).View())
+
+	order := []string{
+		"Wire -i into the CLI", "14:22–14:51 · 12 prompts · tui", "017516d6-7c60-4081-961e-f2120aa11111",
+		"▸ you", "Add the terminal", "▸ claude", "term.ts",
+	}
+	at := 0
+	for _, want := range order {
+		found := strings.Index(view[at:], want)
+		if found < 0 {
+			t.Fatalf("%q is missing or out of order in:\n%s", want, view)
+		}
+		at += found
+	}
+	if strings.Contains(view, "▸ assistant") {
+		t.Errorf("the pane names a role the way the transcript stores it:\n%s", view)
+	}
+}
+
+// At or above the split threshold the preview sits beside the list, so both are readable at once (§5).
+func TestReviewPreviewIsASideSplitAtWideWidths(t *testing.T) {
+	m, cmd := press(t, previewing(t, 140), " ")
+	view := plain(deliver(t, m, cmd).View())
+
+	if !strings.Contains(view, "Show PR title and branch") {
+		t.Errorf("the list is not drawn beside the preview at 140 columns:\n%s", view)
+	}
+
+	split := false
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, `C:\dev\dr\devresults\devresults`) && strings.Contains(line, "Wire -i into the CLI") {
+			split = true
+		}
+		if lipgloss.Width(line) > 140 {
+			t.Errorf("a split line is %d columns wide, want no more than 140:\n%s", lipgloss.Width(line), line)
+		}
+	}
+	if !split {
+		t.Errorf("no row carries the list and the preview at once, want them side by side:\n%s", view)
+	}
+}
+
+// Below the threshold a side-by-side split leaves the transcript a gutter too narrow for prose, so
+// the preview takes the whole width and the list gives way to it (§5).
+func TestReviewPreviewIsAnOverlayBelowTheSplit(t *testing.T) {
+	m, cmd := press(t, previewing(t, 100), " ")
+	view := plain(deliver(t, m, cmd).View())
+
+	if strings.Contains(view, `C:\dev\dr\devresults\devresults`) {
+		t.Errorf("the list is still drawn at 100 columns, want the preview as a full-width overlay:\n%s", view)
+	}
+	if !strings.Contains(view, "▸ you") {
+		t.Errorf("the overlay does not carry the transcript:\n%s", view)
+	}
+	// A line this long only fits the pane when the pane has the whole terminal.
+	if !strings.Contains(view, "Add the terminal I/O layer now — raw mode, the alternate") {
+		t.Errorf("the overlay wrapped as if it were a split pane:\n%s", view)
+	}
+}
+
+// A transcript is longer than any terminal, so the pane is cut to the rows it has and says it was
+// cut rather than pushing the footer off the screen.
+func TestReviewPreviewIsCutToThePaneItHas(t *testing.T) {
+	m := previewing(t, 140)
+	m.height = 14
+
+	opened, cmd := press(t, m, " ")
+	view := plain(deliver(t, opened, cmd).View())
+
+	if !strings.Contains(view, "…") {
+		t.Errorf("the cut preview is not marked as cut:\n%s", view)
+	}
+	if strings.Contains(view, "term.ts") {
+		t.Errorf("the preview drew past the rows the pane has:\n%s", view)
+	}
+	if got, want := len(strings.Split(view, "\n")), 14; got != want {
+		t.Errorf("the view is %d lines tall, want %d", got, want)
+	}
+}
+
+// The pane follows the cursor: a row it has not read is read, a row with no transcript on record says
+// so, and a project heading has nothing to preview at all.
+func TestReviewPreviewFollowsTheCursor(t *testing.T) {
+	m, cmd := press(t, previewing(t, 140), " ")
+	m = deliver(t, m, cmd)
+
+	moved, cmd := press(t, m, "j")
+	if cmd == nil {
+		t.Fatal("moving the cursor with the preview open issued no read for the row it landed on")
+	}
+	moved = deliver(t, moved, cmd)
+
+	view := plain(moved.View())
+	if !strings.Contains(view, "Wire the picker into the CLI") {
+		t.Errorf("the pane does not carry the transcript of the row the cursor moved to:\n%s", view)
+	}
+	if strings.Contains(view, "term.ts") {
+		t.Errorf("the pane still carries the session the cursor left:\n%s", view)
+	}
+
+	// The last session of the project was never in the fixture's cache, so its transcript cannot be read.
+	missing, cmd := press(t, moved, "j")
+	view = plain(deliver(t, missing, cmd).View())
+	if !strings.Contains(view, "no transcript") {
+		t.Errorf("a session with no transcript on record does not say so:\n%s", view)
+	}
+
+	heading, cmd := press(t, moved, "k", "k")
+	view = plain(deliver(t, heading, cmd).View())
+	if !strings.Contains(view, "select a session") {
+		t.Errorf("the pane on a project heading does not say there is nothing to preview:\n%s", view)
 	}
 }
 

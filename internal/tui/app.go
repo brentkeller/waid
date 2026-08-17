@@ -174,6 +174,7 @@ func New(opts Options) Model {
 	m.scan.loading = true
 	m.progress = m.spinnerText()
 	m.review.load = reviewLoader(opts)
+	m.review.readTurns = readTranscript
 	return m
 }
 
@@ -218,7 +219,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case scanLoadedMsg:
 		return m.scanLoaded(msg), nil
 	case reviewLoadedMsg:
-		return m.reviewLoaded(msg), nil
+		return m.reviewLoaded(msg)
+	case previewLoadedMsg:
+		return m.previewLoaded(msg), nil
 	case spinnerTickMsg:
 		// The spinner stops with the work it is reporting, so nothing ticks while the app is idle.
 		if !m.scan.loading {
@@ -347,9 +350,16 @@ func (m Model) View() string {
 	divider := m.theme.Divider.Render(strings.Repeat("─", width))
 	footer := m.footer()
 
-	body := m.body(width)
+	// The rows left between the bar and the footer are measured rather than assumed, since a view that
+	// fills them — the preview — has to know how many it has before it draws.
+	rows := 0
 	if height > 0 {
-		body = padLines(body, height-lines(bar)-lines(divider)-lines(footer))
+		rows = height - lines(bar) - lines(divider) - lines(footer)
+	}
+
+	body := m.body(width, rows)
+	if rows > 0 {
+		body = padLines(body, rows)
 	}
 
 	return strings.Join([]string{bar, body, divider, footer}, "\n")
@@ -410,8 +420,8 @@ func (m Model) tabCell(t tab) string {
 }
 
 // body is what sits between the bar and the footer: the key table when it is open, otherwise the
-// active tab's list.
-func (m Model) body(width int) string {
+// active tab's list, in the rows the chrome left it.
+func (m Model) body(width, height int) string {
 	if m.showKeys {
 		return m.keyTable()
 	}
@@ -419,7 +429,7 @@ func (m Model) body(width int) string {
 	case tabScan:
 		return m.scanBody(width)
 	case tabReview:
-		return m.reviewBody(width)
+		return m.reviewBody(width, height)
 	}
 	return m.theme.Dim.Render("  " + tabEmpty[m.tab])
 }

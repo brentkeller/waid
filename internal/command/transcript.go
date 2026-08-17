@@ -25,10 +25,6 @@ const (
 	turnTextWidth = 62
 )
 
-// roleLabels name the two sides of a conversation the way the transcript reads rather than the way
-// it is stored.
-var roleLabels = map[string]string{"user": "you", "assistant": "claude"}
-
 func runTranscript(ctx *cli.Ctx) (TranscriptResult, error) {
 	id, err := requiredSessionId(ctx)
 	if err != nil {
@@ -108,7 +104,7 @@ func renderTranscript(data TranscriptResult, _ *cli.Ctx) string {
 	}
 	for _, turn := range data.Turns {
 		lines = append(lines, "    "+render.Pad(clock(turn.Ts), turnTimeWidth)+"  "+
-			render.Pad(roleLabel(turn.Role), turnRoleWidth)+"  "+render.Truncate(oneLine(turn.Text), turnTextWidth))
+			render.Pad(turn.RoleLabel(), turnRoleWidth)+"  "+render.Truncate(oneLine(turn.Text), turnTextWidth))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -132,13 +128,6 @@ func clock(ts *string) string {
 		return "--:--"
 	}
 	return parsed.Local().Format("15:04")
-}
-
-func roleLabel(role string) string {
-	if label, named := roleLabels[role]; named {
-		return label
-	}
-	return role
 }
 
 // oneLine collapses a turn onto a single row, since a prompt is often a paragraph and the column

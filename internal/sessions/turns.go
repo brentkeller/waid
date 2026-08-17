@@ -10,6 +10,19 @@ type Turn struct {
 	Text string  `json:"text"`
 }
 
+// roleLabels name the two sides of a conversation the way the transcript reads rather than the way
+// it is stored.
+var roleLabels = map[string]string{"user": "you", "assistant": "claude"}
+
+// RoleLabel is how a turn's side of the conversation is printed. A role the map does not name prints
+// as itself, since an unknown role is still worth showing.
+func (t Turn) RoleLabel() string {
+	if label, named := roleLabels[t.Role]; named {
+		return label
+	}
+	return t.Role
+}
+
 // ReadTurns streams a transcript and returns its turns in file order.
 //
 // A line that is not a usable record is skipped rather than failing the read, matching FeedLine:

@@ -35,6 +35,10 @@ var DefaultNow = time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 // bury the failure under the whole document.
 const maxReportedLines = 5
 
+// homeToken stands in for each arm's own copy of the data directory in the output being diffed, and
+// is the placeholder the fixture config.json carries.
+const homeToken = "{{home}}"
+
 // Invocation is one command line, with everything non-deterministic about it pinned.
 type Invocation struct {
 	// Args are the command and its flags; --waid-home is supplied by the harness.
@@ -129,10 +133,24 @@ func CompareRead(t testing.TB, source HomeSource, inv Invocation) {
 	nodeHome := source(t)
 	goHome := source(t)
 
-	node := RunNode(t, nodeHome, inv)
-	built := RunGo(t, goHome, inv)
+	node := normalizeHome(RunNode(t, nodeHome, inv), nodeHome)
+	built := normalizeHome(RunGo(t, goHome, inv), goHome)
 
 	reportDifferences(t, inv, DiffOutputs(node, built))
+}
+
+// normalizeHome rewrites a run's own copy of the home out of its output. The two arms are given
+// separate copies so neither can see the other's writes, which makes the path itself the one thing
+// they are expected to disagree on; a command that reports where it read from is diffed on
+// everything else.
+func normalizeHome(out Output, home string) Output {
+	// The escaped form is listed first so a JSON document's `\\` is consumed before the raw path.
+	replace := strings.NewReplacer(
+		strings.ReplaceAll(home, `\`, `\\`), homeToken,
+		home, homeToken,
+	).Replace
+
+	return Output{Stdout: replace(out.Stdout), Stderr: replace(out.Stderr), Code: out.Code}
 }
 
 // CompareWrite runs inv against both builds on separate copies of the home and additionally diffs
@@ -337,7 +355,7 @@ func expandHomeToken(t testing.TB, path, home string) {
 	}
 
 	escaped := strings.ReplaceAll(home, `\`, `\\`)
-	expanded := strings.ReplaceAll(string(raw), "{{home}}", escaped)
+	expanded := strings.ReplaceAll(string(raw), homeToken, escaped)
 	if expanded == string(raw) {
 		return
 	}

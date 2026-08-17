@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/brentkeller/waid/internal/harness"
@@ -80,6 +81,11 @@ func TestReadCommandsMatchNode(t *testing.T) {
 		"week json":                     {Args: []string{"week", "--json"}},
 		"week last":                     {Args: []string{"week", "--last"}},
 		"week last json":                {Args: []string{"week", "--last", "--json"}},
+		"doctor":                        {Args: []string{"doctor"}},
+		"doctor json":                   {Args: []string{"doctor", "--json"}},
+		"sync":                          {Args: []string{"sync"}},
+		"sync json":                     {Args: []string{"sync", "--json"}},
+		"sync full json":                {Args: []string{"sync", "--full", "--json"}},
 	}
 
 	for name, invocation := range invocations {
@@ -127,6 +133,38 @@ func TestDetectionCommandsMatchNodeWithoutAGhUser(t *testing.T) {
 	for name, invocation := range invocations {
 		t.Run(name, func(t *testing.T) {
 			harness.CompareRead(t, harness.GoldenHome, invocation)
+		})
+	}
+}
+
+// A home whose config.json carries keys waid does not recognise, which is the branch of doctor's
+// report the clean fixture never reaches.
+func typoConfigHome(t testing.TB) string {
+	t.Helper()
+
+	home := harness.GoldenHome(t)
+	path := filepath.Join(home, "config.json")
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	// Appended as text rather than re-encoded, so the keys stay in the order the report prints them.
+	patched := strings.TrimRight(string(raw), " \r\n")
+	patched = strings.TrimSuffix(patched, "}") + `,"scanDepth":4,"ghUsr":"someone"}`
+	if err := os.WriteFile(path, []byte(patched), 0o644); err != nil {
+		t.Fatalf("writing %s: %v", path, err)
+	}
+	return home
+}
+
+func TestDoctorReportsUnknownConfigKeysLikeNode(t *testing.T) {
+	for name, invocation := range map[string]harness.Invocation{
+		"doctor":      {Args: []string{"doctor"}},
+		"doctor json": {Args: []string{"doctor", "--json"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			harness.CompareRead(t, typoConfigHome, invocation)
 		})
 	}
 }

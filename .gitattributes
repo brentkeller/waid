@@ -1,2 +1,5 @@
+# gofmt emits LF; a CRLF checkout reads as unformatted.
+*.go text eol=lf
+
 # Fixtures encode exact line endings; git must not rewrite them.
 testdata/** -text

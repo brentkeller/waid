@@ -95,7 +95,7 @@ export async function run(argv: string[], io: Io = defaultIo, deps: Deps = {}): 
       flags,
       args,
       cwd: process.cwd(),
-      now: new Date(),
+      now: pinnedNow(),
       notes: [],
       git: deps.git,
       gh: deps.gh,
@@ -168,6 +168,15 @@ async function interact(rows: PickRow[], ctx: Ctx, io: Io, deps: Deps): Promise<
 /** A row the cursor can land on; a screen of nothing but headings never opens the picker. */
 function isSelectable(row: PickRow): boolean {
   return row.kind !== 'heading';
+}
+
+/**
+ * The clock the command runs against: the instant pinned through `WAID_NOW`, otherwise now. The
+ * seam the differential harness pins so a spawned process is reproducible.
+ */
+function pinnedNow(): Date {
+  const pinned = process.env.WAID_NOW;
+  return pinned === undefined ? new Date() : new Date(pinned);
 }
 
 function defaultIsTty(): boolean {

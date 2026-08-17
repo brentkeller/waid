@@ -43,9 +43,17 @@ export function readEvents(cfg: Config): { line: number; ev: unknown }[] {
  */
 export function appendEvent(cfg: Config, event: EventInput): WaidEvent {
   const { ts, ...rest } = event;
-  const stamped = { ts: ts ?? new Date().toISOString(), ...rest } as WaidEvent;
+  const stamped = { ts: ts ?? nowIso(), ...rest } as WaidEvent;
   fs.appendFileSync(cfg.eventsPath, `${JSON.stringify(stamped)}\n`);
   return stamped;
+}
+
+/**
+ * The instant an event is stamped with: the value pinned through `WAID_NOW`, otherwise the system
+ * clock. The seam the differential harness pins so two processes writing the same log agree.
+ */
+function nowIso(): string {
+  return process.env.WAID_NOW ?? new Date().toISOString();
 }
 
 /** Folds the whole log into the current state. */

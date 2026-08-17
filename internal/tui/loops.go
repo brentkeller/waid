@@ -13,6 +13,22 @@ import (
 	"github.com/brentkeller/waid/internal/render"
 )
 
+// loopsStatus is a segment of the status row: either one status an item can hold, or one of the two
+// spans over several. The zero value is what the tab opens on.
+type loopsStatus string
+
+const (
+	// loopsOwed is everything the log still holds against the user, open and waiting alike. It is what
+	// `waid loops` means by an open loop and what the tab's badge counts, so the segment is drawn `open`.
+	loopsOwed    loopsStatus = ""
+	loopsWaiting loopsStatus = loopsStatus(events.StatusWaiting)
+	loopsDone    loopsStatus = loopsStatus(events.StatusDone)
+	loopsAll     loopsStatus = "all"
+)
+
+// loopsStatuses are the segments of the status row, in the order §1.1 draws them.
+var loopsStatuses = []loopsStatus{loopsOwed, loopsWaiting, loopsDone, loopsAll}
+
 // Column widths for an item row. The id, the status and the age size themselves to the data; the meta
 // column carrying the tags and who the item waits on is dropped before the title is squeezed below
 // what a title needs to be recognised.
@@ -36,6 +52,9 @@ type loopsLoadedMsg struct {
 type loopsModel struct {
 	items    []events.Item
 	loadedAt time.Time
+
+	// status is the segment of the status row that is selected; the zero value is what is owed.
+	status loopsStatus
 
 	cursor   int
 	expanded map[string]bool
@@ -87,6 +106,10 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		tree.Last()
 	case "enter":
 		tree.Toggle()
+	case "s":
+		m.loops.status = nextLoopsStatus(m.loops.status)
+		m.loops.cursor = 0
+		return m, nil, true
 	case "r":
 		m, cmd := m.refreshLoops()
 		return m, cmd, true
@@ -98,8 +121,9 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 	return m, nil, true
 }
 
-// owed is everything the log still holds against the user: closing an item is the only way out of the
-// list, which is what `waid loops` already means by an open loop.
+// owed is everything the log still holds against the user, which is what `waid loops` means by an
+// open loop and what the tab's badge carries. The status row narrows the list without touching it: a
+// filter narrows the view and not the work.
 func (m Model) owed() []events.Item {
 	var kept []events.Item
 	for _, item := range m.loops.items {
@@ -110,14 +134,39 @@ func (m Model) owed() []events.Item {
 	return kept
 }
 
-// loopsVisible are the items the list is showing: the typed query applied over what is owed, oldest
-// touched first, which is the order `waid loops` prints them in. The filter is client-side over the
-// loaded state, so it issues no work (§1.1).
+// nextLoopsStatus advances the segmented row, wrapping back to what is owed.
+func nextLoopsStatus(current loopsStatus) loopsStatus {
+	for i, status := range loopsStatuses {
+		if status == current {
+			return loopsStatuses[(i+1)%len(loopsStatuses)]
+		}
+	}
+	return loopsOwed
+}
+
+// matchesStatus is the status row's test over one item.
+func (m Model) matchesStatus(item events.Item) bool {
+	switch m.loops.status {
+	case loopsAll:
+		return true
+	case loopsOwed:
+		return item.Status != events.StatusDone
+	default:
+		return string(item.Status) == string(m.loops.status)
+	}
+}
+
+// loopsVisible are the items the list is showing: the status row and the typed query applied over the
+// loaded log, oldest touched first, which is the order `waid loops` prints them in. Both filter
+// client-side, so neither issues any work (§1.1).
 func (m Model) loopsVisible() []events.Item {
 	query := strings.ToLower(m.filter)
 
 	var kept []events.Item
-	for _, item := range m.owed() {
+	for _, item := range m.loops.items {
+		if !m.matchesStatus(item) {
+			continue
+		}
 		if query != "" && !matchesItem(item, query) {
 			continue
 		}
@@ -262,9 +311,28 @@ func (m Model) loopsBody(width int) string {
 	return strings.Join(append(body, tree.View(width, m.theme)), "\n")
 }
 
-// loopsHeader is what the tab says above the rule (§1.1).
+// loopsHeader is the segmented status row with the counts opposite it (§1.1).
 func (m Model) loopsHeader(width int) string {
-	return m.headerLine("", 0, m.loopsCounts(), width)
+	row, rowWidth := m.segmentRow(loopsStatusLabels(), m.loopsSegment())
+	return m.headerLine(row, rowWidth, m.loopsCounts(), width)
+}
+
+// loopsStatusLabels name the segments. What is owed is drawn `open`, since that is the word the CLI
+// and the tab's badge already use for it.
+func loopsStatusLabels() []string {
+	labels := make([]string, 0, len(loopsStatuses))
+	for _, status := range loopsStatuses {
+		if status == loopsOwed {
+			status = loopsStatus(events.StatusOpen)
+		}
+		labels = append(labels, string(status))
+	}
+	return labels
+}
+
+// loopsSegment is which of the segments is selected.
+func (m Model) loopsSegment() int {
+	return slices.Index(loopsStatuses, m.loops.status)
 }
 
 // loopsCounts is what the header says on the right: what is owed, and how many projects it is spread

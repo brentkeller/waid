@@ -811,32 +811,8 @@ func cut(lines []string, height int, theme Theme) []string {
 
 // reviewHeader is the segmented range row with the window's totals opposite it (§1.3).
 func (m Model) reviewHeader(width int) string {
-	row, rowWidth := m.reviewRangeRow()
+	row, rowWidth := m.segmentRow(reviewRangeLabels[:], int(m.review.window))
 	return m.headerLine(row, rowWidth, m.reviewTotals(), width)
-}
-
-// reviewRangeRow draws the segments and returns the printed width alongside them, since the styling
-// makes the string longer than the columns it occupies.
-func (m Model) reviewRangeRow() (string, int) {
-	var row strings.Builder
-	row.WriteString(" ")
-	width := 1
-
-	for i, label := range reviewRangeLabels {
-		if i > 0 {
-			row.WriteString("  ")
-			width += 2
-		}
-
-		style := m.theme.FilterInactive
-		if reviewRange(i) == m.review.window {
-			label, style = "‹"+label+"›", m.theme.FilterActive
-		}
-
-		row.WriteString(style.Render(label))
-		width += lipgloss.Width(label)
-	}
-	return row.String(), width
 }
 
 // reviewTotals is what the header says on the right: the window's sessions, the prompts they took,

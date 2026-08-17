@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -467,33 +468,13 @@ func (m Model) scanBody(width int) string {
 
 // scanHeader is the segmented kind row with the counts opposite it (§1.2).
 func (m Model) scanHeader(width int) string {
-	row, rowWidth := m.scanFilterRow()
-	return m.headerLine(row, rowWidth, m.scanCounts(), width)
-}
-
-// scanFilterRow draws the segments and returns the printed width alongside them, since the styling
-// makes the string longer than the columns it occupies.
-func (m Model) scanFilterRow() (string, int) {
-	var row strings.Builder
-	row.WriteString(" ")
-	width := 1
-
-	for i, kind := range scanKinds {
-		if i > 0 {
-			row.WriteString("  ")
-			width += 2
-		}
-
-		label := scanKindLabel(kind)
-		style := m.theme.FilterInactive
-		if kind == m.scan.kind {
-			label, style = "‹"+label+"›", m.theme.FilterActive
-		}
-
-		row.WriteString(style.Render(label))
-		width += lipgloss.Width(label)
+	labels := make([]string, 0, len(scanKinds))
+	for _, kind := range scanKinds {
+		labels = append(labels, scanKindLabel(kind))
 	}
-	return row.String(), width
+
+	row, rowWidth := m.segmentRow(labels, slices.Index(scanKinds, m.scan.kind))
+	return m.headerLine(row, rowWidth, m.scanCounts(), width)
 }
 
 func scanKindLabel(kind detect.Kind) string {

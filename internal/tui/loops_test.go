@@ -199,6 +199,122 @@ func TestLoopsRefreshRereadsTheLog(t *testing.T) {
 	}
 }
 
+// s walks the status row and wraps, in the order §1.1 draws it.
+func TestLoopsStatusRowCycles(t *testing.T) {
+	m := looped(t, 140, loopsFixture())
+
+	for _, want := range []loopsStatus{loopsWaiting, loopsDone, loopsAll, loopsOwed} {
+		next, _ := press(t, m, "s")
+		if next.loops.status != want {
+			t.Fatalf("s moved the status row from %q to %q, want %q", m.loops.status, next.loops.status, want)
+		}
+		m = next
+	}
+}
+
+// The selected segment is the one the row marks, so the list always says what it is showing.
+func TestLoopsStatusRowMarksTheSelectedSegment(t *testing.T) {
+	m := looped(t, 140, loopsFixture())
+
+	if view := plain(m.View()); !strings.Contains(view, "‹open›  waiting  done  all") {
+		t.Errorf("the status row does not open on open:\n%s", view)
+	}
+
+	waiting, _ := press(t, m, "s")
+	if view := plain(waiting.View()); !strings.Contains(view, "open  ‹waiting›  done  all") {
+		t.Errorf("s did not move the marker to waiting:\n%s", view)
+	}
+}
+
+// The row filters over what is already loaded, so no segment issues a read.
+func TestLoopsStatusFilterIssuesNoWork(t *testing.T) {
+	m := looped(t, 140, loopsFixture())
+
+	for i := range loopsStatuses {
+		next, cmd := press(t, m, "s")
+		if cmd != nil {
+			t.Errorf("segment %d issued %T, want no work", i, cmd())
+		}
+		m = next
+	}
+}
+
+// Each segment narrows the list to what it names: `open` is everything still owed, the way
+// `waid loops` means an open loop, and `all` is the whole log (§1.1).
+func TestLoopsStatusFilterNarrowsTheList(t *testing.T) {
+	cases := []struct {
+		presses int
+		status  loopsStatus
+		shown   []string
+		hidden  []string
+		counts  string
+	}{
+		{0, loopsOwed, []string{"TUI design spike", "Deploy blocked"}, []string{"Already dealt with"}, "5 items · 3 projects"},
+		{1, loopsWaiting, []string{"Deploy blocked"}, []string{"TUI design spike", "Already dealt with"}, "1 item · 1 project"},
+		{2, loopsDone, []string{"Already dealt with"}, []string{"TUI design spike", "Deploy blocked"}, "1 item · 1 project"},
+		{3, loopsAll, []string{"TUI design spike", "Deploy blocked", "Already dealt with"}, nil, "6 items · 3 projects"},
+	}
+
+	for _, c := range cases {
+		m := looped(t, 140, loopsFixture())
+		for range c.presses {
+			m, _ = press(t, m, "s")
+		}
+		if m.loops.status != c.status {
+			t.Fatalf("%d presses left the row on %q, want %q", c.presses, m.loops.status, c.status)
+		}
+
+		view := plain(m.View())
+		for _, want := range c.shown {
+			if !strings.Contains(view, want) {
+				t.Errorf("the %q list drops %q:\n%s", c.status, want, view)
+			}
+		}
+		for _, unwanted := range c.hidden {
+			if strings.Contains(view, unwanted) {
+				t.Errorf("the %q list keeps %q:\n%s", c.status, unwanted, view)
+			}
+		}
+		if !strings.Contains(view, c.counts) {
+			t.Errorf("the %q header does not say %q:\n%s", c.status, c.counts, view)
+		}
+	}
+}
+
+// The badge is what is owed whatever the row is showing: a filter narrows the view and not the work,
+// which is the rule the Scan badge already follows.
+func TestLoopsBadgeIgnoresTheStatusFilter(t *testing.T) {
+	m := looped(t, 140, loopsFixture())
+
+	for range loopsStatuses {
+		m, _ = press(t, m, "s")
+		if got, want := m.counts[tabLoops], 5; got != want {
+			t.Errorf("the Loops badge is %d under %q, want %d", got, m.loops.status, want)
+		}
+	}
+}
+
+// The digits address the tabs on every tab, so the status row is reached by `s` alone (§4).
+func TestLoopsDigitsStayWithTheTabs(t *testing.T) {
+	m := looped(t, 140, loopsFixture())
+
+	switched, _ := press(t, m, "2")
+	if switched.tab != tabScan {
+		t.Errorf("2 on Loops selected %s, want Scan", tabTitles[switched.tab])
+	}
+	if switched.loops.status != loopsOwed {
+		t.Errorf("2 on Loops moved the status row to %q", switched.loops.status)
+	}
+
+	fourth, _ := press(t, m, "4")
+	if fourth.loops.status != loopsOwed {
+		t.Errorf("4 on Loops moved the status row to %q", fourth.loops.status)
+	}
+	if fourth.hint == "" {
+		t.Error("4 on Loops left no footer hint, so an unbound digit says nothing")
+	}
+}
+
 // The typed query narrows the list client-side over what is already loaded, so it issues no work.
 func TestLoopsFilterNarrowsTheList(t *testing.T) {
 	m := looped(t, 140, loopsFixture())

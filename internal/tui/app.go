@@ -80,7 +80,10 @@ type binding struct {
 
 // globalBindings apply on every tab.
 var globalBindings = []binding{
-	{[]string{"1", "2", "3", "tab", "shift+tab"}, "1 2 3 / tab", "switch tab"},
+	// The digits are the bar's on every tab. §1.1 also offers them to the Loops status row, but a digit
+	// that switches tabs on two tabs and jumps a filter on the third is a mode to keep track of, and the
+	// segmented rows Scan and Review draw have no digits either — `s` cycles all three.
+	{[]string{"1", "2", "3", "tab", "shift+tab"}, "1 2 3 / tab", "switch tab, from any tab"},
 	{[]string{"j", "k", "up", "down"}, "j k ↑ ↓", "move the cursor, skipping headings"},
 	{[]string{"g", "G"}, "g / G", "first / last row"},
 	{[]string{"enter"}, "enter", "expand or collapse the fold under the cursor"},
@@ -100,7 +103,7 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"w"}, "w", "waiting"},
 		{[]string{"e"}, "e", "edit title"},
 		{[]string{"n"}, "n", "note"},
-		{[]string{"s"}, "s", "cycle the status filter"},
+		{[]string{"s"}, "s", "cycle the status filter — open, waiting, done, all"},
 		{[]string{"p"}, "p", "toggle the detail pane"},
 	},
 	tabScan: {
@@ -546,6 +549,31 @@ func (m Model) headerLine(row string, rowWidth int, counts string, width int) st
 		gap = 1
 	}
 	return row + strings.Repeat(" ", gap) + m.theme.Count.Render(counts)
+}
+
+// segmentRow draws the toggle every tab hangs off the left of its header — Loops' statuses, Scan's
+// kinds, Review's ranges — marking the selected segment. The printed width comes back alongside the
+// row, since the styling makes the string longer than the columns it occupies.
+func (m Model) segmentRow(labels []string, active int) (string, int) {
+	var row strings.Builder
+	row.WriteString(" ")
+	width := 1
+
+	for i, label := range labels {
+		if i > 0 {
+			row.WriteString("  ")
+			width += 2
+		}
+
+		style := m.theme.FilterInactive
+		if i == active {
+			label, style = "‹"+label+"›", m.theme.FilterActive
+		}
+
+		row.WriteString(style.Render(label))
+		width += lipgloss.Width(label)
+	}
+	return row.String(), width
 }
 
 // lines counts the printed lines in a rendered block.

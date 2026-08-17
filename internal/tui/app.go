@@ -222,6 +222,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.reviewLoaded(msg)
 	case previewLoadedMsg:
 		return m.previewLoaded(msg), nil
+	case resumedMsg:
+		return m.resumed(msg)
+	case copiedMsg:
+		return m.copied(msg), nil
 	case spinnerTickMsg:
 		// The spinner stops with the work it is reporting, so nothing ticks while the app is idle.
 		if !m.scan.loading {

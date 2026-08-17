@@ -212,7 +212,7 @@ func (m Model) scanKey(pressed string) (Model, tea.Cmd, bool) {
 func (m Model) openSelected(tree Tree[detect.Signal]) (Model, tea.Cmd, bool) {
 	signal, ok := tree.SelectedItem()
 	if !ok {
-		m.hint = "o opens a signal — this row is a project"
+		m.hint = inertOn(tree, noSignals, "o opens a signal — this row is a project")
 		return m, nil, true
 	}
 
@@ -222,10 +222,7 @@ func (m Model) openSelected(tree Tree[detect.Signal]) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	return m, func() tea.Msg {
-		openUrl(url)
-		return nil
-	}, true
+	return m, opener(url), true
 }
 
 // nextScanKind advances the segmented filter, wrapping back to `all`.
@@ -357,17 +354,26 @@ func signalUrl(signal detect.Signal) string {
 	return fmt.Sprintf("https://github.com/%s/pull/%s", repository, number)
 }
 
-// openUrl hands a URL to whatever the desktop opens links with. It is a variable so a test can watch
-// it rather than open windows.
-var openUrl = func(url string) error {
+// openTarget hands a URL or a path to whatever the desktop opens it with — a pull request from Scan,
+// a checkout from Review. It is a variable so a test can watch it rather than open windows.
+var openTarget = func(target string) error {
 	switch runtime.GOOS {
 	case "windows":
 		// url.dll is the handler the shell itself uses, and it needs no console window to run in.
-		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", target).Start()
 	case "darwin":
-		return exec.Command("open", url).Start()
+		return exec.Command("open", target).Start()
 	default:
-		return exec.Command("xdg-open", url).Start()
+		return exec.Command("xdg-open", target).Start()
+	}
+}
+
+// opener hands a target to the desktop off the update loop: launching the handler is a process
+// spawn, and the app has nothing to say about it beyond having asked (§6).
+func opener(target string) tea.Cmd {
+	return func() tea.Msg {
+		openTarget(target)
+		return nil
 	}
 }
 

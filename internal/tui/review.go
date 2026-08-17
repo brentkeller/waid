@@ -3,6 +3,8 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -75,6 +77,17 @@ type previewLoadedMsg struct {
 	id    string
 	turns []sessions.Turn
 	err   error
+}
+
+// resumedMsg is Claude exiting and the app coming back to the alternate screen, with whatever went
+// wrong reaching it rather than the terminal the process was handed.
+type resumedMsg struct{ err error }
+
+// copiedMsg is a finished copy to the system clipboard, carrying what was copied so the footer can
+// name it.
+type copiedMsg struct {
+	id  string
+	err error
 }
 
 // reviewModel is the Review tab: the whole harvested history, the window over it, and the tree's
@@ -225,6 +238,12 @@ func (m Model) reviewKey(pressed string) (Model, tea.Cmd, bool) {
 	case "r":
 		m, cmd := m.refreshReview()
 		return m, cmd, true
+	case "R":
+		return m.resumeSelected(tree)
+	case "o":
+		return m.openSession(tree)
+	case "y":
+		return m.copySessionId(tree)
 	default:
 		return m, nil, false
 	}
@@ -233,6 +252,118 @@ func (m Model) reviewKey(pressed string) (Model, tea.Cmd, bool) {
 
 	m, cmd := m.previewSync(tree)
 	return m, cmd, true
+}
+
+// resumeSelected hands the session under the cursor back to Claude. The app suspends rather than
+// embedding it: ExecProcess releases the terminal, runs Claude on the app's own stdio, and re-enters
+// the alternate screen when it exits, so ctrl-c goes where the user expects (§5).
+func (m Model) resumeSelected(tree Tree[sessions.Session]) (Model, tea.Cmd, bool) {
+	session, ok := tree.SelectedItem()
+	if !ok {
+		m.hint = inertOn(tree, noSessions, "R resumes a session — this row is a project")
+		return m, nil, true
+	}
+	return m, resumeProcess(resumeCommand(session)), true
+}
+
+// resumeCommand is the process a resume runs. It runs in the directory the session ran in, since
+// Claude files its transcripts per project and a resume started elsewhere would not find the session.
+func resumeCommand(session sessions.Session) *exec.Cmd {
+	cmd := exec.Command("claude", "--resume", session.Id)
+	if session.Project != nil {
+		cmd.Dir = *session.Project
+	}
+	return cmd
+}
+
+// resumeProcess suspends the app for the length of the process. It is a variable so a test can watch
+// what would be run rather than launch Claude from the test binary.
+var resumeProcess = func(cmd *exec.Cmd) tea.Cmd {
+	return tea.ExecProcess(cmd, func(err error) tea.Msg { return resumedMsg{err: err} })
+}
+
+// resumed is the app back from a suspension. The session that was just worked in has grown prompts
+// and turns the loaded read knows nothing about, so the history is re-read rather than left stale.
+func (m Model) resumed(msg resumedMsg) (Model, tea.Cmd) {
+	if msg.err != nil {
+		m.hint = fmt.Sprintf("resume failed: %v", msg.err)
+		return m, nil
+	}
+	return m.refreshReview()
+}
+
+// openSession opens the checkout the session under the cursor ran in, which is what a page-less tab
+// has to open instead of a URL. A session whose transcript never recorded a cwd has nothing to open
+// and says so (§4).
+func (m Model) openSession(tree Tree[sessions.Session]) (Model, tea.Cmd, bool) {
+	session, ok := tree.SelectedItem()
+	if !ok {
+		m.hint = inertOn(tree, noSessions, "o opens the repo a session ran in — this row is a project")
+		return m, nil, true
+	}
+	if session.Project == nil {
+		m.hint = "this session recorded no project to open"
+		return m, nil, true
+	}
+	return m, opener(*session.Project), true
+}
+
+// copySessionId puts the id on the system clipboard, which is what resuming from another terminal or
+// pasting into `waid transcript` needs. The copy runs off the update loop, since the clipboard is
+// reached through a process of its own (§6).
+func (m Model) copySessionId(tree Tree[sessions.Session]) (Model, tea.Cmd, bool) {
+	session, ok := tree.SelectedItem()
+	if !ok {
+		m.hint = inertOn(tree, noSessions, "y copies a session id — this row is a project")
+		return m, nil, true
+	}
+
+	id := session.Id
+	return m, func() tea.Msg { return copiedMsg{id: id, err: copyText(id)} }, true
+}
+
+// copied reports what the copy did. It is a hint rather than a receipt: nothing reached the event
+// log, so there is nothing to undo and nothing to replay on quit (§3.1).
+func (m Model) copied(msg copiedMsg) Model {
+	if msg.err != nil {
+		m.hint = fmt.Sprintf("copy failed: %v", msg.err)
+		return m
+	}
+
+	m.hint = "copied " + msg.id
+	return m
+}
+
+// copyText hands text to the system clipboard through whatever the desktop copies with, trying each
+// tool in turn since a Linux session may be running either display protocol. It is a variable so a
+// test can watch it rather than write to the real clipboard.
+var copyText = func(text string) error {
+	tools := clipboardCommands()
+	for _, argv := range tools {
+		cmd := exec.Command(argv[0], argv[1:]...)
+		cmd.Stdin = strings.NewReader(text)
+		if err := cmd.Run(); err == nil {
+			return nil
+		}
+	}
+
+	names := make([]string, 0, len(tools))
+	for _, argv := range tools {
+		names = append(names, argv[0])
+	}
+	return fmt.Errorf("no clipboard tool available (tried %s)", strings.Join(names, ", "))
+}
+
+// clipboardCommands are the copy commands to try, in the order a desktop is likely to answer them.
+func clipboardCommands() [][]string {
+	switch runtime.GOOS {
+	case "windows":
+		return [][]string{{"clip"}}
+	case "darwin":
+		return [][]string{{"pbcopy"}}
+	default:
+		return [][]string{{"wl-copy"}, {"xclip", "-selection", "clipboard"}, {"xsel", "--clipboard", "--input"}}
+	}
 }
 
 // previewSync keeps the open pane pointed at the row under the cursor: a session it has not read yet

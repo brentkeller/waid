@@ -25,7 +25,7 @@ import (
 func (m Model) promoteSelected(tree Tree[detect.Signal]) (Model, tea.Cmd, bool) {
 	signal, ok := tree.SelectedItem()
 	if !ok {
-		m.hint = inertOn(tree, "p promotes a signal — this row is a project")
+		m.hint = inertOn(tree, noSignals, "p promotes a signal — this row is a project")
 		return m, nil, true
 	}
 
@@ -87,7 +87,7 @@ func (m Model) renameTarget() (receipt, bool) {
 func (m Model) dismissSelected(tree Tree[detect.Signal]) (Model, tea.Cmd, bool) {
 	signal, ok := tree.SelectedItem()
 	if !ok {
-		m.hint = inertOn(tree, "d dismisses a signal — this row is a project")
+		m.hint = inertOn(tree, noSignals, "d dismisses a signal — this row is a project")
 		return m, nil, true
 	}
 
@@ -132,11 +132,18 @@ func (m Model) unhide(key string) Model {
 	return m
 }
 
-// inertOn is the reason an action needing a signal did nothing. A list with nothing in it has no row
-// to describe, so the heading's reason would be a lie there (§4).
-func inertOn(tree Tree[detect.Signal], hint string) string {
+// The two reasons an action found nothing at all to act on, which is not the same as finding the
+// wrong kind of row.
+const (
+	noSignals  = "there are no signals to triage"
+	noSessions = "there are no sessions here"
+)
+
+// inertOn is the reason an action needing a row did nothing. A list with nothing in it has no row to
+// describe, so the heading's reason would be a lie there (§4).
+func inertOn[T any](tree Tree[T], empty, hint string) string {
 	if tree.Len() == 0 {
-		return "there are no signals to triage"
+		return empty
 	}
 	return hint
 }

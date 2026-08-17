@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
+	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -431,6 +434,200 @@ func TestReviewPreviewFollowsTheCursor(t *testing.T) {
 	view = plain(deliver(t, heading, cmd).View())
 	if !strings.Contains(view, "select a session") {
 		t.Errorf("the pane on a project heading does not say there is nothing to preview:\n%s", view)
+	}
+}
+
+// onSession is a Review model with the first project expanded and the cursor resting on its first
+// session, which is the row the actions act on.
+func onSession(t *testing.T, msg reviewLoadedMsg) Model {
+	t.Helper()
+
+	m, _ := press(t, reviewed(t, 140, msg), "j", "enter")
+	return m
+}
+
+// watchResume swaps the suspension seam for one that records what would have been run, so a test
+// never launches Claude from the test binary.
+func watchResume(t *testing.T) *[]*exec.Cmd {
+	t.Helper()
+
+	launched := []*exec.Cmd{}
+	restore := resumeProcess
+	resumeProcess = func(cmd *exec.Cmd) tea.Cmd {
+		launched = append(launched, cmd)
+		return func() tea.Msg { return resumedMsg{} }
+	}
+	t.Cleanup(func() { resumeProcess = restore })
+	return &launched
+}
+
+// R hands the session under the cursor back to Claude, run in the directory the session belongs to
+// since Claude files its transcripts per project (§5).
+func TestReviewResumeRunsClaudeOnTheSelectedSession(t *testing.T) {
+	launched := watchResume(t)
+
+	m, cmd := press(t, onSession(t, reviewFixture()), "R")
+	if cmd == nil {
+		t.Fatal("R produced no command, want the app suspended into claude")
+	}
+	if len(*launched) != 1 {
+		t.Fatalf("R launched %d processes, want 1", len(*launched))
+	}
+
+	want := []string{"claude", "--resume", "017516d6-7c60-4081-961e-f2120aa11111"}
+	if got := (*launched)[0].Args; !slices.Equal(got, want) {
+		t.Errorf("R runs %v, want %v", got, want)
+	}
+	if got := (*launched)[0].Dir; got != `C:\dev\waid` {
+		t.Errorf("R runs in %q, want the session's own project", got)
+	}
+	if m.hint != "" {
+		t.Errorf("R on a session left the hint %q, want none", m.hint)
+	}
+}
+
+// The suspension is Bubble Tea's own, so the terminal is released and restored around Claude rather
+// than proxied through the update loop (§5).
+func TestReviewResumeSuspendsThroughExecProcess(t *testing.T) {
+	_, cmd := press(t, onSession(t, reviewFixture()), "R")
+
+	msgs := messages(cmd)
+	if len(msgs) != 1 {
+		t.Fatalf("R produced %d messages, want 1", len(msgs))
+	}
+	if got := fmt.Sprintf("%T", msgs[0]); got != "tea.execMsg" {
+		t.Errorf("R produced %s, want the message tea.ExecProcess suspends on", got)
+	}
+}
+
+// Claude exiting brings the app back, and the history is re-read: the session that was just resumed
+// has grown prompts the loaded read knows nothing about.
+func TestReviewResumeRereadsTheHistoryWhenClaudeExits(t *testing.T) {
+	m := onSession(t, reviewFixture())
+
+	next, cmd := m.Update(resumedMsg{})
+	back := next.(Model)
+	if back.hint != "" {
+		t.Errorf("a clean exit left the hint %q, want none", back.hint)
+	}
+
+	found := false
+	for _, msg := range messages(cmd) {
+		if _, ok := msg.(reviewLoadedMsg); ok {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("returning from claude produced no reviewLoadedMsg, want the history re-read")
+	}
+
+	failed, _ := m.Update(resumedMsg{err: errors.New("executable file not found")})
+	if hint := failed.(Model).hint; !strings.Contains(hint, "executable file not found") {
+		t.Errorf("a failed resume left the hint %q, want the reason in the footer", hint)
+	}
+}
+
+// o opens the checkout the session ran in, and says so when the session recorded none (§4).
+func TestReviewOpenRepo(t *testing.T) {
+	opened := []string{}
+	restore := openTarget
+	openTarget = func(target string) error {
+		opened = append(opened, target)
+		return nil
+	}
+	t.Cleanup(func() { openTarget = restore })
+
+	m, cmd := press(t, onSession(t, reviewFixture()), "o")
+	messages(cmd)
+	if len(opened) != 1 || opened[0] != `C:\dev\waid` {
+		t.Fatalf("o opened %v, want the session's project", opened)
+	}
+	if m.hint != "" {
+		t.Errorf("o on a session with a project left the hint %q, want none", m.hint)
+	}
+
+	// A session whose transcript never recorded a cwd has no checkout to open.
+	msg := reviewFixture()
+	msg.sessions = append(msg.sessions, sessions.Session{
+		Id: "017516d6-7c60-4081-961e-f2120aa77777", Title: "Ad-hoc question",
+		Started: stamp(17, 12, 0), Ended: stamp(17, 12, 5), Prompts: 2,
+	})
+
+	loose, cmd := press(t, reviewed(t, 140, msg), "j", "j", "enter", "o")
+	messages(cmd)
+	if len(opened) != 1 {
+		t.Errorf("o opened %v from a session with no project, want nothing opened", opened)
+	}
+	if !strings.Contains(loose.hint, "no project") {
+		t.Errorf("o on a session with no project left the hint %q, want it to say why", loose.hint)
+	}
+}
+
+// y puts the session id on the clipboard, which is what a resume from another terminal needs.
+func TestReviewCopiesTheSessionId(t *testing.T) {
+	copied := []string{}
+	restore := copyText
+	copyText = func(text string) error {
+		copied = append(copied, text)
+		return nil
+	}
+	t.Cleanup(func() { copyText = restore })
+
+	m, cmd := press(t, onSession(t, reviewFixture()), "y")
+	m = deliver(t, m, cmd)
+
+	want := "017516d6-7c60-4081-961e-f2120aa11111"
+	if len(copied) != 1 || copied[0] != want {
+		t.Fatalf("y copied %v, want the session id %q", copied, want)
+	}
+	if !strings.Contains(m.hint, want) {
+		t.Errorf("y left the hint %q, want it to name what was copied", m.hint)
+	}
+	if len(m.receipts) != 0 {
+		t.Errorf("y recorded %d receipts, want none — a copy writes nothing to the log", len(m.receipts))
+	}
+
+	copyText = func(string) error { return errors.New("no clipboard tool available") }
+	broken, cmd := press(t, onSession(t, reviewFixture()), "y")
+	broken = deliver(t, broken, cmd)
+	if !strings.Contains(broken.hint, "no clipboard tool") {
+		t.Errorf("a failed copy left the hint %q, want the reason in the footer", broken.hint)
+	}
+}
+
+// None of the three act on a fold: a project is not a session to resume, open or address (§4).
+func TestReviewActionsAreInertOnAProjectHeading(t *testing.T) {
+	launched := watchResume(t)
+
+	opened, copied := []string{}, []string{}
+	restoreOpen, restoreCopy := openTarget, copyText
+	openTarget = func(target string) error {
+		opened = append(opened, target)
+		return nil
+	}
+	copyText = func(text string) error {
+		copied = append(copied, text)
+		return nil
+	}
+	t.Cleanup(func() { openTarget, copyText = restoreOpen, restoreCopy })
+
+	m := reviewed(t, 140, reviewFixture())
+	for _, pressed := range []string{"R", "o", "y"} {
+		heading, cmd := press(t, m, pressed)
+		messages(cmd)
+		if !strings.Contains(heading.hint, "project") {
+			t.Errorf("%s on a project heading left the hint %q, want it to name the row", pressed, heading.hint)
+		}
+	}
+
+	if len(*launched)+len(opened)+len(copied) != 0 {
+		t.Errorf("a heading resumed %v, opened %v and copied %v, want nothing acted on", *launched, opened, copied)
+	}
+
+	// An empty list has no row to describe at all, so the heading's reason would be a lie there.
+	empty, _ := press(t, reviewed(t, 140, reviewLoadedMsg{at: reviewNow}), "R")
+	if !strings.Contains(empty.hint, "no sessions") {
+		t.Errorf("R on an empty list left the hint %q, want it to say the list is empty", empty.hint)
 	}
 }
 

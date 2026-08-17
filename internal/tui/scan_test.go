@@ -246,12 +246,12 @@ func TestInitLoadsTheSignals(t *testing.T) {
 // page to open (§4).
 func TestOpenSignalInBrowser(t *testing.T) {
 	opened := []string{}
-	restore := openUrl
-	openUrl = func(url string) error {
+	restore := openTarget
+	openTarget = func(url string) error {
 		opened = append(opened, url)
 		return nil
 	}
-	t.Cleanup(func() { openUrl = restore })
+	t.Cleanup(func() { openTarget = restore })
 
 	m := scanned(t, 140, scanFixture())
 

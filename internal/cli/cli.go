@@ -18,6 +18,9 @@ const (
 	ExitInternal = 2
 )
 
+// homeFlag overrides the data directory waid reads and writes.
+const homeFlag = "--waid-home"
+
 // Io is where the CLI writes. Tests replace both ends with buffers.
 type Io struct {
 	Out io.Writer
@@ -56,7 +59,13 @@ func execute(argv []string, out Io, asJson *bool) error {
 		}
 	}
 
-	for _, arg := range argv {
+	for index := 0; index < len(argv); index++ {
+		arg := argv[index]
+		if arg == homeFlag {
+			// The override carries a path, which is a value rather than the command.
+			index++
+			continue
+		}
 		if !strings.HasPrefix(arg, "-") {
 			return Userf("unknown command: %s", arg)
 		}

@@ -100,4 +100,5 @@ title, project or tag, use their version verbatim.
 - **Titles** are one line saying what needs doing, with no `TODO:` prefix and no date. Add
   `--tag bug` for a defect and `--waiting-on <who>` when the block is a person, which sets the
   item's status to `waiting`.
-- If `waid` is not on `PATH`, every command works as `node C:\dev\waid\bin\waid.ts <command>`.
+- If `waid` is not on `PATH`, every command works as `go run ./cmd/waid <command>` from
+  `C:\dev\waid`.

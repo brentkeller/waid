@@ -86,20 +86,31 @@ func Width(text string) int {
 }
 
 // Pad fits text to exactly width columns, padding with spaces or truncating with an ellipsis. Width
-// counts UTF-16 code units, so an astral character such as an emoji costs two. Truncating between
-// the halves of a surrogate pair leaves a lone surrogate, which decodes to the replacement
-// character — the same byte sequence Node writes to a UTF-8 stream.
+// counts UTF-16 code units, so an astral character such as an emoji costs two.
 func Pad(text string, width int) string {
 	if width <= 0 {
 		return ""
 	}
 
 	units := utf16.Encode([]rune(text))
-	if len(units) == width {
-		return text
-	}
 	if len(units) < width {
 		return text + strings.Repeat(" ", width-len(units))
+	}
+	return Truncate(text, width)
+}
+
+// Truncate fits text within width columns, ending it with an ellipsis when it does not fit, and
+// leaves anything shorter unpadded. Truncating between the halves of a surrogate pair leaves a lone
+// surrogate, which decodes to the replacement character — the same byte sequence Node writes to a
+// UTF-8 stream.
+func Truncate(text string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+
+	units := utf16.Encode([]rune(text))
+	if len(units) <= width {
+		return text
 	}
 	if width == 1 {
 		return string(utf16.Decode(units[:1]))

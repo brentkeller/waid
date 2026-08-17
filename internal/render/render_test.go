@@ -117,6 +117,29 @@ func TestPadCountsUtf16CodeUnitsAsNodeDoes(t *testing.T) {
 	}
 }
 
+func TestTruncateFitsTextToAWidthWithoutPaddingIt(t *testing.T) {
+	cases := []struct {
+		text  string
+		width int
+		want  string
+	}{
+		{"abcdef", 5, "abcd…"},
+		{"abc", 5, "abc"},
+		{"abcde", 5, "abcde"},
+		{"abc", 1, "a"},
+		{"abc", 0, ""},
+		{"abc", -1, ""},
+		// An emoji outside the BMP costs two code units, so three of them overflow a width of five.
+		{"🙂🙂🙂", 5, "🙂🙂…"},
+	}
+
+	for _, c := range cases {
+		if got := Truncate(c.text, c.width); got != c.want {
+			t.Errorf("Truncate(%q, %d) = %q, want %q", c.text, c.width, got, c.want)
+		}
+	}
+}
+
 func TestLocalYmdFormatsATimeInLocalTime(t *testing.T) {
 	cases := []struct {
 		at   time.Time

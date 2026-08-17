@@ -46,21 +46,11 @@ func NewAccumulator() *Accumulator { return &Accumulator{} }
 // FeedLine applies one raw transcript line to the accumulator.
 //
 // Streaming and pure: no filesystem, no whole-file buffering, so a 2.5 MB transcript costs one line
-// of memory. Transcript records are third-party data, so a line that is not a JSON object — a blank
-// line, or the half-written final line of a session being appended to right now — is skipped
-// silently rather than treated as an error.
+// of memory. Transcript records are third-party data, so a line that is not a usable record is
+// skipped silently rather than treated as an error.
 func (acc *Accumulator) FeedLine(rawLine string) {
-	line := strings.TrimSpace(rawLine)
-	if line == "" {
-		return
-	}
-
-	var parsed any
-	if err := json.Unmarshal([]byte(line), &parsed); err != nil {
-		return
-	}
-	record, isRecord := parsed.(map[string]any)
-	if !isRecord {
+	record, ok := decodeRecord(rawLine)
+	if !ok {
 		return
 	}
 
@@ -163,8 +153,24 @@ func DecodeProjectSlug(dirName string) string {
 	return dirName
 }
 
-// messageText pulls the text out of a user message, whose content is either a string or content
-// blocks.
+// decodeRecord narrows a raw transcript line to the record it holds, reporting false for anything
+// that is not a JSON object — a blank line, or the half-written final line of a session being
+// appended to right now.
+func decodeRecord(rawLine string) (map[string]any, bool) {
+	line := strings.TrimSpace(rawLine)
+	if line == "" {
+		return nil, false
+	}
+
+	var parsed any
+	if err := json.Unmarshal([]byte(line), &parsed); err != nil {
+		return nil, false
+	}
+	record, isRecord := parsed.(map[string]any)
+	return record, isRecord
+}
+
+// messageText pulls the text out of a message, whose content is either a string or content blocks.
 func messageText(message any) *string {
 	record, isRecord := message.(map[string]any)
 	if !isRecord {

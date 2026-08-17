@@ -51,11 +51,11 @@ func runWeek(ctx *cli.Ctx) (WeekResult, error) {
 
 	weekly := []sessions.Session{}
 	for _, session := range ctx.Sessions {
-		if session.Prompts > 0 && overlaps(session.Session, start, end) {
+		if session.Prompts > 0 && session.Overlaps(start, end) {
 			weekly = append(weekly, session.Session)
 		}
 	}
-	slices.SortStableFunc(weekly, byStart)
+	slices.SortStableFunc(weekly, sessions.ByStart)
 
 	projects := rollUpWeek(weekly, closuresByProject(ctx, start, end))
 

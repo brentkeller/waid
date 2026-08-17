@@ -63,11 +63,11 @@ func runToday(ctx *cli.Ctx) (TodayResult, error) {
 	// syncing, not part of a day's report.
 	daily := []sessions.Session{}
 	for _, session := range ctx.Sessions {
-		if session.Prompts > 0 && overlaps(session.Session, start, end) {
+		if session.Prompts > 0 && session.Overlaps(start, end) {
 			daily = append(daily, session.Session)
 		}
 	}
-	slices.SortStableFunc(daily, byStart)
+	slices.SortStableFunc(daily, sessions.ByStart)
 
 	return TodayResult{
 		Date:     date,
@@ -90,48 +90,6 @@ func readDate(input string, passed bool, now time.Time) (string, error) {
 		return "", errs.Userf("invalid --date: %s (expected YYYY-MM-DD)", input)
 	}
 	return value, nil
-}
-
-// overlaps reports whether any part of a session's span falls inside the half-open window. A
-// session with only one of the two timestamps is treated as an instant at that time.
-func overlaps(session sessions.Session, start, end time.Time) bool {
-	started, ok := startedAt(session)
-	ended, endOk := endedAt(session)
-	if !ok || !endOk {
-		return false
-	}
-	return started.Before(end) && !ended.Before(start)
-}
-
-func startedAt(session sessions.Session) (time.Time, bool) {
-	return instant(session.Started, session.Ended)
-}
-
-func endedAt(session sessions.Session) (time.Time, bool) {
-	return instant(session.Ended, session.Started)
-}
-
-// instant parses the first of the two timestamps that is present, since a session missing one end
-// stands in for it with the other.
-func instant(preferred, fallback *string) (time.Time, bool) {
-	for _, candidate := range []*string{preferred, fallback} {
-		if candidate == nil {
-			continue
-		}
-		return render.ParseTime(*candidate)
-	}
-	return time.Time{}, false
-}
-
-// byStart orders sessions oldest first, treating an unparseable timestamp as equal to everything so
-// an unsortable session keeps its place rather than moving one.
-func byStart(a, b sessions.Session) int {
-	left, leftOk := startedAt(a)
-	right, rightOk := startedAt(b)
-	if !leftOk || !rightOk {
-		return 0
-	}
-	return left.Compare(right)
 }
 
 // projectKey folds a nullable project path into a map key, keeping the project-less group distinct

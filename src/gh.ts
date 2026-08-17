@@ -10,9 +10,29 @@ export const GH_TIMEOUT_MS = 10_000;
 export const GH_SEARCH_LIMIT = 100;
 
 /** Bumped whenever a cache written by an older waid can no longer be reused. */
-export const GH_CACHE_VERSION = 1;
+export const GH_CACHE_VERSION = 2;
 
-const GH_FIELDS = 'number,repository,title,author,isDraft,state,createdAt,url';
+/**
+ * The search runs through GraphQL rather than `gh search prs` for one reason: `--json` on the search
+ * command cannot report a head branch, and GraphQL can, at the same cost of one request per query.
+ */
+const GH_QUERY = `query($q: String!, $limit: Int!) {
+  search(query: $q, type: ISSUE, first: $limit) {
+    nodes {
+      ... on PullRequest {
+        number
+        title
+        headRefName
+        isDraft
+        state
+        createdAt
+        url
+        repository { nameWithOwner }
+        author { login }
+      }
+    }
+  }
+}`;
 
 const MINUTE_MS = 60 * 1000;
 
@@ -35,11 +55,11 @@ export type GhResult = {
   cachedAt: string | null;
 };
 
-/** The production `GhClient`, backed by `gh search prs`. Throws when `gh` cannot answer. */
+/** The production `GhClient`, backed by `gh api graphql`. Throws when `gh` cannot answer. */
 export function realGhClient(): GhClient {
   return {
-    reviewRequested: () => search('--review-requested=@me'),
-    authored: () => search('--author=@me'),
+    reviewRequested: () => search('is:pr is:open review-requested:@me'),
+    authored: () => search('is:pr is:open author:@me'),
   };
 }
 
@@ -47,10 +67,20 @@ export function realGhClient(): GhClient {
  * Runs one account-wide search. Account-wide rather than per-repo on purpose: detection costs two
  * calls regardless of how many repos are active.
  */
-function search(filter: string): GhPr[] {
+function search(query: string): GhPr[] {
   const out = execFileSync(
     'gh',
-    ['search', 'prs', filter, '--state=open', '--limit', String(GH_SEARCH_LIMIT), '--json', GH_FIELDS],
+    [
+      'api',
+      'graphql',
+      '-f',
+      // Sent on one line so a failure message, which echoes the command, stays one line too.
+      `query=${GH_QUERY.replace(/\s+/g, ' ')}`,
+      '-f',
+      `q=${query}`,
+      '-F',
+      `limit=${GH_SEARCH_LIMIT}`,
+    ],
     {
       encoding: 'utf8',
       timeout: GH_TIMEOUT_MS,
@@ -58,7 +88,16 @@ function search(filter: string): GhPr[] {
       windowsHide: true,
     },
   );
-  return narrowPrs(JSON.parse(out));
+  return narrowPrs(searchNodes(JSON.parse(out)));
+}
+
+/** The `data.search.nodes` array, or nothing when the response is not shaped as expected. */
+function searchNodes(value: unknown): unknown {
+  if (!isRecord(value)) return [];
+  const data = value['data'];
+  if (!isRecord(data)) return [];
+  const search = data['search'];
+  return isRecord(search) ? search['nodes'] : [];
 }
 
 /**
@@ -176,7 +215,15 @@ function narrowPr(value: unknown): GhPr | null {
     state: typeof value['state'] === 'string' ? value['state'] : 'open',
     createdAt: typeof value['createdAt'] === 'string' ? value['createdAt'] : '',
     url: typeof value['url'] === 'string' ? value['url'] : '',
+    branch: branchName(value),
   };
+}
+
+/** GraphQL names the head branch `headRefName`; our own cache stores it flat as `branch`. */
+function branchName(value: Record<string, unknown>): string {
+  const head = value['headRefName'];
+  if (typeof head === 'string') return head;
+  return typeof value['branch'] === 'string' ? value['branch'] : '';
 }
 
 /** `gh` nests the repo as `{name, nameWithOwner}`; our own cache stores the flat `owner/repo`. */
@@ -193,12 +240,19 @@ function authorLogin(value: unknown): string {
   return '';
 }
 
-/** The first line of a failure, short enough to sit on one dim note line. */
+/**
+ * The first line of a failure, short enough to sit on one dim note line. `gh`'s own stderr is
+ * preferred over the message, which only echoes the command that failed.
+ */
 function describe(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  const firstLine = message.split('\n')[0]?.trim() ?? '';
-  const text = firstLine || 'gh failed';
+  const stderr = isRecord(error) ? String(error['stderr'] ?? '') : '';
+  const text = firstLine(stderr) || firstLine(message) || 'gh failed';
   return text.length > 200 ? `${text.slice(0, 199)}…` : text;
+}
+
+function firstLine(text: string): string {
+  return text.split('\n').find((line) => line.trim() !== '')?.trim() ?? '';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

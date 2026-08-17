@@ -75,15 +75,14 @@ function byRank(a: Candidate, b: Candidate): number {
 
 function reviewSignal(pr: GhPr, repos: readonly string[], now: Date): Candidate {
   const age = relTime(pr.createdAt, now);
-  const detail = ['Awaiting your review', pr.author === '' ? '' : `@${pr.author}`, age]
-    .filter((part) => part !== '')
-    .join(' · ');
 
   return {
     key: `review:${pr.repository}#${pr.number}`,
     kind: 'review',
     title: pr.title,
-    detail,
+    subject: pr.title,
+    detail: meta(pr.author === '' ? '' : `@${pr.author}`, pr.branch, age),
+    branch: pr.branch || null,
     project: repoForGhRepository(pr.repository, repos),
     age,
     at: instant(pr.createdAt, now),
@@ -92,14 +91,16 @@ function reviewSignal(pr: GhPr, repos: readonly string[], now: Date): Candidate 
 
 function prSignal(pr: GhPr, repos: readonly string[], now: Date): Candidate {
   const age = relTime(pr.createdAt, now);
-  // `gh search prs` exposes no review decision, so draft state is the most a search can say.
+  // The search exposes no review decision, so draft state is the most it can say.
   const state = pr.isDraft ? 'draft' : pr.state.toLowerCase() || 'open';
 
   return {
     key: `pr:${pr.repository}#${pr.number}`,
     kind: 'pr',
     title: pr.title,
-    detail: `Yours, ${state} · ${age}`,
+    subject: pr.title,
+    detail: meta(pr.branch, state, age),
+    branch: pr.branch || null,
     project: repoForGhRepository(pr.repository, repos),
     age,
     at: instant(pr.createdAt, now),
@@ -123,7 +124,9 @@ function repoSignals(repo: string, git: GitClient, now: Date): Candidate[] {
       key: `ahead:${repo}:${branch}`,
       kind: 'ahead',
       title: `${plural(ahead, 'unpushed commit')} on ${branch} in ${name}`,
-      detail: `${plural(ahead, 'commit')} ahead on ${branch}`,
+      subject: `${plural(ahead, 'commit')} ahead`,
+      detail: meta(branch, age),
+      branch,
       project: repo,
       age,
       at,
@@ -132,12 +135,13 @@ function repoSignals(repo: string, git: GitClient, now: Date): Candidate[] {
 
   const dirty = git.dirtyFileCount(repo);
   if (dirty > 0) {
-    const where = branch === null ? '' : ` on ${branch}`;
     signals.push({
       key: `dirty:${repo}`,
       kind: 'dirty',
       title: `${plural(dirty, 'uncommitted file')} in ${name}`,
-      detail: `${plural(dirty, 'uncommitted file')}${where}`,
+      subject: plural(dirty, 'uncommitted file'),
+      detail: meta(branch ?? '', age),
+      branch,
       project: repo,
       age,
       at,
@@ -145,6 +149,11 @@ function repoSignals(repo: string, git: GitClient, now: Date): Candidate[] {
   }
 
   return signals;
+}
+
+/** The right-hand column: the parts that are known, dot-separated, in the order given. */
+function meta(...parts: string[]): string {
+  return parts.filter((part) => part !== '').join(' · ');
 }
 
 /**

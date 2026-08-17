@@ -81,6 +81,7 @@ function pr(repository: string, number: number, overrides: Partial<GhPr> = {}): 
     state: 'open',
     createdAt: daysAgo(3).toISOString(),
     url: `https://github.com/${repository}/pull/${number}`,
+    branch: `pr-${number}-branch`,
     ...overrides,
   };
 }
@@ -186,7 +187,7 @@ test('scan on a clean machine says so and exits 0', async () => {
   assert.match(human.out, /nothing detected/);
 });
 
-test('scan renders the DETECTED header, key column and footer', async () => {
+test('scan renders the DETECTED header, three aligned columns and the footer', async () => {
   const root = tempDir();
   const repo = makeRepo(root, 'inl-prt');
   const home = setup(root);
@@ -194,17 +195,57 @@ test('scan renders the DETECTED header, key column and footer', async () => {
 
   const human = await waid(home, ['scan', '--no-sync'], {
     git: fakeGit({ [repo]: { branch: 'inl-prt-fixes', ahead: null, dirty: 14 } }),
-    gh: fakeGh([pr('acme/web', 123, { title: 'Fix the chart legend' })], [pr('acme/web', 456)]),
+    gh: fakeGh(
+      [pr('acme/web', 123, { title: 'Fix the chart legend', branch: 'chart-legend' })],
+      [pr('acme/web', 456)],
+    ),
   });
 
   assert.equal(human.code, 0, human.err);
   const lines = human.out.split('\n');
   assert.equal(lines[0], 'DETECTED  (2 shown, 1 dismissed)');
   assert.equal(lines[1], '');
-  assert.match(lines[2] ?? '', /^ {2}review:acme\/web#123 +Awaiting your review · @tmoore · 3d$/);
-  assert.match(lines[3] ?? '', new RegExp(`^ {2}dirty:${escapeRe(repo)} +14 uncommitted files on inl-prt-fixes$`));
+  assert.match(
+    lines[2] ?? '',
+    /^ {2}review:acme\/web#123 +Fix the chart legend +@tmoore · chart-legend · 3d$/,
+  );
+  assert.match(
+    lines[3] ?? '',
+    // The HEAD date is relative to when the fake was built, so the age is a shape, not a value.
+    new RegExp(`^ {2}dirty:${escapeRe(repo)} +14 uncommitted files +inl-prt-fixes · \\d+[hd]$`),
+  );
   assert.match(human.out, /waid promote <key>/);
   assert.match(human.out, /waid dismiss <key>/);
+});
+
+test('scan aligns the subject column across signals whose keys differ in length', async () => {
+  const root = tempDir();
+  const home = setup(root);
+
+  const human = await waid(home, ['scan', '--no-sync'], {
+    git: fakeGit({}),
+    gh: fakeGh([], [pr('acme/web', 1, { title: 'Short key' }), pr('acme/a-much-longer-repo', 22222, { title: 'Long key' })]),
+  });
+
+  assert.equal(human.code, 0, human.err);
+  const [first, second] = human.out.split('\n').slice(2, 4);
+  assert.equal(first?.indexOf('Short key'), second?.indexOf('Long key'));
+});
+
+test('scan truncates a subject too wide for its column rather than shifting the meta', async () => {
+  const root = tempDir();
+  const home = setup(root);
+  const long = 'Migrate the BudgetBreakdown chart from ASP.NET to AngularJS and D3 in one pass';
+
+  const human = await waid(home, ['scan', '--no-sync'], {
+    git: fakeGit({}),
+    gh: fakeGh([], [pr('acme/web', 1, { title: long }), pr('acme/web', 2, { title: 'Short' })]),
+  });
+
+  const [first, second] = human.out.split('\n').slice(2, 4);
+  assert.ok(!first?.includes(long), 'an over-wide subject must be truncated');
+  assert.match(first ?? '', /…/);
+  assert.equal(first?.indexOf('pr-1-branch'), second?.indexOf('pr-2-branch'));
 });
 
 test('scan notes an unavailable gh once and still reports git signals', async () => {

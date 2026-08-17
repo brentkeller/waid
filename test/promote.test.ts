@@ -76,6 +76,7 @@ function pr(repository: string, number: number, overrides: Partial<GhPr> = {}): 
     state: 'open',
     createdAt: daysAgo(3).toISOString(),
     url: `https://github.com/${repository}/pull/${number}`,
+    branch: `pr-${number}-branch`,
     ...overrides,
   };
 }

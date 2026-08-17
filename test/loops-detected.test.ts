@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import type { Deps } from '../src/cli.ts';
 import type { DoctorResult } from '../src/commands/doctor.ts';
+import { GH_CACHE_VERSION } from '../src/gh.ts';
 import type { Item, GhClient, GhPr, GitClient, Signal } from '../src/types.ts';
 import { makeHome, waid } from './helpers.ts';
 
@@ -85,6 +86,7 @@ function pr(repository: string, number: number, overrides: Partial<GhPr> = {}): 
     state: 'open',
     createdAt: daysAgo(3).toISOString(),
     url: `https://github.com/${repository}/pull/${number}`,
+    branch: `pr-${number}-branch`,
     ...overrides,
   };
 }
@@ -141,7 +143,10 @@ test('human loops renders DETECTED beneath the declared items, with the spec hea
 
   const result = await waid(home, ['loops', '--no-sync'], {
     git: fakeGit({ [repo]: { branch: 'inl-prt-fixes', ahead: null, dirty: 14 } }),
-    gh: fakeGh([pr('acme/web', 123, { title: 'Fix the chart legend' })], [pr('acme/web', 456)]),
+    gh: fakeGh(
+      [pr('acme/web', 123, { title: 'Fix the chart legend', branch: 'chart-legend' })],
+      [pr('acme/web', 456)],
+    ),
   });
 
   assert.equal(result.code, 0, result.err);
@@ -157,10 +162,14 @@ test('human loops renders DETECTED beneath the declared items, with the spec hea
   // The declared item stays above the header; the signals stay below it.
   const item = lines.findIndex((line) => line.includes('k3f9'));
   assert.ok(item > 0 && item < header, 'the declared item must render above DETECTED');
-  assert.match(lines[header + 2] ?? '', /^ {2}review:acme\/web#123 +Awaiting your review · @tmoore · 3d$/);
+  assert.match(
+    lines[header + 2] ?? '',
+    /^ {2}review:acme\/web#123 +Fix the chart legend +@tmoore · chart-legend · 3d$/,
+  );
   assert.match(
     lines[header + 3] ?? '',
-    new RegExp(`^ {2}dirty:${escapeRe(repo)} +14 uncommitted files on inl-prt-fixes$`),
+    // The HEAD date is relative to when the fake was built, so the age is a shape, not a value.
+    new RegExp(`^ {2}dirty:${escapeRe(repo)} +14 uncommitted files +inl-prt-fixes · \\d+[hd]$`),
   );
   assert.match(result.out, /waid promote <key> to track · waid dismiss <key> to hide/);
 });
@@ -253,7 +262,7 @@ test('doctor reports gh availability, both cache ages and repo counts', async ()
   fs.writeFileSync(
     path.join(home, 'cache', 'gh.json'),
     JSON.stringify({
-      version: 1,
+      version: GH_CACHE_VERSION,
       cachedAt: new Date(Date.now() - 7 * 60 * 1000).toISOString(),
       reviewRequested: [],
       authored: [],

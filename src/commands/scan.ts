@@ -15,6 +15,12 @@ export type ScanResult = {
 
 const FOOTER = 'waid promote <key> to track · waid dismiss <key> to hide';
 
+/** Width of the subject column, matching the title column `waid list` renders items in. */
+const SUBJECT_WIDTH = 44;
+
+/** Blank columns between the subject and the meta that follows it. */
+const SUBJECT_GAP = 2;
+
 async function run(ctx: Ctx): Promise<ScanResult> {
   const state = loadState(ctx.cfg);
   const detected = detectSignals(ctx.cfg, {
@@ -54,13 +60,25 @@ export function signalProjects(signals: readonly Signal[], known: string[]): str
 /**
  * The `DETECTED` block, shared with `loops` so the two render signals identically. Returns no lines
  * at all when there is nothing detected and nothing dismissed, letting the caller decide what to say.
+ *
+ * Each signal is three columns: the key it is addressed by, what it is about, and where and when.
+ * The key column widens to fit the longest key, so the other two stay aligned down the block.
  */
 export function detectedSection(signals: readonly Signal[], dismissedCount: number): string[] {
   if (signals.length === 0 && dismissedCount === 0) return [];
 
   const width = Math.max(0, ...signals.map((signal) => signal.key.length)) + 2;
   const lines = [`DETECTED  (${signals.length} shown, ${dismissedCount} dismissed)`, ''];
-  for (const signal of signals) lines.push(`  ${pad(signal.key, width)}${signal.detail}`);
+  for (const signal of signals) {
+    // Padded separately from the gap so a truncated subject still keeps the columns apart.
+    const columns = [
+      pad(signal.key, width),
+      pad(signal.subject, SUBJECT_WIDTH),
+      ' '.repeat(SUBJECT_GAP),
+      signal.detail,
+    ];
+    lines.push(`  ${columns.join('')}`.trimEnd());
+  }
   lines.push('', `  ${FOOTER}`);
   return lines;
 }

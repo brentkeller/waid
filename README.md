@@ -91,6 +91,17 @@ They rank by kind in that order, then oldest first. `promote` and `dismiss` both
 GitHub signals need `ghUser` set and an authenticated `gh`; without them the git signals still
 work and a note explains the gap.
 
+Each signal renders as three columns — the key, what it is about, and where and when:
+
+```
+DETECTED  (4 shown, 1 dismissed)
+
+  review:DevResults/DevResults#6886  Add SharedDashboards role to non-owners  @Copilot · edit-shared-dashboards · 15w
+  pr:DevResults/DevResults#7110      Migrate BudgetBreakdown chart to D3      migrate-aspx-charts · open · 5w
+  ahead:C:\dev\waid:cli-ui           1 commit ahead                           cli-ui · 4m
+  dirty:C:\dev\bkc-my                13 uncommitted files                     day-cards-p3-outliner · 2w
+```
+
 ### Interactive triage (`-i`)
 
 `waid loops -i` and `waid scan -i` open the same screen the command would have printed, with a

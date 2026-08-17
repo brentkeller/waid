@@ -165,7 +165,9 @@ const SIGNAL: Signal = {
   key: 'dirty:C:\\dev\\waid',
   kind: 'dirty',
   title: '6 uncommitted files in waid',
-  detail: '6 files · 20m',
+  subject: '6 uncommitted files',
+  detail: 'main · 20m',
+  branch: 'main',
   project: 'C:\\dev\\waid',
   age: '20m',
 };

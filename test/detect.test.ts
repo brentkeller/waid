@@ -70,6 +70,7 @@ function pr(repository: string, number: number, overrides: Partial<GhPr> = {}): 
     state: 'open',
     createdAt: daysAgo(3).toISOString(),
     url: `https://github.com/${repository}/pull/${number}`,
+    branch: `pr-${number}-branch`,
     ...overrides,
   };
 }
@@ -122,7 +123,7 @@ test('detectSignals produces all four kinds with the documented key formats', ()
   assert.deepEqual(kinds, ['review', 'pr', 'ahead', 'dirty']);
 });
 
-test('detectSignals fills title, detail and project for each kind', () => {
+test('detectSignals fills title, subject, detail and project for each kind', () => {
   const root = tempDir();
   const repo = makeRepo(root, 'web');
 
@@ -131,26 +132,35 @@ test('detectSignals fills title, detail and project for each kind', () => {
     state: state(),
     now: NOW,
     git: fakeGit({ [repo]: { branch: 'inl-prt-fixes', ahead: 3, dirty: 14 } }),
-    gh: fakeGh([pr('acme/web', 123, { title: 'Fix the chart legend' })], []),
+    gh: fakeGh(
+      [pr('acme/web', 123, { title: 'Fix the chart legend', branch: 'chart-legend' })],
+      [],
+    ),
   });
 
   const [review, ahead, dirty] = result.signals;
 
   assert.equal(review?.title, 'Fix the chart legend');
-  assert.match(review?.detail ?? '', /^Awaiting your review · @tmoore · 3d$/);
+  assert.equal(review?.subject, 'Fix the chart legend');
+  assert.equal(review?.detail, '@tmoore · chart-legend · 3d');
+  assert.equal(review?.branch, 'chart-legend');
   // The PR's repo name matches exactly one local repo, so `-p` can narrow to it.
   assert.equal(review?.project, repo);
   assert.equal(review?.age, '3d');
 
   assert.equal(ahead?.project, repo);
-  assert.equal(ahead?.detail, '3 commits ahead on inl-prt-fixes');
+  assert.equal(ahead?.subject, '3 commits ahead');
+  assert.equal(ahead?.detail, 'inl-prt-fixes · 1d');
+  assert.equal(ahead?.branch, 'inl-prt-fixes');
 
   assert.equal(dirty?.project, repo);
-  assert.equal(dirty?.detail, '14 uncommitted files on inl-prt-fixes');
+  assert.equal(dirty?.subject, '14 uncommitted files');
+  assert.equal(dirty?.detail, 'inl-prt-fixes · 1d');
+  assert.equal(dirty?.branch, 'inl-prt-fixes');
   assert.match(dirty?.title ?? '', /web/);
 });
 
-test('detectSignals reports draft and open state on authored PRs', () => {
+test('detectSignals reports the branch, draft and open state on authored PRs', () => {
   const root = tempDir();
 
   const result = detectSignals(config(root), {
@@ -161,8 +171,42 @@ test('detectSignals reports draft and open state on authored PRs', () => {
     gh: fakeGh([], [pr('acme/web', 1, { isDraft: true }), pr('acme/web', 2)]),
   });
 
-  assert.equal(result.signals[0]?.detail, 'Yours, draft · 3d');
-  assert.equal(result.signals[1]?.detail, 'Yours, open · 3d');
+  assert.equal(result.signals[0]?.detail, 'pr-1-branch · draft · 3d');
+  assert.equal(result.signals[1]?.detail, 'pr-2-branch · open · 3d');
+});
+
+test('detectSignals omits a branch the search could not report', () => {
+  const root = tempDir();
+
+  const result = detectSignals(config(root), {
+    sessions: NO_SESSIONS,
+    state: state(),
+    now: NOW,
+    git: fakeGit({}),
+    gh: fakeGh([pr('acme/web', 1, { branch: '' })], [pr('acme/web', 2, { branch: '' })]),
+  });
+
+  assert.equal(result.signals[0]?.detail, '@tmoore · 3d');
+  assert.equal(result.signals[0]?.branch, null);
+  assert.equal(result.signals[1]?.detail, 'open · 3d');
+  assert.equal(result.signals[1]?.branch, null);
+});
+
+test('detectSignals leaves the branch off a detached HEAD', () => {
+  const root = tempDir();
+  const repo = makeRepo(root, 'detached');
+
+  const result = detectSignals(config(root), {
+    sessions: NO_SESSIONS,
+    state: state(),
+    now: NOW,
+    git: fakeGit({ [repo]: { branch: null, dirty: 2 } }),
+    gh: fakeGh([], []),
+  });
+
+  assert.equal(result.signals[0]?.subject, '2 uncommitted files');
+  assert.equal(result.signals[0]?.detail, '1d');
+  assert.equal(result.signals[0]?.branch, null);
 });
 
 test('detectSignals ranks by kind, breaking ties by age descending', () => {

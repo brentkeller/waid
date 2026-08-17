@@ -27,6 +27,7 @@ function pr(number: number, overrides: Partial<GhPr> = {}): GhPr {
     state: 'open',
     createdAt: '2026-08-10T09:00:00Z',
     url: `https://github.com/octo/widgets/pull/${number}`,
+    branch: `branch-${number}`,
     ...overrides,
   };
 }
@@ -138,6 +139,24 @@ test('a throwing client reports unavailable with a reason and leaves the cache i
   assert.equal(fs.readFileSync(cfg.ghCachePath, 'utf8'), before);
 });
 
+test('a failure reason prefers gh stderr over the echoed command', () => {
+  const cfg = config();
+  const failing: GhClient = {
+    reviewRequested: () => {
+      const error = Object.assign(new Error('Command failed: gh api graphql -f query=...'), {
+        stderr: '\ngh: API rate limit exceeded\n',
+      });
+      throw error;
+    },
+    authored: () => [],
+  };
+
+  const result = fetchGh(cfg, { client: failing, now: NOW });
+
+  assert.equal(result.available, false);
+  assert.equal(result.reason, 'gh: API rate limit exceeded');
+});
+
 test('a corrupt gh cache is a miss, not an error', () => {
   const cfg = config();
   fs.writeFileSync(cfg.ghCachePath, '{not json at all');
@@ -182,6 +201,30 @@ test('ghUser null short-circuits to unavailable without calling gh', () => {
   assert.equal(calls.authored, 0);
   assert.equal(result.cachedAt, null);
   assert.equal(fs.existsSync(cfg.ghCachePath), false);
+});
+
+test('narrowing reads the branch from either the graphql field or a cached entry', () => {
+  const cfg = config();
+  fs.writeFileSync(
+    cfg.ghCachePath,
+    JSON.stringify({
+      version: GH_CACHE_VERSION,
+      cachedAt: NOW.toISOString(),
+      reviewRequested: [
+        { ...pr(1), branch: undefined, headRefName: 'from-graphql' },
+        { ...pr(2), branch: 'from-cache' },
+        { ...pr(3), branch: undefined },
+      ],
+      authored: [],
+    }),
+  );
+
+  const result = fetchGh(cfg, { client: countingClient([], []).client, now: NOW });
+
+  assert.deepEqual(
+    result.reviewRequested.map((item) => item.branch),
+    ['from-graphql', 'from-cache', ''],
+  );
 });
 
 test('cached entries that are not pull requests are dropped rather than trusted', () => {

@@ -176,13 +176,15 @@ export type GhPr = {
   /** Login of the PR author. */
   author: string;
   /**
-   * `gh search prs` exposes no review decision, so draft state is the closest thing to a review
-   * state it can report; a richer state would cost a per-PR API call.
+   * The search exposes no review decision, so draft state is the closest thing to a review state it
+   * can report; a richer state would cost a per-PR API call.
    */
   isDraft: boolean;
   state: string;
   createdAt: string;
   url: string;
+  /** Head branch the PR merges from; empty when the search did not report one. */
+  branch: string;
 };
 
 /**
@@ -215,8 +217,12 @@ export type Signal = {
   kind: SignalKind;
   /** Human summary, good enough to become an item title when the signal is promoted. */
   title: string;
-  /** The line rendered beside the key: state, counts, and the age where the spec shows one. */
+  /** The middle column: what the signal is about — a PR title, a count of files. */
+  subject: string;
+  /** The right column: where and when — a branch, an author, a state, the age. */
   detail: string;
+  /** Branch the signal sits on; null when there is none, as on a detached HEAD. */
+  branch: string | null;
   /** Absolute repo path the signal belongs to; null when no local repo could be matched. */
   project: string | null;
   /** Compact relative age of whatever the signal is timed by — a PR's creation, a repo's HEAD. */

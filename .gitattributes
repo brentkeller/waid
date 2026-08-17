@@ -5,5 +5,7 @@
 go.mod text eol=lf
 go.sum text eol=lf
 
-# Fixtures encode exact line endings; git must not rewrite them.
+# Fixtures encode exact line endings; git must not rewrite them. A pattern with an interior slash
+# is anchored to this file's directory, so the leading **/ is what reaches the per-package testdata.
 testdata/** -text
+**/testdata/** -text

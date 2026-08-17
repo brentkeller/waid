@@ -36,8 +36,51 @@ func (m Model) promoteSelected(tree Tree[detect.Signal]) (Model, tea.Cmd, bool) 
 		return m, nil, true
 	}
 
-	m = m.hide(signal.Key)
-	return m.record(receipt{verb: "promoted", subject: promoted.Id, detail: promoted.Title}), nil, true
+	m = m.hide(signal.Key).pushUndo(undoPromote(promoted))
+	return m.record(receipt{verb: verbPromoted, subject: promoted.Id, detail: promoted.Title}), nil, true
+}
+
+// renameSelected corrects the title a promotion was written with. It acts on the receipt rather than
+// on the cursor: the row it addresses has already left the list, and the promoted item is not a
+// signal to point at (§3).
+func (m Model) renameSelected() (Model, tea.Cmd, bool) {
+	target, ok := m.renameTarget()
+	if !ok {
+		m.hint = "e renames an item just promoted"
+		return m, nil, true
+	}
+
+	// The input opens empty rather than filled with the title being replaced: a correction is a new
+	// title, and clearing a prefilled one costs a keypress per character.
+	m.prompt = prompt{kind: promptRename, label: "rename", subject: target.subject, prior: target.detail}
+	return m, nil, true
+}
+
+// rename writes the corrected title and leaves its own receipt, since it is a write of its own and
+// the write before it is already on the undo stack.
+func (m Model) rename(id, prior, title string) (Model, tea.Cmd) {
+	if title == prior {
+		return m, nil
+	}
+
+	event := events.UpdateEvent{Ev: "update", Id: id, Title: &title}
+	if _, err := events.Append(m.opts.Cfg.EventsPath, event, m.now()); err != nil {
+		m.hint = writeFailed("rename", err)
+		return m, nil
+	}
+
+	m = m.pushUndo(undoRetitle(id, prior))
+	return m.record(receipt{verb: verbRetitled, subject: id, detail: title}), nil
+}
+
+// renameTarget is the item the footer is offering `e` for: the promotion the last write made, or the
+// correction of one, so a title can be corrected twice.
+func (m Model) renameTarget() (receipt, bool) {
+	last, written := m.lastReceipt()
+	if !written || (last.verb != verbPromoted && last.verb != verbRetitled) {
+		return receipt{}, false
+	}
+	return last, true
 }
 
 // dismissSelected hides the signal under the cursor for good.
@@ -53,7 +96,7 @@ func (m Model) dismissSelected(tree Tree[detect.Signal]) (Model, tea.Cmd, bool) 
 		return m, nil, true
 	}
 
-	m = m.hide(signal.Key)
+	m = m.hide(signal.Key).pushUndo(undoDismiss(signal.Key))
 	return m.record(receipt{verb: "dismissed", subject: signal.Key}), nil, true
 }
 
@@ -71,6 +114,21 @@ func (m Model) hide(key string) Model {
 
 	// The row that left may have been the last one, so the cursor is pulled back into range.
 	m.scan.cursor = m.scanTree(m.viewWidth()).Cursor
+	return m
+}
+
+// unhide puts a triaged signal back in the list an undo restored it to.
+func (m Model) unhide(key string) Model {
+	if !m.scan.triaged[key] {
+		return m
+	}
+
+	restored := make(map[string]bool, len(m.scan.triaged))
+	maps.Copy(restored, m.scan.triaged)
+	delete(restored, key)
+	m.scan.triaged = restored
+
+	m.counts[tabScan] = m.scanCount()
 	return m
 }
 

@@ -102,6 +102,7 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"d"}, "d", "dismiss"},
 		{[]string{"o"}, "o", "open in browser"},
 		{[]string{"s"}, "s", "cycle the kind filter"},
+		{[]string{"e"}, "e", "rename the item just promoted"},
 	},
 	tabReview: {
 		{[]string{" "}, "space", "preview"},
@@ -135,6 +136,12 @@ type Model struct {
 	// behind for the footer.
 	showKeys bool
 	hint     string
+
+	// prompt is the inline input open in the footer, if any; its zero value is no prompt.
+	prompt prompt
+
+	// undos are the inverses of the writes this session made, newest last and bounded (§3).
+	undos []undoEntry
 
 	// receipts are the writes this session made, in order. The last one is what the footer shows,
 	// and the whole log is replayed to the restored terminal on quit (§3.1).
@@ -206,11 +213,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// key routes a keypress. While the filter is being edited every key but the two that end the edit
-// is text, so a query containing `q` cannot quit the app out from under the person typing it.
+// key routes a keypress. While text is being edited — a filter query or a prompt's answer — every key
+// but the two that end the edit is text, so a title containing `q` cannot quit the app out from under
+// the person typing it. ctrl-c is the exception and quits from anywhere.
 func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.filtering && msg.Type != tea.KeyCtrlC {
-		return m.filterKey(msg), nil
+	if msg.Type != tea.KeyCtrlC {
+		if m.prompt.kind != promptNone {
+			return m.promptKey(msg)
+		}
+		if m.filtering {
+			return m.filterKey(msg), nil
+		}
 	}
 
 	m.hint = ""
@@ -228,6 +241,8 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showKeys = !m.showKeys
 	case "/":
 		m.filtering = true
+	case "u":
+		return m.undo()
 	case "esc":
 		m.showKeys, m.filter = false, ""
 	default:
@@ -425,6 +440,9 @@ func (m Model) footer() string {
 // otherwise the filter in force sits beside the freshest thing the app has to say — the reason a key
 // was inert, or the receipt for the last write (§3.1).
 func (m Model) status() string {
+	if m.prompt.kind != promptNone {
+		return m.promptLine()
+	}
 	if m.filtering {
 		return m.theme.FilterActive.Render(" /" + m.filter + "▏")
 	}
@@ -444,10 +462,26 @@ func (m Model) status() string {
 		parts = append(parts, m.theme.Dim.Render("esc clears"))
 	}
 
-	if len(parts) == 0 {
-		return ""
+	line := ""
+	if len(parts) > 0 {
+		line = " " + strings.Join(parts, "  ")
 	}
-	return " " + strings.Join(parts, "  ")
+	return m.withAffordance(line)
+}
+
+// withAffordance hangs the keys that act on the last write against the right edge of the status line,
+// which is where the undo is offered rather than in the tab's fixed hints (§1.2).
+func (m Model) withAffordance(line string) string {
+	keys := m.undoAffordance()
+	if keys == "" {
+		return line
+	}
+
+	gap := m.viewWidth() - lipgloss.Width(line) - lipgloss.Width(keys) - 1
+	if gap < 2 {
+		return line
+	}
+	return line + strings.Repeat(" ", gap) + m.theme.Dim.Render(keys) + " "
 }
 
 // lines counts the printed lines in a rendered block.

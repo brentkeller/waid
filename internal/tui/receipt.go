@@ -15,6 +15,13 @@ type receipt struct {
 	detail  string
 }
 
+// The two verbs the footer's rename affordance keys off, since what `e` offers depends on what the
+// last write was (§3).
+const (
+	verbPromoted = "promoted"
+	verbRetitled = "retitled"
+)
+
 const (
 	// receiptDetailMax is the column the trailing text is cut to, so a long title cannot push the
 	// footer onto a second line and shift the list above it.

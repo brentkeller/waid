@@ -167,6 +167,8 @@ func (m Model) scanKey(pressed string) (Model, tea.Cmd, bool) {
 		return m.promoteSelected(tree)
 	case "d":
 		return m.dismissSelected(tree)
+	case "e":
+		return m.renameSelected()
 	default:
 		return m, nil, false
 	}

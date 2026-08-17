@@ -1,7 +1,10 @@
 package detect
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -499,4 +502,143 @@ func TestSignalsLeavesAPrProjectNullWhenTheRepoNameIsNotLocalOrIsAmbiguous(t *te
 	}
 	assertNilString(t, "ambiguous project", result.Signals[0].Project)
 	assertNilString(t, "unmatched project", result.Signals[1].Project)
+}
+
+// jitteringGit wraps a table with a small random delay per probe, so a pool that returned results in
+// completion order would come back in a different order run to run.
+type jitteringGit struct{ fakeGit }
+
+func (j jitteringGit) jitter() {
+	time.Sleep(time.Duration(rand.Intn(400)) * time.Microsecond)
+}
+
+func (j jitteringGit) HeadCommitDate(repo string) *time.Time {
+	j.jitter()
+	return j.fakeGit.HeadCommitDate(repo)
+}
+
+func (j jitteringGit) CurrentBranch(repo string) *string {
+	j.jitter()
+	return j.fakeGit.CurrentBranch(repo)
+}
+
+func (j jitteringGit) AheadCount(repo string) *int {
+	j.jitter()
+	return j.fakeGit.AheadCount(repo)
+}
+
+func (j jitteringGit) DirtyFileCount(repo string) int {
+	j.jitter()
+	return j.fakeGit.DirtyFileCount(repo)
+}
+
+// panickingGit explodes on one named repo and answers normally for the rest.
+type panickingGit struct {
+	fakeGit
+	at string
+}
+
+func (p panickingGit) DirtyFileCount(repo string) int {
+	if repo == p.at {
+		panic("git blew up probing " + repo)
+	}
+	return p.fakeGit.DirtyFileCount(repo)
+}
+
+// manyRepos builds count repos under root, each ahead and dirty, with HEAD dates that stagger by an
+// hour — inside the activity window, and far enough apart that the rank order within a kind is fully
+// determined.
+func manyRepos(t *testing.T, root string, count int) ([]string, fakeGit) {
+	t.Helper()
+
+	built := make([]string, 0, count)
+	table := fakeGit{}
+	for index := range count {
+		repo := makeRepo(t, root, fmt.Sprintf("repo-%02d", index))
+		head := now.Add(-time.Duration(index+1) * time.Hour)
+		table[repo] = repoState{head: &head, branch: str("main"), ahead: num(index + 1), dirty: num(index + 1)}
+		built = append(built, repo)
+	}
+	return built, table
+}
+
+func encode(t *testing.T, result Result) string {
+	t.Helper()
+
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("encoding the result: %v", err)
+	}
+	return string(raw)
+}
+
+func TestSignalsProducesIdenticalOutputAcrossRepeatedConcurrentRuns(t *testing.T) {
+	root := t.TempDir()
+	_, table := manyRepos(t, root, 40)
+	cfg := testConfig(t, root, nil)
+
+	deps := Deps{
+		State: state(),
+		Now:   now,
+		Git:   jitteringGit{table},
+		Gh:    fakeGh{review: []gh.Pr{pr("acme/web", 1, nil)}, authored: []gh.Pr{pr("acme/web", 2, nil)}},
+	}
+
+	first := encode(t, Signals(cfg, deps))
+	for run := range 24 {
+		if got := encode(t, Signals(cfg, deps)); got != first {
+			t.Fatalf("run %d differs from the first run\nfirst: %s\ngot:   %s", run+2, first, got)
+		}
+	}
+}
+
+// TestSignalsMatchesTheSequentialBaseline pins the concurrent result against the ranking a serial
+// walk produces: kind first, then oldest first, which for these repos is discovery order reversed.
+func TestSignalsMatchesTheSequentialBaseline(t *testing.T) {
+	root := t.TempDir()
+	repos, table := manyRepos(t, root, 40)
+	cfg := testConfig(t, root, nil)
+
+	result := Signals(cfg, Deps{
+		State: state(),
+		Now:   now,
+		Git:   jitteringGit{table},
+		Gh:    fakeGh{},
+	})
+
+	want := make([]string, 0, len(repos)*2)
+	for index := len(repos) - 1; index >= 0; index-- {
+		want = append(want, "ahead:"+repos[index]+":main")
+	}
+	for index := len(repos) - 1; index >= 0; index-- {
+		want = append(want, "dirty:"+repos[index])
+	}
+	assertEqualStrings(t, keys(result.Signals), want)
+}
+
+func TestSignalsKeepsAPanickingProbeFromTakingThePoolWithIt(t *testing.T) {
+	root := t.TempDir()
+	repos, table := manyRepos(t, root, 12)
+	exploding := repos[5]
+
+	result := Signals(testConfig(t, root, nil), Deps{
+		State: state(),
+		Now:   now,
+		Git:   panickingGit{fakeGit: table, at: exploding},
+		Gh:    fakeGh{},
+	})
+
+	// The exploding repo reports nothing at all; every other repo still reports both of its signals.
+	want := make([]string, 0, len(repos)*2)
+	for index := len(repos) - 1; index >= 0; index-- {
+		if repos[index] != exploding {
+			want = append(want, "ahead:"+repos[index]+":main")
+		}
+	}
+	for index := len(repos) - 1; index >= 0; index-- {
+		if repos[index] != exploding {
+			want = append(want, "dirty:"+repos[index])
+		}
+	}
+	assertEqualStrings(t, keys(result.Signals), want)
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/brentkeller/waid/internal/config"
 	"github.com/brentkeller/waid/internal/git"
+	"github.com/brentkeller/waid/internal/pool"
 	"github.com/brentkeller/waid/internal/sessions"
 )
 
@@ -98,13 +99,19 @@ func Active(cfg config.Config, harvested []sessions.CachedSession, opts ActiveOp
 		}
 	}
 
-	var active []string
-	for _, repo := range discovered {
+	// The HEAD probe is a git subprocess per repo, so the probes overlap; the answers are collected
+	// by index and the order still follows discovery.
+	recent := pool.Map(pool.Limit, discovered, func(repo string) bool {
 		if _, used := recentlyUsed[repo]; used {
-			active = append(active, repo)
-			continue
+			return true
 		}
-		if head := client.HeadCommitDate(repo); head != nil && !head.Before(cutoff) {
+		head := client.HeadCommitDate(repo)
+		return head != nil && !head.Before(cutoff)
+	})
+
+	var active []string
+	for index, repo := range discovered {
+		if recent[index] {
 			active = append(active, repo)
 		}
 	}

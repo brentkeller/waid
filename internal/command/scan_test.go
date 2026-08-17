@@ -83,10 +83,24 @@ func (f fakeGit) DirtyFileCount(repo string) int { return f[repo].dirty }
 
 func (fakeGit) IsRepo(string) bool { return true }
 
-// explodingGit survives the activity gate and then blows up mid-detection.
-type explodingGit struct{ fakeGit }
+// explodingGit survives the activity gate and then blows up probing one repo.
+type explodingGit struct {
+	fakeGit
+	at string
+}
 
-func (explodingGit) CurrentBranch(string) *string { panic(errors.New("git exploded")) }
+func (e explodingGit) CurrentBranch(repo string) *string {
+	if repo == e.at {
+		panic(errors.New("git exploded"))
+	}
+	return e.fakeGit.CurrentBranch(repo)
+}
+
+// explodingGh blows up the account-wide query, which is not per-repo and so fails the whole pass.
+type explodingGh struct{}
+
+func (explodingGh) ReviewRequested() ([]gh.Pr, error) { panic(errors.New("gh exploded")) }
+func (explodingGh) Authored() ([]gh.Pr, error)        { panic(errors.New("gh exploded")) }
 
 // fakeGh serves two fixed lists, or fails both queries when err is set.
 type fakeGh struct {

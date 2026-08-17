@@ -339,13 +339,34 @@ func TestLoopsSurfacesTheUnavailableGhNoteWithoutLosingGitSignals(t *testing.T) 
 	assertMatches(t, record.Notes[0], `GitHub signals unavailable`)
 }
 
+func TestLoopsKeepsTheOtherReposWhenOneRepoCannotBeProbed(t *testing.T) {
+	root := t.TempDir()
+	alpha := makeRepo(t, root, "alpha")
+	beta := makeRepo(t, root, "beta")
+	home := detectHome(t, root)
+
+	_, record := loopsJson(t, home, cli.Seams{
+		Git: explodingGit{
+			fakeGit: fakeGit{alpha: {branch: ptr("main"), dirty: 2}, beta: {branch: ptr("main"), dirty: 3}},
+			at:      alpha,
+		},
+		Gh: fakeGh{},
+	})
+
+	// A repo that blew up mid-probe reports nothing; it does not cost the scan its other results.
+	assertKeys(t, signalKeys(record.Detected), []string{"dirty:" + beta})
+	if len(record.Notes) != 0 {
+		t.Errorf("got notes %v, want none", record.Notes)
+	}
+}
+
 func TestLoopsDegradesToDeclaredItemsWhenDetectionFails(t *testing.T) {
 	root := t.TempDir()
 	makeRepo(t, root, "alpha")
 	home := detectHome(t, root)
 	seedLog(t, home, map[string]any{"ts": "2026-08-09T09:00:00.000Z", "ev": "add", "id": "k3f9", "title": "Chart legend"})
 
-	seams := cli.Seams{Git: explodingGit{}, Gh: fakeGh{}}
+	seams := cli.Seams{Git: fakeGit{}, Gh: explodingGh{}}
 
 	run, record := loopsJson(t, home, seams)
 	if run.code != cli.ExitOK {
@@ -361,7 +382,7 @@ func TestLoopsDegradesToDeclaredItemsWhenDetectionFails(t *testing.T) {
 	if len(record.Notes) != 1 {
 		t.Fatalf("got %d notes %v, want 1", len(record.Notes), record.Notes)
 	}
-	assertMatches(t, record.Notes[0], `detection failed.*git exploded`)
+	assertMatches(t, record.Notes[0], `detection failed.*gh exploded`)
 
 	human := runLoops(t, home, seams)
 	if human.code != cli.ExitOK {

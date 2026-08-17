@@ -13,6 +13,7 @@ import (
 	"github.com/brentkeller/waid/internal/events"
 	"github.com/brentkeller/waid/internal/gh"
 	"github.com/brentkeller/waid/internal/git"
+	"github.com/brentkeller/waid/internal/pool"
 	"github.com/brentkeller/waid/internal/render"
 	"github.com/brentkeller/waid/internal/repos"
 	"github.com/brentkeller/waid/internal/sessions"
@@ -94,10 +95,21 @@ func Signals(cfg config.Config, deps Deps) Result {
 	if client == nil {
 		client = git.Real()
 	}
-	fetched := gh.Fetch(cfg, gh.Deps{Client: deps.Gh, Now: deps.Now})
+	// The two GitHub queries are account-wide and independent of the local repos, so they overlap the
+	// git pool rather than blocking it.
+	fetching := pool.Detached(func() gh.Result {
+		return gh.Fetch(cfg, gh.Deps{Client: deps.Gh, Now: deps.Now})
+	})
 
 	discovered := repos.Discover(cfg)
 	active := repos.Active(cfg, deps.Sessions, repos.ActiveOptions{Now: deps.Now, Git: client, Repos: discovered})
+	// Probing is four git subprocesses per repo. They run bounded and concurrently, but the results
+	// are collected by repo index rather than by completion, so ranking sees the same input every run.
+	probed := pool.Map(pool.Limit, active, func(repo string) []candidate {
+		return repoSignals(repo, client, deps.Now)
+	})
+
+	fetched := fetching()
 
 	var candidates []candidate
 	for _, pr := range fetched.ReviewRequested {
@@ -106,8 +118,8 @@ func Signals(cfg config.Config, deps Deps) Result {
 	for _, pr := range fetched.Authored {
 		candidates = append(candidates, prSignal(pr, discovered, deps.Now))
 	}
-	for _, repo := range active {
-		candidates = append(candidates, repoSignals(repo, client, deps.Now)...)
+	for _, found := range probed {
+		candidates = append(candidates, found...)
 	}
 	slices.SortStableFunc(candidates, byRank)
 

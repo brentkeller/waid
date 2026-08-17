@@ -1,6 +1,8 @@
 package repos
 
 import (
+	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"slices"
@@ -284,4 +286,68 @@ func TestForPathToleratesTrailingAndMixedSeparators(t *testing.T) {
 			t.Fatalf("ForPath(%q) = %q, want %q", path, got, repos[0])
 		}
 	}
+}
+
+// jitteringGit delays each HEAD probe by a random amount, so a gate that collected answers as they
+// arrived would order the active repos differently run to run.
+type jitteringGit struct{ fakeGit }
+
+func (j jitteringGit) HeadCommitDate(repo string) *time.Time {
+	time.Sleep(time.Duration(rand.Intn(400)) * time.Microsecond)
+	return j.fakeGit.HeadCommitDate(repo)
+}
+
+func TestActiveKeepsDiscoveryOrderWhileProbingConcurrently(t *testing.T) {
+	root := t.TempDir()
+
+	built := make([]string, 0, 40)
+	heads := map[string]time.Time{}
+	for index := range 40 {
+		repo := makeRepo(t, root, fmt.Sprintf("repo-%02d", index))
+		built = append(built, repo)
+		heads[repo] = daysAgo(index % 5)
+	}
+	slices.Sort(built)
+
+	for run := range 10 {
+		active := Active(cfg([]string{root}, 3, 30), nil, ActiveOptions{
+			Now:   now,
+			Git:   jitteringGit{fakeGit{heads: heads}},
+			Repos: built,
+		})
+		if !slices.Equal(active, built) {
+			t.Fatalf("run %d returned %v, want discovery order %v", run+1, active, built)
+		}
+	}
+}
+
+func TestActiveSurvivesARepoWhoseProbePanics(t *testing.T) {
+	root := t.TempDir()
+	quiet := makeRepo(t, root, "quiet")
+	exploding := makeRepo(t, root, "exploding")
+	busy := makeRepo(t, root, "busy")
+
+	active := Active(cfg([]string{root}, 3, 30), nil, ActiveOptions{
+		Now:   now,
+		Git:   panickingGit{fakeGit: fakeGit{heads: map[string]time.Time{quiet: daysAgo(1), busy: daysAgo(2)}}, at: exploding},
+		Repos: []string{quiet, exploding, busy},
+	})
+
+	// The repo that could not be probed is simply not active; the others are unaffected.
+	if !slices.Equal(active, []string{quiet, busy}) {
+		t.Fatalf("active = %v, want %v", active, []string{quiet, busy})
+	}
+}
+
+// panickingGit explodes on one named repo and answers normally for the rest.
+type panickingGit struct {
+	fakeGit
+	at string
+}
+
+func (p panickingGit) HeadCommitDate(repo string) *time.Time {
+	if repo == p.at {
+		panic("git blew up probing " + repo)
+	}
+	return p.fakeGit.HeadCommitDate(repo)
 }

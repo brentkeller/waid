@@ -6,7 +6,7 @@ A local open-loop tracker over an append-only event log. It answers three questi
 2. **What do I need to track?** — items I declare as I go.
 3. **What open loops do I have?** — declared items plus detected signals from git and GitHub.
 
-Single machine, local files, zero runtime dependencies.
+Single machine, local files, one binary. `waid ui` puts all three on one screen.
 
 ## Install
 
@@ -21,8 +21,9 @@ has to be on `PATH`. `waid --version` confirms which binary is resolving.
 
 ### No build step to manage
 
-The binary is the whole distribution. There is no dependency tree to install — `go.mod` requires
-nothing — no config to generate, and nothing to watch or recompile while using it. Reinstalling
+The binary is the whole distribution. There is nothing to install alongside it — `go install`
+vendors what `go.mod` requires, which is Bubble Tea and Lipgloss for the app and nothing else — no
+config to generate, and nothing to watch or recompile while using it. Reinstalling
 after a change is the same one command, and `go run ./cmd/waid <command>` works from the source tree
 without installing at all.
 
@@ -48,6 +49,7 @@ installed path stays proven.
 | `waid dismiss <key>` | Hide a detected signal without tracking it. |
 | `waid undismiss <key>` | Restore a dismissed signal so detection reports it again. |
 | `waid doctor` | Validate config, log integrity, gh auth, cache freshness, repo counts. |
+| `waid ui` | The terminal app: loops, scan and review in one screen. |
 
 ### Global flags
 
@@ -106,9 +108,8 @@ to hide it, `waid undismiss <key>` to bring it back. `undismiss` only accepts a 
 dismissed now; anything else is a user error, since the likeliest cause is a typo. The keys are
 meant to be copied out of the `DETECTED` block verbatim.
 
-The interactive picker (`-i`) that used to stage marks on this screen is gone. It is superseded by
-the app's Scan tab, which serves the same job with the same keys and more context. Until that
-lands, triage means copying a key into a second command.
+The interactive picker (`-i`) that used to stage marks on this screen is gone, superseded by the
+app's [Scan tab](#the-app-waid-ui), which triages with the same two keys and more context.
 
 ### Sessions
 
@@ -124,6 +125,50 @@ the 36-character session id `today` and `week` print, but any unambiguous prefix
 prefix matching several sessions is a user error and the candidates are listed. Turns come from the
 transcript file on disk rather than the cache, so a session whose file has since moved or been
 deleted is a user error too.
+
+## The app (`waid ui`)
+
+The same data the commands print, in a long-running screen that folds, filters, and writes as you
+go. It runs on the alternate screen and needs a real terminal: with stdout redirected it is a user
+error rather than a fallback to text.
+
+```
+╭───────────╮
+│ Loops  12 │ Scan  8 │ Review │                                     ⟳ scanning  5/9 repos
+┴───────────┴─────────┴────────┴──────────────────────────────────────────────────────────
+```
+
+Three tabs, switched with `1` `2` `3` or `tab`:
+
+| Tab | Shows | Acts |
+| --- | --- | --- |
+| Loops | Declared items grouped by project, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `n` note, `p` toggle the pane. |
+| Scan | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
+| Review | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `R` resume in Claude, `o` open the repo, `y` copy the session id. |
+
+Keys that work everywhere: `j` `k` to move, `g` / `G` for first and last, `enter` to fold, `/` to
+filter (`esc` clears), `s` to cycle the tab's segmented row — Loops' statuses, Scan's kinds, Review's
+today/week/last week — `a` to add an item, `r` to refresh, `u` to undo, `?` for the key table, `q` to
+quit. A key that belongs to another tab says so in the footer rather than doing nothing quietly.
+
+Writes land on the keypress with no confirm step, so the footer's receipt is what says a press did
+anything, and `u` reverses the last one — as another event, since the log is append-only. The stack
+reaches 20 writes back; a note has no inverse and stops the offer. On quit the receipts are replayed
+to the restored terminal, so a triage pass leaves a record in scrollback:
+
+```
+promoted 7k3m  Activity Compendium prototype
+dismissed dirty:C:\dev\bkc-my
+done     sga9  Design template + args persistence
+```
+
+Reads run off the update loop, so nothing blocks on git, `gh`, or the filesystem. A detection pass
+that partly fails degrades the way `waid scan` does: the list keeps what was detected, the notes
+explaining the gap sit below it, and a failed refresh shows in the tab bar beside the age of the
+data still on screen.
+
+`R` runs `claude --resume <id>` in the session's own directory, suspending the app for the length of
+it. `y` copies through `clip`, `pbcopy`, or `wl-copy`/`xclip`/`xsel`, depending on the platform.
 
 ## `WAID_HOME`
 
@@ -170,4 +215,5 @@ go vet ./...
 
 Tests are the real thing wherever possible: `internal/git` drives temp git repos,
 `internal/harness` builds the binary and runs it as a child process against fixture homes and
-against a copy of the real `C:\data\waid`. Only `gh` and the clock are faked.
+against a copy of the real `C:\data\waid`, and `internal/tui` drives the program through `teatest`
+with golden frames at 80 and 140 columns. Only `gh` and the clock are faked.

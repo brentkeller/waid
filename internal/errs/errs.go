@@ -1,4 +1,7 @@
-package cli
+// Package errs holds the error types the CLI maps onto exit codes. It sits below every other
+// package so a command, the config loader and the CLI itself can all raise the same error without
+// depending on one another.
+package errs
 
 import "fmt"
 

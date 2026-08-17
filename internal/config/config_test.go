@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brentkeller/waid/internal/cli"
+	"github.com/brentkeller/waid/internal/errs"
 )
 
 func readFile(t *testing.T, path string) string {
@@ -365,7 +365,7 @@ func TestLoadReportsAUserErrorNamingConfigJson(t *testing.T) {
 		writeFile(t, configPath, contents)
 
 		_, err := Load(home)
-		var user *cli.UserError
+		var user *errs.UserError
 		if !errors.As(err, &user) {
 			t.Fatalf("%s: Load error = %v, want a UserError", name, err)
 		}
@@ -380,7 +380,7 @@ func TestLoadReportsAUserErrorOnAMistypedValue(t *testing.T) {
 	writeFile(t, filepath.Join(home, "config.json"), `{"scanMaxDepth":"deep"}`)
 
 	_, err := Load(home)
-	var user *cli.UserError
+	var user *errs.UserError
 	if !errors.As(err, &user) {
 		t.Fatalf("Load error = %v, want a UserError", err)
 	}

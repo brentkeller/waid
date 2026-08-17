@@ -9,6 +9,9 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+
+	"github.com/brentkeller/waid/internal/config"
+	"github.com/brentkeller/waid/internal/errs"
 )
 
 // Process exit codes. Success is 0, anything the user can fix is 1, and everything else is 2.
@@ -18,8 +21,8 @@ const (
 	ExitInternal = 2
 )
 
-// homeFlag overrides the data directory waid reads and writes.
-const homeFlag = "--waid-home"
+// Version is the release the binary reports.
+const Version = "0.1.0"
 
 // Io is where the CLI writes. Tests replace both ends with buffers.
 type Io struct {
@@ -30,45 +33,83 @@ type Io struct {
 // DefaultIo writes to the process's own streams.
 var DefaultIo = Io{Out: os.Stdout, Err: os.Stderr}
 
-// executor runs a parsed command line. It reports whether output was requested as JSON through
-// json, which is set as soon as the flags are known so a later failure is reported in kind.
-type executor func(argv []string, out Io, json *bool) error
-
-// Run executes argv and returns the process exit code. The optional executor replaces dispatch.
-func Run(argv []string, out Io, exec ...executor) (code int) {
+// Run executes argv against the registry and returns the process exit code.
+func Run(argv []string, out Io, registry Registry) (code int) {
 	defer func() {
 		if r := recover(); r != nil {
 			code = reportPanic(r, out)
 		}
 	}()
 
-	run := execute
-	if len(exec) > 0 {
-		run = exec[0]
-	}
-
+	// Set as soon as the flags are known, so a failure after that point is reported in kind.
 	asJson := false
-	return report(run(argv, out, &asJson), asJson, out)
+	return report(execute(argv, out, registry, &asJson), asJson, out)
 }
 
-// execute parses argv and runs the requested command.
-func execute(argv []string, out Io, asJson *bool) error {
-	for _, arg := range argv {
-		if arg == "--json" {
-			*asJson = true
-		}
+// execute parses argv, prepares the home, and runs the command it names.
+func execute(argv []string, out Io, registry Registry, asJson *bool) error {
+	parsed, err := ParseArgv(argv)
+	if err != nil {
+		return err
+	}
+	*asJson = parsed.Flags.Bool("json")
+
+	if parsed.Flags.Bool("version") {
+		fmt.Fprintf(out.Out, "waid %s\n", Version)
+		return nil
 	}
 
-	for index := 0; index < len(argv); index++ {
-		arg := argv[index]
-		if arg == homeFlag {
-			// The override carries a path, which is a value rather than the command.
-			index++
-			continue
+	override, _ := parsed.Flags.String("waid-home")
+	home := config.ResolveHome(override)
+	if err := config.EnsureHome(home, nil); err != nil {
+		return err
+	}
+	cfg, err := config.Load(home)
+	if err != nil {
+		return err
+	}
+
+	if parsed.Command == "" || parsed.Flags.Bool("help") {
+		fmt.Fprint(out.Out, Usage)
+		return nil
+	}
+
+	command, known := registry[parsed.Command]
+	if !known {
+		return errs.Userf("unknown command: %s", parsed.Command)
+	}
+
+	ctx := &Ctx{
+		Cfg:   cfg,
+		Flags: parsed.Flags,
+		Args:  parsed.Args,
+		Cwd:   workingDir(),
+		Now:   Now(),
+	}
+
+	data, err := command.run(ctx)
+	if err != nil {
+		return err
+	}
+	return present(command, data, ctx, *asJson, out)
+}
+
+// present writes what the command produced: one JSON document with the notes alongside it on
+// stderr, or the rendered text with the notes beneath it.
+func present(command Command, data any, ctx *Ctx, asJson bool, out Io) error {
+	if asJson {
+		if err := writeJsonDocument(out.Out, data); err != nil {
+			return err
 		}
-		if !strings.HasPrefix(arg, "-") {
-			return Userf("unknown command: %s", arg)
+		// Stdout stays a single JSON document, so degradations are reported next to it.
+		for _, note := range ctx.Notes {
+			fmt.Fprintf(out.Err, "%s\n", note)
 		}
+		return nil
+	}
+
+	if text := compose(command.render(data, ctx), ctx.Notes); text != "" {
+		fmt.Fprint(out.Out, ensureNewline(text))
 	}
 	return nil
 }
@@ -79,7 +120,7 @@ func report(err error, asJson bool, out Io) int {
 		return ExitOK
 	}
 
-	var user *UserError
+	var user *errs.UserError
 	if errors.As(err, &user) {
 		if asJson {
 			writeJsonLine(out.Err, userErrorPayload{Error: user.Message, Candidates: user.Candidates})
@@ -125,6 +166,21 @@ type internalErrorPayload struct {
 	Stack string `json:"stack"`
 }
 
+// writeJsonDocument emits the command's result as one indented JSON document, matching what
+// JSON.stringify(data, null, 2) produces. Nothing reaches the stream until the whole document
+// encodes, so a failure mid-value cannot leave half a document behind.
+func writeJsonDocument(w io.Writer, payload any) error {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(payload); err != nil {
+		return fmt.Errorf("encoding the result: %w", err)
+	}
+	_, err := w.Write(buf.Bytes())
+	return err
+}
+
 // writeJsonLine emits one compact JSON document, leaving `<`, `>`, and `&` unescaped so the output
 // matches what the Node CLI writes.
 func writeJsonLine(w io.Writer, payload any) {
@@ -138,13 +194,35 @@ func writeJsonLine(w io.Writer, payload any) {
 	w.Write(buf.Bytes())
 }
 
-func humanUserError(err *UserError) string {
+// compose joins rendered output and the run's notes into one block, dropping the empty parts.
+func compose(rendered string, notes []string) string {
+	parts := []string{}
+	if trimmed := strings.TrimRight(rendered, "\n"); trimmed != "" {
+		parts = append(parts, trimmed)
+	}
+	for _, note := range notes {
+		if note != "" {
+			parts = append(parts, note)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func humanUserError(err *errs.UserError) string {
 	lines := make([]string, 0, len(err.Candidates)+1)
 	lines = append(lines, err.Message)
 	for _, candidate := range err.Candidates {
 		lines = append(lines, "  "+candidate)
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func workingDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 func ensureNewline(text string) string {

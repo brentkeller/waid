@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brentkeller/waid/internal/cli"
+	"github.com/brentkeller/waid/internal/errs"
 )
 
 // DefaultHome is the data directory used when neither an override nor WAID_HOME is given.
@@ -245,15 +245,15 @@ func readSettings(configPath string) (Settings, error) {
 
 	var probe any
 	if err := json.Unmarshal(raw, &probe); err != nil {
-		return Settings{}, cli.Userf("invalid JSON in config.json (%s): %s", configPath, err)
+		return Settings{}, errs.Userf("invalid JSON in config.json (%s): %s", configPath, err)
 	}
 	if _, isObject := probe.(map[string]any); !isObject {
-		return Settings{}, cli.Userf("config.json must contain a JSON object (%s)", configPath)
+		return Settings{}, errs.Userf("config.json must contain a JSON object (%s)", configPath)
 	}
 
 	// Keys the file omits keep the defaults already in settings.
 	if err := json.Unmarshal(raw, &settings); err != nil {
-		return Settings{}, cli.Userf("invalid value in config.json (%s): %s", configPath, describeValueError(err))
+		return Settings{}, errs.Userf("invalid value in config.json (%s): %s", configPath, describeValueError(err))
 	}
 	return settings, nil
 }

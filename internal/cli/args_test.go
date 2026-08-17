@@ -4,6 +4,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/brentkeller/waid/internal/errs"
 )
 
 func TestParseArgvSplitsCommandPositionalsAndValueFlags(t *testing.T) {
@@ -144,7 +146,7 @@ func TestParseArgvValueFlagWithoutValueIsAUserError(t *testing.T) {
 	} {
 		_, err := ParseArgv(argv)
 
-		var user *UserError
+		var user *errs.UserError
 		if !errors.As(err, &user) {
 			t.Fatalf("ParseArgv(%q) returned %v, want a UserError", argv, err)
 		}

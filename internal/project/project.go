@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/brentkeller/waid/internal/cli"
+	"github.com/brentkeller/waid/internal/errs"
 	"github.com/brentkeller/waid/internal/events"
 )
 
@@ -60,7 +60,7 @@ func KnownProjects(items []events.Item, sessionProjects []string) []string {
 
 // Resolve resolves a -p value: nothing → no project, `.` → the current directory, an absolute path
 // taken as given, anything else a case-insensitive substring of a known project path. A partial
-// matching no known project, or more than one, is a cli.UserError.
+// matching no known project, or more than one, is a errs.UserError.
 func Resolve(input string, known []string, cwd string) (*string, error) {
 	value := strings.TrimSpace(input)
 	if value == "" {
@@ -84,9 +84,9 @@ func Resolve(input string, known []string, cwd string) (*string, error) {
 	case 1:
 		return &matches[0], nil
 	case 0:
-		return nil, cli.Userf("no known project matches: %s", value)
+		return nil, errs.Userf("no known project matches: %s", value)
 	default:
-		return nil, cli.Ambiguous("ambiguous project: "+value, matches)
+		return nil, errs.Ambiguous("ambiguous project: "+value, matches)
 	}
 }
 

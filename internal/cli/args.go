@@ -1,6 +1,10 @@
 package cli
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/brentkeller/waid/internal/errs"
+)
 
 // booleanFlags never take a value, so they cannot swallow the argument that follows them.
 var booleanFlags = map[string]bool{
@@ -97,7 +101,7 @@ func ParseArgv(argv []string) (ParsedArgv, error) {
 		value := inline
 		if !hasInline {
 			if index+1 >= len(argv) || isFlag(argv[index+1]) {
-				return ParsedArgv{}, Userf("flag --%s requires a value", name)
+				return ParsedArgv{}, errs.Userf("flag --%s requires a value", name)
 			}
 			value = argv[index+1]
 			index++

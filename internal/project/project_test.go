@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/brentkeller/waid/internal/cli"
+	"github.com/brentkeller/waid/internal/errs"
 	"github.com/brentkeller/waid/internal/events"
 )
 
@@ -169,7 +169,7 @@ func TestResolveMatchesAPartialCaseInsensitively(t *testing.T) {
 func TestResolveRejectsAPartialMatchingNothing(t *testing.T) {
 	_, err := Resolve("nope", known, `C:\cwd`)
 
-	var userErr *cli.UserError
+	var userErr *errs.UserError
 	if !errors.As(err, &userErr) {
 		t.Fatalf("Resolve returned %v, want a UserError", err)
 	}
@@ -181,7 +181,7 @@ func TestResolveRejectsAPartialMatchingNothing(t *testing.T) {
 func TestResolveRejectsAnAmbiguousPartialAndCarriesTheCandidates(t *testing.T) {
 	_, err := Resolve("dev", known, `C:\cwd`)
 
-	var userErr *cli.UserError
+	var userErr *errs.UserError
 	if !errors.As(err, &userErr) {
 		t.Fatalf("Resolve returned %v, want a UserError", err)
 	}
@@ -197,7 +197,7 @@ func TestResolveRejectsAnAmbiguousPartialAndCarriesTheCandidates(t *testing.T) {
 func TestResolveRejectsAnyPartialWhenNothingIsKnown(t *testing.T) {
 	_, err := Resolve("waid", nil, `C:\cwd`)
 
-	var userErr *cli.UserError
+	var userErr *errs.UserError
 	if !errors.As(err, &userErr) {
 		t.Fatalf("Resolve returned %v, want a UserError", err)
 	}

@@ -13,20 +13,21 @@ import (
 // Registry is the dispatch table: every command waid answers to is listed here, and anything absent
 // from it is an unknown command.
 var Registry = cli.Registry{
-	"sync":    cli.Module[SyncResult]{Run: runSync, Render: renderSync},
-	"doctor":  cli.Module[DoctorResult]{Run: runDoctor, Render: renderDoctor},
-	"add":     cli.Module[AddResult]{Run: runAdd, Render: renderAdd},
-	"done":    cli.Module[DoneResult]{Run: runDone, Render: renderDone},
-	"reopen":  cli.Module[ReopenResult]{Run: runReopen, Render: renderReopen},
-	"note":    cli.Module[NoteResult]{Run: runNote, Render: renderNote},
-	"list":    cli.Module[ListResult]{Run: runList, Render: renderList},
-	"show":    cli.Module[ShowResult]{Run: runShow, Render: renderShow},
-	"today":   cli.Module[TodayResult]{Run: runToday, Render: renderToday, NeedsSessions: true},
-	"week":    cli.Module[WeekResult]{Run: runWeek, Render: renderWeek, NeedsSessions: true},
-	"scan":    cli.Module[ScanResult]{Run: runScan, Render: renderScan, NeedsSessions: true},
-	"loops":   cli.Module[LoopsResult]{Run: runLoops, Render: renderLoops, NeedsSessions: true},
-	"dismiss": cli.Module[DismissResult]{Run: runDismiss, Render: renderDismiss},
-	"promote": cli.Module[PromoteResult]{Run: runPromote, Render: renderPromote, NeedsSessions: true},
+	"sync":      cli.Module[SyncResult]{Run: runSync, Render: renderSync},
+	"doctor":    cli.Module[DoctorResult]{Run: runDoctor, Render: renderDoctor},
+	"add":       cli.Module[AddResult]{Run: runAdd, Render: renderAdd},
+	"done":      cli.Module[DoneResult]{Run: runDone, Render: renderDone},
+	"reopen":    cli.Module[ReopenResult]{Run: runReopen, Render: renderReopen},
+	"note":      cli.Module[NoteResult]{Run: runNote, Render: renderNote},
+	"list":      cli.Module[ListResult]{Run: runList, Render: renderList},
+	"show":      cli.Module[ShowResult]{Run: runShow, Render: renderShow},
+	"today":     cli.Module[TodayResult]{Run: runToday, Render: renderToday, NeedsSessions: true},
+	"week":      cli.Module[WeekResult]{Run: runWeek, Render: renderWeek, NeedsSessions: true},
+	"scan":      cli.Module[ScanResult]{Run: runScan, Render: renderScan, NeedsSessions: true},
+	"loops":     cli.Module[LoopsResult]{Run: runLoops, Render: renderLoops, NeedsSessions: true},
+	"dismiss":   cli.Module[DismissResult]{Run: runDismiss, Render: renderDismiss},
+	"undismiss": cli.Module[UndismissResult]{Run: runUndismiss, Render: renderUndismiss},
+	"promote":   cli.Module[PromoteResult]{Run: runPromote, Render: renderPromote, NeedsSessions: true},
 }
 
 // requiredId reads the item id a mutation operates on from the first positional.

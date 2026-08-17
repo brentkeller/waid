@@ -159,6 +159,67 @@ func TestNoSyncKeepsAStaleCache(t *testing.T) {
 	}
 }
 
+// freezeSessionCache makes cache/sessions.json unwritable, which fails a sync without touching what
+// a command can still read back from it.
+func freezeSessionCache(t *testing.T, home string) {
+	t.Helper()
+
+	path := filepath.Join(home, "cache", "sessions.json")
+	if err := os.Chmod(path, 0o444); err != nil {
+		t.Fatalf("freezing the cache: %v", err)
+	}
+	// Restored so the temp directory can be removed on a platform that honours the read-only bit.
+	t.Cleanup(func() { os.Chmod(path, 0o644) })
+}
+
+func TestAFailingSyncLeavesTheCommandOnTheStaleCacheWithANote(t *testing.T) {
+	home := testHome(t)
+	seedClaudeDir(t, home)
+	seedTranscript(t, home, "aaaa1111-2222-3333-4444-555555555555")
+	seedSessionCache(t, home, "stale", time.Hour)
+	freezeSessionCache(t, home)
+
+	c := &capture{}
+	code := Run(argv(home, "probe"), c.io(), sessionProbe(true))
+
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d: %s", code, ExitOK, c.err.String())
+	}
+	lines := strings.Split(strings.TrimSpace(c.out.String()), "\n")
+	if lines[0] != "stale" {
+		t.Errorf("sessions = %q, want the cached one", lines[0])
+	}
+	// The note is the CLI's to render, so it lands beneath the command's own output.
+	if len(lines) < 2 || !strings.Contains(lines[1], "session sync failed") {
+		t.Errorf("no sync failure note in:\n%s", c.out.String())
+	}
+}
+
+func TestUnderJsonAFailingSyncKeepsStdoutOneDocument(t *testing.T) {
+	home := testHome(t)
+	seedClaudeDir(t, home)
+	seedTranscript(t, home, "aaaa1111-2222-3333-4444-555555555555")
+	seedSessionCache(t, home, "stale", time.Hour)
+	freezeSessionCache(t, home)
+
+	c := &capture{}
+	code := Run(argv(home, "probe", "--json"), c.io(), sessionProbe(true))
+
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d: %s", code, ExitOK, c.err.String())
+	}
+	var ids []string
+	if err := json.Unmarshal(c.out.Bytes(), &ids); err != nil {
+		t.Fatalf("stdout is not one JSON document (%v): %s", err, c.out.String())
+	}
+	if len(ids) != 1 || ids[0] != "stale" {
+		t.Errorf("sessions = %v, want the cached one", ids)
+	}
+	if !strings.Contains(c.err.String(), "session sync failed") {
+		t.Errorf("no sync failure note on stderr: %q", c.err.String())
+	}
+}
+
 func TestACommandNotNeedingSessionsGetsNone(t *testing.T) {
 	home := testHome(t)
 	seedClaudeDir(t, home)

@@ -43,6 +43,42 @@ func TestReadRecordsSkipsWhatItCannotUseAndKeepsLineNumbers(t *testing.T) {
 	}
 }
 
+// A home that has never been written to has no log at all, which reads as an empty one rather than
+// as a failure — every read command has to work on a fresh install.
+func TestAnAbsentLogReadsAsAnEmptyOne(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nothing.jsonl")
+
+	if lines := ReadLines(path); len(lines) != 0 {
+		t.Errorf("lines = %v, want none", lines)
+	}
+
+	state := Load(path)
+	if len(state.Items) != 0 || len(state.Dismissed) != 0 || len(state.Problems) != 0 {
+		t.Errorf("state = %+v, want an empty one", state)
+	}
+}
+
+func TestReadLinesDropsOnlyTheTrailingNewline(t *testing.T) {
+	path := writeLog(t, `{"ev":"add"}`, ``, `{"ev":"close"}`)
+
+	if lines := ReadLines(path); len(lines) != 3 {
+		t.Errorf("lines = %q, want the blank one kept and the trailing newline dropped", lines)
+	}
+}
+
+func TestFindReportsWhetherTheLogHoldsAnItem(t *testing.T) {
+	path := writeLog(t, `{"ts":"2026-08-14T09:00:00.000Z","ev":"add","id":"a1b2","title":"One"}`)
+	state := Load(path)
+
+	item, found := state.Find("a1b2")
+	if !found || item.Title != "One" {
+		t.Errorf("Find(a1b2) = %+v, %v", item, found)
+	}
+	if _, found := state.Find("zzzz"); found {
+		t.Errorf("Find(zzzz) found an item the log does not hold")
+	}
+}
+
 func TestReadRecordsOfAnAbsentLogIsEmpty(t *testing.T) {
 	records := ReadRecords(filepath.Join(t.TempDir(), "nothing.jsonl"))
 

@@ -13,15 +13,15 @@ the surface is wrong for it.
 This adds a long-running terminal app over the same data: three tabs, collapsible grouping, a
 transcript preview, and triage that writes as you go.
 
-It is the opposite end of a spectrum from `-i`, and both ends earn their place. `-i` opens on one
-list, takes a batch decision, applies it, and dies — which is what a script or an agent wants. The
-app is where you sit down to read the week.
+It also replaces the `-i` picker, which the port drops. Between cutover and this app's Scan tab
+there is no interactive triage at all, which is why §9 builds Scan first.
+
+Bubble Tea and Lipgloss enter the dependency set here. The port takes none.
 
 ## Non-goals
 
 - **Not a replacement for the CLI.** Every command keeps working and keeps its output. Bare `waid`
   still prints loops, because the `CLAUDE.md` snippet and the `/waid` skill depend on it.
-- **Not a replacement for `-i`.** It stays, and shares this app's components.
 - **Not a mouse target.** Keyboard only, as the picker already established.
 - **Not a session viewer.** The transcript pane shows enough to recognise a session; reading one
   properly is what `R` hands off to Claude for.
@@ -91,9 +91,7 @@ The detail pane is `show`'s data rendered live, and `p` collapses it when densit
  p promote · d dismiss · o open in browser · r refresh · / filter · ? keys
 ```
 
-Rows leave the list the moment you act on them. The receipt line is both the undo affordance and the
-trace — which matters, because `-i` deliberately prints receipts into real scrollback and an app
-running on the alt screen has no scrollback to print into.
+Rows leave the list the moment you act on them, and the receipt line is the undo affordance.
 
 ### 1.3 Review
 
@@ -140,11 +138,8 @@ type Tree[T any] struct {
 ## 3. Writes happen immediately
 
 Actions write as you press them. The row leaves the list, a receipt appears in the footer, and `u`
-undoes it.
-
-This is a deliberate divergence from `-i`, and the reason is the difference in lifetime. The picker
-batches because it opens on one screen and dies; a confirm step costs one keystroke across the whole
-session. In an app you live in, "press Enter to commit" is a modal interruption repeated all day.
+undoes it. There is no confirm step — in an app you live in, "press Enter to commit" is a modal
+interruption repeated all day.
 
 The event log makes this safe in a way it would not be over a mutable store. Undo is a bounded stack
 of **inverse commands**, not a state snapshot:
@@ -162,6 +157,23 @@ append-only design that is the correct behaviour, not a limitation.
 Promote is the one action carrying text — an item title read for weeks afterwards. Under immediate
 writes it fires with the signal's own title, and the footer offers `e` to rename alongside `u`, so
 the common case costs one key and the correction stays one key away.
+
+### 3.1 Receipts survive the alt screen
+
+The picker printed one receipt line per write *after* restoring the terminal, so a triage pass left
+its trace in real scrollback. An app on the alt screen would lose that entirely: quit, and every
+decision you made vanishes with the screen.
+
+So quitting prints a summary to the restored terminal — the same receipt lines, in the order they
+were written:
+
+```
+promoted 7k3m  Activity Compendium prototype
+dismissed ahead:C:\dev\waid:tui
+closed   sga9  Design template + args persistence…
+```
+
+Nothing is printed when nothing was written, so reading the week stays silent.
 
 ## 4. Keys
 
@@ -215,7 +227,7 @@ internal/tui/
   tree.go         the shared collapsible tree (§2)
   theme.go        one lipgloss palette
   layout.go       the width rule (§5)
-  pick.go         the -i picker, from the port's spec, on these components
+  receipt.go      the write log replayed to stdout on quit (§3.1)
 ```
 
 Every read is a `tea.Cmd`: it runs off the update loop and returns a `tea.Msg`. `Update` never waits,
@@ -243,7 +255,7 @@ is the common case, and the CLI already reports it as a note rather than a failu
 | --- | --- |
 | Degradation notes | Dim strip below the list, wording unchanged from the CLI |
 | A failed refresh | Last good data stays; the tab bar shows the failure and the age of what is shown |
-| Not a TTY | Exit 1 with the same message `-i` uses; the app is never a fallback for a pipe |
+| Not a TTY | Exit 1, `waid ui requires an interactive terminal`; the app is never a fallback for a pipe |
 | Panic mid-render | Deferred restore leaves the alt screen and shows the cursor before the stack prints |
 
 That last row is the failure mode that actually hurts a hand-rolled terminal app, and it is the one
@@ -273,14 +285,14 @@ Each phase ends green on `go test ./...` and is usable on its own.
 
 1. **Chrome and tree.** `app.go`, `tree.go`, `theme.go`, `layout.go`, tab switching, and the key
    table. Driven by tests; nothing loads real data yet.
-2. **Review.** The lightest tab — sessions are cached and need no detection — so the tree proves
-   itself on real data before triage exists. Preview pane, then `R`.
-3. **Scan.** Signals, async refresh with the spinner, then triage and the undo stack.
+2. **Scan.** Signals, async refresh with the spinner, triage, the undo stack, and the exit receipts.
+3. **Review.** Sessions, the collapsed-by-project tree, the preview pane, then `R`.
 4. **Loops.** Items, the status toggle, the detail pane, `a`, `e`, `n`.
-5. **Picker.** Re-point `-i` at these components and delete its standalone rendering.
 
-Review is deliberately first: it is the tab with no writes, so the shared tree and the preview are
-proven before anything can mutate the log.
+Scan is first because the port drops `-i` and leaves no interactive triage behind it; every phase
+before Scan is time spent copying signal keys by hand. That inverts the safer ordering — Review has
+no writes and would prove the tree without being able to corrupt anything — so phase 1 carries the
+weight instead, testing the tree exhaustively against fixtures before phase 2 points it at the log.
 
 ## 10. Decisions settled during design
 
@@ -288,11 +300,12 @@ proven before anything can mutate the log.
 | --- | --- |
 | Panes like lazygit, or tabs like winget-tui? | Tabs at the top, master/detail within each. The sections are modes, not a hierarchy. |
 | Do Scan and Review share a component? | Yes, one tree. Two would drift invisibly. |
-| Batch writes like `-i`, or write immediately? | Immediately, with an undo stack of inverse commands. |
+| Batch writes, or write immediately? | Immediately, with an undo stack of inverse commands. |
+| How is the picker's scrollback trace kept? | Quitting replays the session's writes to the restored terminal. |
 | Does promote prompt for a title? | No. It fires with the signal's title; `e` renames. |
 | Do agent sessions appear in Scan? | No. Scan is exactly `waid scan`; sessions are history, shown in Review. |
 | Embed Claude for resume, or suspend? | Suspend via `ExecProcess`. |
 | Side pane or overlay for transcripts? | Both, chosen by width at 120 columns. |
 | Subprocess or direct calls? | Direct. The port removed the boundary this design originally needed. |
-| Does `-i` survive? | Yes, re-pointed at these components. |
+| Does `-i` survive? | No. Dropped in the port; this app supersedes it, and Scan is built first to close the gap. |
 | Does bare `waid` open the app? | No. It keeps printing loops; the app is `waid ui`. |

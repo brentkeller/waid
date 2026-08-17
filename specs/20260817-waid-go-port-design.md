@@ -52,7 +52,7 @@ The port is correct when these hold. Everything else is an implementation detail
 | Human stdout | Identical text, including column widths and the `…` truncation. |
 | stderr | Degradation notes, same wording. |
 | Exit codes | `0` success, `1` user error, `2` internal with a stack. |
-| Command surface | Every command and flag, including `-i`. |
+| Command surface | Every command and flag **except `-i`**, which is dropped (§6). |
 
 `cache/` is explicitly **not** in the contract. It is derived, disposable, and gitignored, so the Go
 build may store `sessions.json` and `gh.json` however it likes; a stale Node-written cache is
@@ -104,7 +104,6 @@ waid/
     render/                       shared column formatting and truncation
     command/                      one file per command
     cli/                          flag parsing, dispatch, --json vs render
-    tui/                          the -i picker (§6)
   testdata/
     transcripts/                  ported unchanged from test/fixtures
     golden/                       differential fixtures (§5)
@@ -173,28 +172,28 @@ reproduce a note containing `&` or a project path with a space.
 Beyond the harness, the Go suite reproduces the Node suite's approach: real temp git repos for
 `git`, the binary spawned as a child process for smoke tests, fakes only for `gh` and the clock.
 
-## 6. The `-i` picker
+## 6. The `-i` picker is dropped
 
-`-i` is ported rather than dropped. It serves the scripted and agent path that a long-running TUI
-cannot: open, take one decision, apply, exit.
+`-i` is **not** ported. It is superseded by the app in the following spec, and porting it would mean
+building a subsystem in order to delete it.
 
-It is rebuilt on **Bubble Tea** rather than transliterated from `src/tui/`. The existing design is
-already Elm-shaped — `PickState` / `reduce(state, key)` / `paint(state) → string[]` is Model /
-Update / View under different names — so this is a renaming, not a redesign. Bubble Tea and Lipgloss
-enter the dependency set here so that the app in the following spec extends one terminal stack
-rather than adding a second.
+The picker was justified as serving a scripted path, but it never did: `-i` exits 1 when stdin or
+stdout is not a TTY, so an agent cannot use it and never could — an agent calls
+`waid promote <key> --json`. Its only user is a human at a terminal, which is exactly who the app's
+Scan tab serves, with the same keys and better context.
 
-Its rendering stays deliberately minimal — a flat list, no shared tree. The app's spec factors the
-tree out later and re-points the picker at it; inventing that abstraction now, with one caller,
-would be guessing at its shape.
+Keeping both would also mean two triage surfaces with opposite semantics: the picker stages marks
+and writes nothing until `Enter`, while the app writes immediately with an undo stack. That is a
+worse outcome than either alone, because the correct keystroke depends on which one you are in.
 
-Its behaviour is unchanged and stays in the compatibility contract: mark-then-apply, nothing written
-until `Enter`, the same keys, the same three guards, receipts printed after the terminal is restored,
-and no re-detection on apply.
+Consequently `src/tui/` and `specs/20260814-waid-tui-design.md`'s implementation are retired at
+cutover, and **the Go CLI takes no dependencies at all** — Bubble Tea and Lipgloss arrive with the
+app, not here. The 2026-08-14 spec stays in `specs/` as the record of what shipped and why.
 
-The guard on stdio being a TTY is the one piece of `src/tui/term.ts` with no direct Go equivalent;
-`golang.org/x/term.IsTerminal` on both descriptors replaces it, and the smoke test proving `waid
-scan -i` exits 1 under piped stdio ports as-is.
+**This opens a gap.** Between cutover and the app's Scan tab, triage returns to copying keys like
+`review:DevResults/DevResults#6886` into a second command — the friction the picker existed to
+remove. The gap is bounded by building Scan first in the following spec rather than by keeping dead
+code alive, but it is real and should be expected rather than discovered.
 
 ## 7. Two commands the port adds
 
@@ -227,14 +226,13 @@ the differential harness rather than deferring it.
    the diff proves equivalence, and only then the §4 worker pool, so the speedup is measured against
    a known-correct baseline.
 5. **Remainder.** `sync`, `doctor`, `dismiss`, `promote`, `undismiss`, `transcript`, usage text.
-6. **Picker.** `-i` on Bubble Tea, the three guards, the piped-stdio smoke test.
-7. **Cutover.** `go install ./cmd/waid`, delete `bin/`, `src/`, `test/`, `package.json`,
-   `tsconfig.json`. Rewrite the README's install and no-build-step sections. Verify the
-   `CLAUDE.md` snippet and the `/waid` skill against the Go binary.
+6. **Cutover.** `go install ./cmd/waid`, delete `bin/`, `src/`, `test/`, `package.json`,
+   `tsconfig.json`. Rewrite the README's install, no-build-step, and interactive-triage sections.
+   Verify the `CLAUDE.md` snippet and the `/waid` skill against the Go binary.
 
 The ordering is deliberate: the slowest, most valuable work (§4) lands only once a correctness
-baseline exists to compare it against, and the terminal code that can strand a shell lands last —
-the same principle the picker's own spec used.
+baseline exists to compare it against. Nothing here touches a terminal, so the port carries none of
+the raw-mode risk the picker's spec had to phase around.
 
 ## 9. Risks
 
@@ -255,7 +253,8 @@ the same principle the picker's own spec used.
 | Port first, or build the app first? | Port first. Building the app against JSON means ~400 lines of client, mirrors, and contract tests that the port would delete. |
 | Rewrite the event log format? | No. It holds real data and its append-only design is sound. |
 | Keep `cache/` compatible? | No. It is derived and disposable; a stale cache is rebuilt. |
-| Keep `-i`? | Yes, rebuilt on Bubble Tea. It serves the scripted path the app cannot. |
-| Where do `undismiss` and `transcript` land? | In the port, not the app. Trivial in-process, awkward across a boundary. |
+| Keep `-i`? | No. It requires a TTY, so it never served scripts; the app's Scan tab supersedes it, and two triage surfaces with opposite semantics is worse than one. |
+| Does the Go CLI take dependencies? | None. Bubble Tea arrives with the app, not the port. |
+| Where do `undismiss` and `transcript` land? | In the port. `undismiss` closes a real gap; `transcript` is cheap while the parser is in scope. |
 | How is the port verified? | Differential diffing of both binaries against the same data, including the real log. |
 | Does the port change behaviour? | Only detection's concurrency, and only after the sequential version is proven equivalent. |

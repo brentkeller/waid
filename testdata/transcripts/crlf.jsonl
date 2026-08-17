@@ -1,0 +1,8 @@
+{"type":"user","isSidechain":false,"isMeta":true,"cwd":"C:\\dev\\waid","sessionId":"a1b2c3d4","gitBranch":"main","timestamp":"2026-08-14T09:00:00.000Z","message":{"role":"user","content":"<command-name>/clear</command-name>"}}
+{"type":"user","isSidechain":false,"isMeta":false,"cwd":"C:\\dev\\waid","sessionId":"a1b2c3d4","gitBranch":"main","timestamp":"2026-08-14T09:00:05.000Z","message":{"role":"user","content":"Fix the budget chart legend so it stops overflowing"}}
+{"type":"assistant","sessionId":"a1b2c3d4","timestamp":"2026-08-14T09:00:09.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Looking at the legend now."}]}}
+{"type":"ai-title","aiTitle":"Chart legend work","sessionId":"a1b2c3d4"}
+{"type":"user","isSidechain":true,"isMeta":false,"cwd":"C:\\dev\\elsewhere","sessionId":"a1b2c3d4","gitBranch":"sidechain-branch","timestamp":"2026-08-14T09:02:00.000Z","message":{"role":"user","content":"Search the repo for legend layout code."}}
+{"type":"user","isSidechain":false,"isMeta":false,"cwd":"C:\\dev\\waid","sessionId":"a1b2c3d4","gitBranch":"fix/legend","timestamp":"2026-08-14T09:05:00.000Z","message":{"role":"user","content":[{"type":"text","text":"Now add a regression test."}]}}
+{"type":"ai-title","aiTitle":"Fix budget chart legend overflow","sessionId":"a1b2c3d4"}
+{"type":"assistant","sessionId":"a1b2c3d4","timestamp":"2026-08-14T09:06:30.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Test added."}]}}

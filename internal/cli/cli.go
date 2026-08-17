@@ -85,6 +85,7 @@ func execute(argv []string, out Io, registry Registry, asJson *bool) error {
 		Args:  parsed.Args,
 		Cwd:   workingDir(),
 		Now:   Now(),
+		Ids:   IdGenerator(),
 	}
 
 	data, err := command.run(ctx)

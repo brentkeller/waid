@@ -7,6 +7,7 @@ import (
 	"github.com/brentkeller/waid/internal/config"
 	"github.com/brentkeller/waid/internal/gh"
 	"github.com/brentkeller/waid/internal/git"
+	"github.com/brentkeller/waid/internal/ids"
 )
 
 // Ctx is everything a command needs to run.
@@ -18,6 +19,8 @@ type Ctx struct {
 	Cwd  string
 	// Now is the instant the run treats as the present, pinned through EnvNow for a reproducible run.
 	Now time.Time
+	// Ids is the generator new items draw from, pinned through EnvIds for a reproducible run.
+	Ids ids.Generator
 	// Git and Gh are the detection seams. Nil outside tests, where detection reaches for the real
 	// clients instead.
 	Git git.Client

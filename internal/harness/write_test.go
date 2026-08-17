@@ -44,11 +44,48 @@ func TestWriteCommandsMatchNode(t *testing.T) {
 		"note without text":  {Args: []string{"note", "a1b2", "   "}},
 		"note unknown id":    {Args: []string{"note", "zzzz", "text"}},
 		"reopen unknown id":  {Args: []string{"reopen", "zzzz", "--json"}},
+		// dismiss takes a key on faith, so it needs no detection to reach the log.
+		"dismiss":                    {Args: []string{"dismiss", "pr:octo/widgets#41"}},
+		"dismiss with json":          {Args: []string{"dismiss", "pr:octo/widgets#41", "--json"}},
+		"dismiss an already hidden":  {Args: []string{"dismiss", "review:DevResults/DevResults#6886"}},
+		"dismiss a restored key":     {Args: []string{"dismiss", "pr:DevResults/DevResults#7237", "--json"}},
+		"dismiss without a key":      {Args: []string{"dismiss"}},
+		"dismiss with a blank key":   {Args: []string{"dismiss", "   ", "--json"}},
+		"promote without a key":      {Args: []string{"promote"}},
+		"promote with a blank key":   {Args: []string{"promote", "   ", "--json"}},
+		"promote an undetected key":  {Args: []string{"promote", "pr:octo/widgets#41"}},
+		"promote an undetected json": {Args: []string{"promote", "pr:octo/widgets#41", "--json"}},
 	}
 
 	for name, invocation := range invocations {
 		t.Run(name, func(t *testing.T) {
 			harness.CompareWrite(t, harness.GoldenHome, invocation)
+		})
+	}
+}
+
+// promote is diffed on the detection home, because the signal it names has to still be detectable
+// before either build will write anything at all.
+func TestPromoteMatchesNode(t *testing.T) {
+	fixture := ghFixture(t)
+	invocations := map[string]harness.Invocation{
+		"promote":           {Args: []string{"promote", "review:octo/widgets#41"}, Ids: []string{"9xk2"}, GhFixture: fixture},
+		"promote with json": {Args: []string{"promote", "review:octo/widgets#41", "--json"}, Ids: []string{"9xk2"}, GhFixture: fixture},
+		"promote a draft":   {Args: []string{"promote", "review:octo/gadgets#42", "--json"}, Ids: []string{"9xk2"}, GhFixture: fixture},
+		"promote skipping a taken id": {
+			Args:      []string{"promote", "review:octo/widgets#41", "--json"},
+			Ids:       []string{"a1b2", "9xk2"},
+			GhFixture: fixture,
+		},
+		"promote a dismissed key": {
+			Args:      []string{"promote", "review:DevResults/DevResults#6886", "--json"},
+			GhFixture: fixture,
+		},
+	}
+
+	for name, invocation := range invocations {
+		t.Run(name, func(t *testing.T) {
+			harness.CompareWrite(t, detectionHome, invocation)
 		})
 	}
 }

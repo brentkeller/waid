@@ -15,7 +15,9 @@ Usage: waid <command> [options]
   waid done <id>                      waid reopen <id>
   waid note <id> "<text>"
   waid show <id>                      Full item with notes and history
+  waid transcript <id>                A session's turns, oldest first
   waid promote <key>                  waid dismiss <key>
+  waid undismiss <key>                Restore a dismissed signal
   waid doctor                         Validate config, log integrity, gh auth, cache freshness
 
 Global flags:

@@ -29,6 +29,7 @@ var Registry = cli.Registry{
 	"dismiss":    cli.Module[DismissResult]{Run: runDismiss, Render: renderDismiss},
 	"undismiss":  cli.Module[UndismissResult]{Run: runUndismiss, Render: renderUndismiss},
 	"promote":    cli.Module[PromoteResult]{Run: runPromote, Render: renderPromote, NeedsSessions: true},
+	"ui":         cli.Module[UiResult]{Run: runUi, Render: renderUi},
 }
 
 // requiredId reads the item id a mutation operates on from the first positional.

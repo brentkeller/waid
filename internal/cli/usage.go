@@ -19,6 +19,7 @@ Usage: waid <command> [options]
   waid promote <key>                  waid dismiss <key>
   waid undismiss <key>                Restore a dismissed signal
   waid doctor                         Validate config, log integrity, gh auth, cache freshness
+  waid ui                             The terminal app: loops, scan and review in one screen
 
 Global flags:
   --json                              Print a single JSON document to stdout

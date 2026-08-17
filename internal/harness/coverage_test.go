@@ -13,6 +13,11 @@ import (
 // behind rather than by what they print, since the log is the artifact that outlives the run.
 var writeCommands = []string{"add", "done", "reopen", "note", "dismiss", "promote", "undismiss"}
 
+// undispatchable are the commands this package cannot run. `ui` is a long-running terminal app, so
+// there is no one-shot invocation to capture: with the piped stdio a spawned run gets, the only
+// thing it can do is refuse to start, which smoke_test.go asserts instead.
+var undispatchable = []string{"ui"}
+
 // Every command in the dispatch table is run by this package as a real process somewhere. A command
 // added without an invocation is the failure this guards against: unit tests exercise a command's
 // own package, and only these runs put the whole binary over a populated data directory.
@@ -25,6 +30,9 @@ func TestEveryCommandIsExercised(t *testing.T) {
 	)
 
 	for name := range command.Registry {
+		if slices.Contains(undispatchable, name) {
+			continue
+		}
 		if !slices.Contains(covered, name) {
 			t.Errorf("%s is in the dispatch table but is never run by the harness", name)
 		}
@@ -37,7 +45,7 @@ func TestEveryReadCommandIsExercisedOnTheRealHome(t *testing.T) {
 	covered := commandsIn(realHomeInvocations(t))
 
 	for name := range command.Registry {
-		if slices.Contains(writeCommands, name) {
+		if slices.Contains(writeCommands, name) || slices.Contains(undispatchable, name) {
 			continue
 		}
 		if !slices.Contains(covered, name) {

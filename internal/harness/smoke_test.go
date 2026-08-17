@@ -141,6 +141,22 @@ func TestSmokeAddedItemComesBackFromLoops(t *testing.T) {
 	}
 }
 
+// The app refuses to start without a terminal, and a spawned process is the only place that guard
+// can be observed for real: the streams here are pipes, which is exactly what it exists to reject.
+func TestSmokeUiRefusesPipedStdio(t *testing.T) {
+	result := waid(t, smokeHome(t), "ui")
+
+	if result.Code != 1 {
+		t.Fatalf("ui exited %d, want 1: %s", result.Code, result.Stderr)
+	}
+	if result.Stderr != "waid ui requires an interactive terminal\n" {
+		t.Errorf("stderr = %q", result.Stderr)
+	}
+	if result.Stdout != "" {
+		t.Errorf("ui wrote to stdout: %q", result.Stdout)
+	}
+}
+
 func TestSmokeJsonIsASingleDocumentOnStdout(t *testing.T) {
 	home := smokeHome(t)
 	waid(t, home, "add", "only item")

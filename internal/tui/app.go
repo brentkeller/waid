@@ -7,7 +7,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/brentkeller/waid/internal/config"
 	"github.com/brentkeller/waid/internal/ids"
@@ -32,12 +31,13 @@ func Run(opts Options) error {
 // Model is the root model: the tabs, the focus, the global keys and the undo stack all hang off it.
 type Model struct {
 	opts   Options
+	theme  Theme
 	width  int
 	height int
 }
 
 // New builds the root model.
-func New(opts Options) Model { return Model{opts: opts} }
+func New(opts Options) Model { return Model{opts: opts, theme: NewTheme()} }
 
 func (m Model) Init() tea.Cmd { return nil }
 
@@ -57,7 +57,5 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	return placeholder.Render("waid") + "\n\nq quit\n"
+	return m.theme.Heading.Render("waid") + "\n\n" + m.theme.Footer.Render("q quit") + "\n"
 }
-
-var placeholder = lipgloss.NewStyle().Bold(true)

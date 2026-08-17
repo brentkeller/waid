@@ -13,26 +13,21 @@ Single machine, local files, zero runtime dependencies.
 ```
 git clone <this repo> C:\dev\waid
 cd C:\dev\waid
-npm install        # devDependencies only — typescript and @types/node
-npm link           # exposes `waid` on PATH
+go install ./cmd/waid
 ```
 
-Requires Node >= 24.
+Requires Go >= 1.26. `go install` puts `waid` in `$GOBIN` (`%USERPROFILE%\go\bin` by default), which
+has to be on `PATH`. `waid --version` confirms which binary is resolving.
 
-### No build step
+### No build step to manage
 
-The sources run as written. `bin/waid.ts` is the package's `bin` entry and Node strips the types
-at load time — there is no compile, no `dist/`, and no watch process.
+The binary is the whole distribution. There is no dependency tree to install — `go.mod` requires
+nothing — no config to generate, and nothing to watch or recompile while using it. Reinstalling
+after a change is the same one command, and `go run ./cmd/waid <command>` works from the source tree
+without installing at all.
 
-This survives `npm link` only because of how Node resolves symlinks. Node refuses to strip types
-for files that genuinely live under `node_modules`, but `npm link` symlinks the package in, and
-realpath resolution puts the entry back at `C:\dev\waid` before the check runs. If you ever see
-`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, the package was copied into `node_modules` rather
-than linked.
-
-`test/smoke.test.ts` spawns `bin/waid.ts` as a real child process, so this stays proven.
-
-Without linking, every command below works as `node C:\dev\waid\bin\waid.ts <command>`.
+`internal/harness/smoke_test.go` builds and spawns the binary as a real child process, so the
+installed path stays proven.
 
 ## Commands
 
@@ -41,25 +36,27 @@ Without linking, every command below works as `node C:\dev\waid\bin\waid.ts <com
 | `waid sync [--full]` | Rebuild the derived session cache. Incremental unless `--full`. |
 | `waid today [--date YYYY-MM-DD]` | Sessions and item activity for a day, grouped by project. |
 | `waid week [--last]` | Rollup by project for this week, or the previous one. |
-| `waid loops [-p <project>] [-i]` | Declared open items, then detected signals. The default view. |
-| `waid scan [-p <project>] [-i]` | Detected signals only. |
+| `waid loops [-p <project>]` | Declared open items, then detected signals. The default view. |
+| `waid scan [-p <project>]` | Detected signals only. |
 | `waid list [--status s] [--project p] [--tag t] [--all]` | Declared items. Hides done unless `--all` or `--status done`. |
 | `waid add "<title>" [-p <project>] [--waiting-on <who>] [--tag <t>] [--session <id>]` | Record an item. |
 | `waid done <id>` / `waid reopen <id>` | Close or reopen an item. |
 | `waid note <id> "<text>"` | Append a note to an item. |
 | `waid show <id>` | Full item with its notes and event history. |
+| `waid transcript <id>` | A session's turns, oldest first. |
 | `waid promote <key>` | Turn a detected signal into a tracked item, and dismiss the signal. |
 | `waid dismiss <key>` | Hide a detected signal without tracking it. |
+| `waid undismiss <key>` | Restore a dismissed signal so detection reports it again. |
 | `waid doctor` | Validate config, log integrity, gh auth, cache freshness, repo counts. |
 
 ### Global flags
 
 | Flag | Effect |
 | --- | --- |
-| `-i`, `--interactive` | Triage the rows in place. `loops` and `scan` only. |
 | `--json` | Print a single JSON document to stdout. Degradations go to stderr. |
 | `--no-sync` | Skip the implicit session sync. |
 | `--waid-home <path>` | Override `$WAID_HOME` for one invocation. |
+| `--version` | Print the version. |
 | `-h`, `--help` | Show usage. |
 
 Exit codes are `0` success, `1` user error (unknown id, unresolvable project, bad flag), `2`
@@ -87,9 +84,9 @@ those with activity in the last `activeWindowDays`:
 | `ahead` | `ahead:<repo>:<branch>` | Unpushed commits. |
 | `dirty` | `dirty:<repo>` | Uncommitted files. |
 
-They rank by kind in that order, then oldest first. `promote` and `dismiss` both take the key.
-GitHub signals need `ghUser` set and an authenticated `gh`; without them the git signals still
-work and a note explains the gap.
+They rank by kind in that order, then oldest first. `promote`, `dismiss` and `undismiss` all take
+the key. GitHub signals need `ghUser` set and an authenticated `gh`; without them the git signals
+still work and a note explains the gap.
 
 Each signal renders as three columns — the key, what it is about, and where and when:
 
@@ -102,41 +99,16 @@ DETECTED  (4 shown, 1 dismissed)
   dirty:C:\dev\bkc-my                13 uncommitted files                     day-cards-p3-outliner · 2w
 ```
 
-### Interactive triage (`-i`)
+### Triaging signals
 
-`waid loops -i` and `waid scan -i` open the same screen the command would have printed, with a
-cursor on it. Marking is separate from applying: keys stage a decision in the gutter, and **nothing
-is written until `Enter`**. `q`, `Esc` and end-of-input cancel the whole batch and write nothing,
-which is a success — declining to triage is a valid outcome, not a failure.
+Triage is one command per decision: `waid promote <key>` to track the signal, `waid dismiss <key>`
+to hide it, `waid undismiss <key>` to bring it back. `undismiss` only accepts a key that is
+dismissed now; anything else is a user error, since the likeliest cause is a typo. The keys are
+meant to be copied out of the `DETECTED` block verbatim.
 
-| Key | Effect |
-| --- | --- |
-| `j` `k` `↑` `↓` | Move the cursor. Headings are skipped. |
-| `g` / `G` | First / last row. |
-| `p` | Promote a detected signal. |
-| `d` | Dismiss a detected signal. |
-| `x` | Mark a declared item done. |
-| `w` | Mark a declared item waiting on someone, opening the editor for the name. |
-| `e` | Edit the mark's text — a promote title, or who an item waits on. |
-| `u` | Unmark the row. Pressing the same action key twice does the same. |
-| `Enter` | Apply every mark and exit. |
-| `q`, `Esc` | Cancel; write nothing. |
-| `Ctrl-C` | Cancel; exit `130`. |
-| `?` | Toggle the full key table. |
-
-`p` and `d` only apply to detected signals, `x` and `w` only to declared items; the wrong key on the
-wrong row stages nothing and says why in the footer. While the editor is open every key belongs to
-it, so `Enter` saves the field rather than applying the batch, and `Esc` reverts it.
-
-Applying writes the same events the individual commands write, in row order, and prints one receipt
-line per mark once the terminal is restored — so the trace lands in the real scrollback. **Apply
-does not re-detect.** Every decision is applied against the rows as they were shown: a signal that
-disappeared while you were deciding still promotes, rather than failing on a race.
-
-`-i` is a user error, exit `1`, in three cases, all checked before any detection runs: combined with
-`--json`, on a command that has no interactive screen (`list does not support -i`), or when stdin or
-stdout is not a terminal. A screen with nothing selectable does not open the picker — it prints
-exactly what the plain command prints and exits `0`.
+The interactive picker (`-i`) that used to stage marks on this screen is gone. It is superseded by
+the app's Scan tab, which serves the same job with the same keys and more context. Until that
+lands, triage means copying a key into a second command.
 
 ### Sessions
 
@@ -146,6 +118,12 @@ the command runs on the cached sessions and says so.
 
 Sessions are harvested from Claude Code transcripts under `claudeDir` — title, project, prompt
 count, and timestamps. Nothing is sent anywhere.
+
+`waid transcript <id>` reads the turns back out of one session's transcript, oldest first. The id is
+the 36-character session id `today` and `week` print, but any unambiguous prefix of it resolves; a
+prefix matching several sessions is a user error and the candidates are listed. Turns come from the
+transcript file on disk rather than the cache, so a session whose file has since moved or been
+deleted is a user error too.
 
 ## `WAID_HOME`
 
@@ -186,9 +164,10 @@ Discovery skips `node_modules`, `bin`, `obj`, and `.git`, and never descends int
 ## Development
 
 ```
-npm test           # node --test
-npm run typecheck  # tsc --noEmit
+go test ./...
+go vet ./...
 ```
 
-Tests are the real thing wherever possible: `git.test.ts` drives temp repos, `smoke.test.ts`
-spawns the binary. Only `gh` and the clock are faked.
+Tests are the real thing wherever possible: `internal/git` drives temp git repos,
+`internal/harness` builds the binary and runs it as a child process against fixture homes and
+against a copy of the real `C:\data\waid`. Only `gh` and the clock are faked.

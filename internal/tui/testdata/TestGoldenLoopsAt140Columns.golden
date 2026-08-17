@@ -1,0 +1,24 @@
+╭──────────╮
+│ Loops  5 │ Scan │ Review │                                                                                                      ⠋ scanning
+┴──────────┴──────┴────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ‹open›  waiting  done  all                                                                                            5 items · 3 projects
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▾ C:\dev\dr\devresults\devresults                                                                                                   3 items
+   ▸ 4h2k  waiting  Deploy blocked until the migration is approved                                                           @maria       5d
+     nktt  open     Background workers speak the requester's language                                                        [promoted]   2d
+     sga9  open     Design template + args persistence for localized persisted strings                                                   19m
+ ▾ C:\dev\waid                                                                                                                        1 item
+     9xz1  open     TUI design spike                                                                                                      1h
+ ▾ (no project)                                                                                                                       1 item
+     p0rt  open     Read the port design once more                                                                                        2h
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 4h2k · devresults · waiting ← maria · created 5d ago
+
+ Deploy blocked until the migration is approved
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+ x done · w waiting · e edit · n note · a add · / filter · s status · ? keys

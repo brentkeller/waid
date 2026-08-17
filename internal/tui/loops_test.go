@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/exp/teatest"
 
 	"github.com/brentkeller/waid/internal/detect"
 	"github.com/brentkeller/waid/internal/events"
@@ -471,4 +472,16 @@ func TestLoopsDetailPaneIsCutToItsShareOfTheBody(t *testing.T) {
 	if !strings.Contains(pane, "…") {
 		t.Errorf("the pane was cut without saying so:\n%s", pane)
 	}
+}
+
+// Golden views of the Loops tab at the two widths §8 names, which is the last of the three tabs to
+// have one.
+func TestGoldenLoopsAt80Columns(t *testing.T) { goldenLoops(t, 80) }
+
+func TestGoldenLoopsAt140Columns(t *testing.T) { goldenLoops(t, 140) }
+
+func goldenLoops(t *testing.T, width int) {
+	t.Helper()
+
+	teatest.RequireEqualOutput(t, []byte(plain(looped(t, width, loopsFixture()).View())))
 }

@@ -306,3 +306,143 @@ func TestLoopsPromptsHoldTheKeyboard(t *testing.T) {
 		t.Errorf("q typed into the prompt left %q, want it treated as text", m.prompt.value)
 	}
 }
+
+// adding is a model over a temp home holding every tab's fixture, left on the tab named, so an add
+// can be made from any of the three against a log the test reads back.
+func adding(t *testing.T, on tab) (Model, string) {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	opts := Options{Cfg: config.Config{EventsPath: path}, Now: loopsNow, Ids: ids.Sequence("7k3m")}
+
+	sized, _ := New(opts).Update(tea.WindowSizeMsg{Width: 140, Height: 24})
+	m := offline(sized.(Model), scanFixture())
+	m.clock = func() time.Time { return loopsNow }
+
+	for _, msg := range []tea.Msg{loopsFixture(), scanLoadedMsg{result: scanFixture(), at: scannedAt}, reviewFixture()} {
+		next, _ := m.Update(msg)
+		m = next.(Model)
+	}
+
+	m, _ = press(t, m, string(rune('1'+on)))
+	return m, path
+}
+
+// a declares an item from any tab, filed under the project the row the cursor is on belongs to (§4).
+// Review's cursor is on a fold, since its projects are collapsed by default — a project on one line
+// is still a project to file against.
+func TestAddDeclaresAnItemFromAnyTab(t *testing.T) {
+	cases := []struct {
+		tab     tab
+		to      []string
+		project string
+		logged  string
+	}{
+		{tabLoops, nil, `C:\dev\dr\devresults\devresults`, `"C:\\dev\\dr\\devresults\\devresults"`},
+		{tabScan, []string{"j", "j"}, `C:\dev\waid`, `"C:\\dev\\waid"`},
+		{tabReview, nil, `C:\dev\dr\devresults\devresults`, `"C:\\dev\\dr\\devresults\\devresults"`},
+	}
+
+	for _, c := range cases {
+		t.Run(tabTitles[c.tab], func(t *testing.T) {
+			m, path := adding(t, c.tab)
+			m, _ = press(t, m, c.to...)
+
+			m, _ = press(t, m, "a")
+			if m.prompt.kind != promptAdd {
+				t.Fatalf("a opened no prompt for the title")
+			}
+			if view := plain(m.View()); !strings.Contains(view, "add "+projectLabel(&c.project)) {
+				t.Errorf("the prompt does not name the project the item lands in:\n%s", view)
+			}
+
+			m, cmd := press(t, m, "Ship the add key", "enter")
+			if cmd != nil {
+				t.Error("the answer issued a command, want the write made on the keypress")
+			}
+
+			assertLog(t, path, []string{
+				`{"ts":"` + loopsStamped() + `","ev":"add","id":"7k3m","title":"Ship the add key","status":"open",` +
+					`"project":` + c.logged + `,"session":null,"tags":[],"waitingOn":null}`,
+			})
+			if view := plain(m.View()); !strings.Contains(view, "added 7k3m  Ship the add key") {
+				t.Errorf("the footer carries no receipt for the add:\n%s", view)
+			}
+		})
+	}
+}
+
+// The declared item is on the Loops tab in the frame it was added in, wherever it was added from,
+// rather than waiting for the next read of the log to bring it in.
+func TestAddPutsTheItemInTheListItLandsIn(t *testing.T) {
+	m, _ := adding(t, tabScan)
+	before := m.counts[tabLoops]
+
+	m, _ = press(t, m, "a", "Ship the add key", "enter", "1")
+
+	view := plain(m.View())
+	if !listed(view, "7k3m") {
+		t.Errorf("the declared item is not in the list:\n%s", view)
+	}
+	if got, want := m.counts[tabLoops], before+1; got != want {
+		t.Errorf("the Loops badge is %d after the add, want %d", got, want)
+	}
+	if row := rowFor(t, view, "7k3m"); !strings.Contains(row, "open") || !strings.Contains(row, "Ship the add key") {
+		t.Errorf("the row is %q, want the declared item open", row)
+	}
+}
+
+// An add against a row belonging to no project declares an item belonging to none, which is what
+// `waid add` outside a checkout writes.
+func TestAddWithoutAProjectDeclaresOneWithoutAProject(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	m := offline(chrome(t, 140), detect.Result{})
+	m.opts.Cfg.EventsPath, m.opts.Ids = path, ids.Sequence("7k3m")
+	m.clock = func() time.Time { return loopsNow }
+
+	m, _ = press(t, m, "a", "Ship the add key", "enter")
+
+	assertLog(t, path, []string{
+		`{"ts":"` + loopsStamped() + `","ev":"add","id":"7k3m","title":"Ship the add key","status":"open",` +
+			`"project":null,"session":null,"tags":[],"waitingOn":null}`,
+	})
+}
+
+// The log holds no event that takes an item out of it, so undoing an add closes the item it declared
+// and leaves the reversal visible in the log (§3).
+func TestUndoOfAnAddClosesTheItem(t *testing.T) {
+	m, path := adding(t, tabLoops)
+
+	m, _ = press(t, m, "a", "Ship the add key", "enter", "u")
+
+	ts := loopsStamped()
+	assertLog(t, path, []string{
+		`{"ts":"` + ts + `","ev":"add","id":"7k3m","title":"Ship the add key","status":"open",` +
+			`"project":"C:\\dev\\dr\\devresults\\devresults","session":null,"tags":[],"waitingOn":null}`,
+		`{"ts":"` + ts + `","ev":"close","id":"7k3m"}`,
+	})
+
+	view := plain(m.View())
+	if listed(view, "7k3m") {
+		t.Errorf("the item the undo closed is still in the list:\n%s", view)
+	}
+	if !strings.Contains(view, "closed 7k3m  Ship the add key") {
+		t.Errorf("the footer carries no receipt for the undo:\n%s", view)
+	}
+}
+
+// esc abandons the title without writing anything, and an empty answer is an abandoned add rather
+// than an item titled with nothing.
+func TestAddAbandonsWithoutWriting(t *testing.T) {
+	for _, ending := range []string{"esc", "enter"} {
+		m, path := adding(t, tabLoops)
+
+		m, _ = press(t, m, "a", ending)
+		if m.prompt.kind != promptNone {
+			t.Errorf("a left the prompt open after %s", ending)
+		}
+		if log := written(t, path); len(log) != 0 {
+			t.Errorf("an add abandoned with %s wrote %v", ending, log)
+		}
+	}
+}

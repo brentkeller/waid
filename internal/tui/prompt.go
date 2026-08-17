@@ -15,6 +15,7 @@ const (
 	promptRename
 	promptWaiting
 	promptNote
+	promptAdd
 )
 
 // prompt is the inline input the footer takes text in. It holds the keyboard the way the filter does,
@@ -29,6 +30,10 @@ type prompt struct {
 
 	// prior is what the answer replaces, kept for the inverse the write pushes onto the undo stack.
 	prior string
+
+	// project is where an added item is filed, resolved from the row the prompt was opened on. The
+	// subject names it for the footer; this is the path the write carries, since the two differ.
+	project *string
 
 	value string
 }
@@ -68,6 +73,8 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 		return m.waitOn(answered.subject, value)
 	case promptNote:
 		return m.addNote(answered.subject, value)
+	case promptAdd:
+		return m.addItem(answered.project, value)
 	}
 	return m, nil
 }

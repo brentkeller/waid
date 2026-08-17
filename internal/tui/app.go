@@ -283,6 +283,8 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showKeys = !m.showKeys
 	case "/":
 		m.filtering = true
+	case "a":
+		return m.addPrompt()
 	case "u":
 		return m.undo()
 	case "esc":

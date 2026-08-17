@@ -3,12 +3,15 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/brentkeller/waid/internal/detect"
 	"github.com/brentkeller/waid/internal/events"
+	"github.com/brentkeller/waid/internal/sessions"
 )
 
-// The four writes Loops makes: close an item, mark it waiting on someone, correct its title, and note
-// something against it. They follow the rule Scan's triage already does (§3) — the write lands on the
-// keypress with no confirm step, and the footer's receipt is what says a press did anything.
+// The writes made against items: the four Loops binds to the row under the cursor — close an item,
+// mark it waiting on someone, correct its title, note something against it — and the add every tab
+// offers. They follow the rule Scan's triage already does (§3) — the write lands on the keypress with
+// no confirm step, and the footer's receipt is what says a press did anything.
 //
 // Each one edits the loaded copy of the item beside appending to the log, so the row moves in the
 // frame the key was pressed in rather than waiting for the next read to catch up with it.
@@ -129,6 +132,75 @@ func (m Model) addNote(id, text string) (Model, tea.Cmd) {
 	return m.record(receipt{verb: "noted", subject: id, detail: text}), nil
 }
 
+// addPrompt opens the input a declared item is titled in. `a` is global rather than a Loops key (§4):
+// an item is declared as often while reading a signal or a session as while reading the list it lands
+// in, and the project it is filed under is what the row the cursor is on already says.
+func (m Model) addPrompt() (Model, tea.Cmd) {
+	path := m.cursorProject()
+	m.prompt = prompt{kind: promptAdd, label: "add", subject: projectLabel(path), project: path}
+	return m, nil
+}
+
+// addItem declares the item the prompt was answered with, writing the same event `waid add` writes
+// for it. The id is drawn against the whole log rather than the loaded list, since an id another
+// session declared is taken whether or not this one has read it.
+func (m Model) addItem(path *string, title string) (Model, tea.Cmd) {
+	id, err := events.Load(m.opts.Cfg.EventsPath).NewId(m.opts.Ids)
+	if err != nil {
+		m.hint = writeFailed("add", err)
+		return m, nil
+	}
+
+	// The log holds an empty array rather than null when no tags were given, which is what the command
+	// writes for an item declared with none.
+	event := events.AddEvent{
+		Ev: "add", Id: id, Title: title, Status: events.StatusOpen,
+		Project: path, Session: nil, Tags: []string{}, WaitingOn: nil,
+	}
+	ts, err := events.Append(m.opts.Cfg.EventsPath, event, m.now())
+	if err != nil {
+		m.hint = writeFailed("add", err)
+		return m, nil
+	}
+
+	item := events.Item{
+		Id: id, Title: title, Status: events.StatusOpen, Project: path,
+		Tags: []string{}, Notes: []events.Note{}, Created: ts, Updated: ts,
+	}
+
+	m = m.insertItem(item).pushUndo(undoAdd(item))
+	return m.record(receipt{verb: "added", subject: id, detail: title}), nil
+}
+
+// cursorProject is the project a declared item is filed under: the one the row under the cursor
+// belongs to, whichever tab that row is on. A row belonging to none — a signal against a repository
+// with no checkout, a session whose transcript recorded no cwd — files the item under none as well.
+func (m Model) cursorProject() *string {
+	width := m.viewWidth()
+	switch m.tab {
+	case tabLoops:
+		return rowProject(m.loopsTree(width), func(item events.Item) *string { return item.Project })
+	case tabScan:
+		return rowProject(m.scanTree(width), func(signal detect.Signal) *string { return signal.Project })
+	case tabReview:
+		return rowProject(m.reviewTree(width), func(s sessions.Session) *string { return s.Project })
+	}
+	return nil
+}
+
+// rowProject reads the project off the row under the cursor, falling back to the group the cursor is
+// in when the row is a fold: a project collapsed to one line is still a project to file against, and
+// every row folded under it belongs to it.
+func rowProject[T any](tree Tree[T], of func(T) *string) *string {
+	if item, ok := tree.SelectedItem(); ok {
+		return of(item)
+	}
+	if group, ok := tree.SelectedGroup(); ok && len(group.Items) > 0 {
+		return of(group.Items[0])
+	}
+	return nil
+}
+
 // loopTarget is the item an action addresses. A row that is not one — a collapsed project fold — is
 // inert, and the footer says which row it was pressed on rather than staying silent (§4).
 func (m Model) loopTarget(tree Tree[events.Item], action string) (Model, events.Item, bool) {
@@ -151,10 +223,9 @@ func (m Model) loadedItem(id string) (events.Item, bool) {
 	return events.Item{}, false
 }
 
-// applyItem replaces the loaded copy of an item with what a write just made of it, moving the badge
-// and pulling the cursor back into range in case the row left the list. The slice is rebuilt rather
-// than written through: Model is copied by value through the update loop, and two copies sharing a
-// backing array would see each other's edits.
+// applyItem replaces the loaded copy of an item with what a write just made of it. The slice is
+// rebuilt rather than written through: Model is copied by value through the update loop, and two
+// copies sharing a backing array would see each other's edits.
 func (m Model) applyItem(item events.Item) Model {
 	items := make([]events.Item, len(m.loops.items))
 	copy(items, m.loops.items)
@@ -168,7 +239,19 @@ func (m Model) applyItem(item events.Item) Model {
 	if !found {
 		return m
 	}
+	return m.setItems(items, item.Id)
+}
 
+// insertItem puts a freshly declared item into the loaded list, so it is on the tab in the frame the
+// add was made in rather than waiting for the next read to bring it in. The append is capped to the
+// list's own length so it allocates a fresh array, for the reason applyItem rebuilds one.
+func (m Model) insertItem(item events.Item) Model {
+	return m.setItems(append(m.loops.items[:len(m.loops.items):len(m.loops.items)], item), item.Id)
+}
+
+// setItems takes the list a write left behind, moving the badge with it and leaving the cursor on the
+// item the write addressed.
+func (m Model) setItems(items []events.Item, focus string) Model {
 	m.loops.items = items
 	m.counts[tabLoops] = len(m.owed())
 
@@ -176,7 +259,7 @@ func (m Model) applyItem(item events.Item) Model {
 	// write acted on rather than the place it was standing in. A row that left the list has nothing to
 	// follow, and the clamp puts the cursor back in range.
 	tree := m.loopsTree(m.viewWidth())
-	if !tree.Focus(func(candidate events.Item) bool { return candidate.Id == item.Id }) {
+	if !tree.Focus(func(candidate events.Item) bool { return candidate.Id == focus }) {
 		tree.clamp()
 	}
 

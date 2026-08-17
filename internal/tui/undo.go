@@ -28,8 +28,10 @@ type undoEntry struct {
 	// key is the signal a retired row is restored by, empty for a write no signal was retired by.
 	key string
 
-	// item is the loaded copy of the item as it stood before the write, put back beside the log so the
-	// row moves in the frame the undo was pressed in. A write on an item no tab has loaded leaves it nil.
+	// item is the loaded copy the list is left showing once the inverse has been written, put back
+	// beside the log so the row moves in the frame the undo was pressed in — the state before the write
+	// for one that changed an item, and the closed item for an add, which nothing removes. A write on
+	// an item no tab has loaded leaves it nil.
 	item *events.Item
 }
 
@@ -58,6 +60,21 @@ func undoPromote(promotion triage.Promotion) undoEntry {
 		},
 		receipt: receipt{verb: "unpromoted", subject: promotion.Id, detail: promotion.Title},
 		key:     promotion.Key,
+	}
+}
+
+// undoAdd closes the item an add declared. The log holds no event that takes an item out of it — an
+// add is the only way one enters — so the reversal is the close every other way out of the list is,
+// and the receipt names the event rather than the write it reverses, as the other single-event
+// inverses do.
+func undoAdd(item events.Item) undoEntry {
+	closed := item
+	closed.Status = events.StatusDone
+
+	return undoEntry{
+		events:  []events.WaidEvent{events.CloseEvent{Ev: "close", Id: item.Id}},
+		receipt: receipt{verb: "closed", subject: item.Id, detail: item.Title},
+		item:    &closed,
 	}
 }
 

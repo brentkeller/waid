@@ -52,7 +52,12 @@ type Item struct {
 // WaidEvent is a line of events.jsonl as waid writes it. Lines read back from disk are untrusted
 // and are narrowed by the fold instead — these shapes describe output, never assumptions about
 // input. Their fields are declared in the order Node emits them, which is the order the log holds.
-type WaidEvent interface{ event() }
+type WaidEvent interface {
+	event()
+	// stamp returns a copy carrying ts, leaving a timestamp the caller already set alone.
+	stamp(ts string) WaidEvent
+	timestamp() string
+}
 
 // AddEvent introduces an item.
 type AddEvent struct {
@@ -67,7 +72,8 @@ type AddEvent struct {
 	WaitingOn *string  `json:"waitingOn"`
 }
 
-// UpdateEvent patches the fields it carries, leaving the rest of the item alone.
+// UpdateEvent patches the fields it carries, leaving the rest of the item alone. Nothing in this
+// build emits one; it describes the lines already in the log.
 type UpdateEvent struct {
 	Ts        string   `json:"ts"`
 	Ev        string   `json:"ev"`
@@ -122,6 +128,29 @@ func (CloseEvent) event()     {}
 func (ReopenEvent) event()    {}
 func (DismissEvent) event()   {}
 func (UndismissEvent) event() {}
+
+func (e AddEvent) timestamp() string       { return e.Ts }
+func (e UpdateEvent) timestamp() string    { return e.Ts }
+func (e NoteEvent) timestamp() string      { return e.Ts }
+func (e CloseEvent) timestamp() string     { return e.Ts }
+func (e ReopenEvent) timestamp() string    { return e.Ts }
+func (e DismissEvent) timestamp() string   { return e.Ts }
+func (e UndismissEvent) timestamp() string { return e.Ts }
+
+func (e AddEvent) stamp(ts string) WaidEvent       { e.Ts = firstTs(e.Ts, ts); return e }
+func (e UpdateEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }
+func (e NoteEvent) stamp(ts string) WaidEvent      { e.Ts = firstTs(e.Ts, ts); return e }
+func (e CloseEvent) stamp(ts string) WaidEvent     { e.Ts = firstTs(e.Ts, ts); return e }
+func (e ReopenEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }
+func (e DismissEvent) stamp(ts string) WaidEvent   { e.Ts = firstTs(e.Ts, ts); return e }
+func (e UndismissEvent) stamp(ts string) WaidEvent { e.Ts = firstTs(e.Ts, ts); return e }
+
+func firstTs(existing, stamped string) string {
+	if existing != "" {
+		return existing
+	}
+	return stamped
+}
 
 // ProblemReason is why a log line could not be applied. Reported by `waid doctor`, never fatal.
 type ProblemReason string

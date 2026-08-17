@@ -7,7 +7,6 @@ import (
 	"github.com/brentkeller/waid/internal/cli"
 	"github.com/brentkeller/waid/internal/errs"
 	"github.com/brentkeller/waid/internal/events"
-	"github.com/brentkeller/waid/internal/ids"
 	"github.com/brentkeller/waid/internal/project"
 )
 
@@ -86,16 +85,7 @@ func renderAdd(data AddResult, ctx *cli.Ctx) string {
 
 // newId draws an id no item in the log already holds.
 func newId(ctx *cli.Ctx, state events.State) (string, error) {
-	taken := make(map[string]bool, len(state.Items))
-	for _, item := range state.Items {
-		taken[item.Id] = true
-	}
-
-	generate := ctx.Ids
-	if generate == nil {
-		generate = ids.New
-	}
-	return generate(func(candidate string) bool { return taken[candidate] })
+	return state.NewId(ctx.Ids)
 }
 
 // optional reads a flag that is stored as null when it was not passed at all.

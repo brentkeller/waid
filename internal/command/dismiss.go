@@ -7,6 +7,7 @@ import (
 	"github.com/brentkeller/waid/internal/cli"
 	"github.com/brentkeller/waid/internal/errs"
 	"github.com/brentkeller/waid/internal/events"
+	"github.com/brentkeller/waid/internal/triage"
 )
 
 // DismissResult is the key as hidden, echoed back so --json callers need no follow-up read. Fields
@@ -32,7 +33,7 @@ func runDismiss(ctx *cli.Ctx) (DismissResult, error) {
 		return DismissResult{Key: key, Dismissed: true, Already: true}, nil
 	}
 
-	if _, err := events.Append(ctx.Cfg.EventsPath, events.DismissEvent{Ev: "dismiss", Key: key}, ctx.Now); err != nil {
+	if err := triage.Dismiss(ctx.Cfg.EventsPath, key, ctx.Now); err != nil {
 		return DismissResult{}, err
 	}
 	return DismissResult{Key: key, Dismissed: true, Already: false}, nil

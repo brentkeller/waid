@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+
+	"github.com/brentkeller/waid/internal/ids"
 )
 
 // ReadLines reads the log as lines, returning nothing when the log does not exist yet. Both line
@@ -51,6 +53,20 @@ func ReadRecords(path string) []Record {
 // Load folds the whole log at path into the current state.
 func Load(path string) State {
 	return Fold(ReadLines(path))
+}
+
+// NewId draws an id no item in the folded log already holds. A nil generator draws from the system's
+// randomness, which is what a real invocation does; tests and the differential harness pass their own.
+func (s State) NewId(generate ids.Generator) (string, error) {
+	taken := make(map[string]bool, len(s.Items))
+	for _, item := range s.Items {
+		taken[item.Id] = true
+	}
+
+	if generate == nil {
+		generate = ids.New
+	}
+	return generate(func(candidate string) bool { return taken[candidate] })
 }
 
 // Find returns the item carrying id, and whether the log holds one.

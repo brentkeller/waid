@@ -1,0 +1,8 @@
+{
+  "scanRoots": [],
+  "claudeDir": "{{home}}\\claude",
+  "activeWindowDays": 30,
+  "ghUser": null,
+  "ghCacheTtlMinutes": 15,
+  "scanMaxDepth": 4
+}

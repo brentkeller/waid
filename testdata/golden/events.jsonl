@@ -1,0 +1,23 @@
+{"ts":"2026-08-14T09:00:00.000Z","ev":"add","id":"a1b2","title":"Fix the & in the <script> exporter","status":"open","project":"C:\\dev\\waid","session":"11111111-2222-3333-4444-555555555555","tags":["bug","exporter"],"waitingOn":null}
+{"ts":"2026-08-14T09:05:00.000Z","ev":"add","id":"c3d4","title":"Ship the picker","status":"waiting","project":"C:\\Program Files\\demo project","session":null,"tags":[],"waitingOn":"brent"}
+
+{"ts":"2026-08-14T09:10:00.000Z","ev":"note","id":"a1b2","text":"escaping < > & stays raw"}
+{"ts":"2026-08-14T09:02:00.000Z","ev":"note","id":"a1b2","text":"an earlier ts than the line above; file order wins"}
+{"ts":"2026-08-15T10:00:00.000Z","ev":"update","id":"c3d4","title":"Ship the picker (renamed)","status":"open","project":"C:\\dev\\waid","tags":["review"],"waitingOn":null}
+{"ts":"2026-08-15T11:00:00.000Z","ev":"add","id":"e5f6","title":"Port the CLI to Go","status":"open","project":"C:\\dev\\waid","session":null,"tags":[],"waitingOn":null}
+{"ts":"2026-08-15T12:00:00.000Z","ev":"close","id":"e5f6"}
+{"ts":"2026-08-16T08:00:00.000Z","ev":"reopen","id":"e5f6"}
+{"ts":"2026-08-16T08:30:00.000Z","ev":"add","id":"g7h8","title":"Write the differential harness","status":"open","project":null,"session":null,"tags":["promoted"],"waitingOn":null}
+{"ts":"2026-08-16T09:00:00.000Z","ev":"close","id":"g7h8"}
+{"ts":"2026-08-16T10:00:00.000Z","ev":"dismiss","key":"review:DevResults/DevResults#6886"}
+{"ts":"2026-08-16T10:01:00.000Z","ev":"dismiss","key":"branch:C:\\dev\\waid@tui"}
+{"ts":"2026-08-16T10:02:00.000Z","ev":"undismiss","key":"branch:C:\\dev\\waid@tui"}
+{"ts":"2026-08-16T11:00:00.000Z","ev":"add","id":"a1b2","title":"duplicate-id","status":"open","project":null,"session":null,"tags":[],"waitingOn":null}
+{"ts":"2026-08-16T11:01:00.000Z","ev":"add","title":"add-missing-fields","status":"open","project":null,"session":null,"tags":[],"waitingOn":null}
+{"ts":"2026-08-16T11:02:00.000Z","ev":"note","id":"zzzz","text":"unknown-id"}
+{"ts":"2026-08-16T11:03:00.000Z","ev":"note","id":"a1b2"}
+{"ts":"2026-08-16T11:04:00.000Z","ev":"update","id":"a1b2","status":"bad-status"}
+{"ts":"2026-08-16T11:05:00.000Z","ev":"dismiss"}
+{"ts":"2026-08-16T11:06:00.000Z","ev":"frobnicate","id":"a1b2"}
+{"ts":"2026-08-16T11:07:00.000Z","ev":"add","id":
+["not","an","object"]

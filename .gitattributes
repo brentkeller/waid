@@ -1,2 +1,3 @@
 # Fixtures encode exact line endings; git must not rewrite them.
 test/fixtures/** -text
+testdata/** -text

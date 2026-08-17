@@ -1,6 +1,7 @@
 package events
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 )
@@ -18,6 +19,33 @@ func ReadLines(path string) []string {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
+}
+
+// Record is one log line parsed as JSON, tagged with the 1-based line it was read from.
+type Record struct {
+	Line int
+	// Value is the untrusted object the line held; callers narrow the fields they need.
+	Value map[string]any
+}
+
+// ReadRecords reads the log as parsed objects tagged with their 1-based line number. Blank lines,
+// lines that do not parse, and lines holding something other than an object are skipped here and
+// reported by Fold instead, so line numbers stay comparable between the two.
+func ReadRecords(path string) []Record {
+	records := []Record{}
+	for index, line := range ReadLines(path) {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var parsed any
+		if err := json.Unmarshal([]byte(line), &parsed); err != nil {
+			continue
+		}
+		if object, ok := parsed.(map[string]any); ok {
+			records = append(records, Record{Line: index + 1, Value: object})
+		}
+	}
+	return records
 }
 
 // Load folds the whole log at path into the current state.

@@ -17,6 +17,8 @@ var Registry = cli.Registry{
 	"done":   cli.Module[DoneResult]{Run: runDone, Render: renderDone},
 	"reopen": cli.Module[ReopenResult]{Run: runReopen, Render: renderReopen},
 	"note":   cli.Module[NoteResult]{Run: runNote, Render: renderNote},
+	"list":   cli.Module[ListResult]{Run: runList, Render: renderList},
+	"show":   cli.Module[ShowResult]{Run: runShow, Render: renderShow},
 }
 
 // requiredId reads the item id a mutation operates on from the first positional.

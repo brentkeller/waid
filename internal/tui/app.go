@@ -445,7 +445,7 @@ func (m Model) body(width, height int) string {
 	}
 	switch m.tab {
 	case tabLoops:
-		return m.loopsBody(width)
+		return m.loopsBody(width, height)
 	case tabScan:
 		return m.scanBody(width)
 	case tabReview:

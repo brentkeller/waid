@@ -32,6 +32,7 @@ func loopsFixture() loopsLoadedMsg {
 			{
 				Id: "sga9", Title: "Design template + args persistence for localized persisted strings",
 				Status: events.StatusOpen, Project: &devresults,
+				Notes:   []events.Note{{Ts: *stamp(17, 15, 41), Text: "needs to survive a round trip through the queue"}},
 				Created: *stamp(17, 15, 41), Updated: *stamp(17, 15, 41),
 			},
 			{
@@ -329,5 +330,145 @@ func TestLoopsFilterNarrowsTheList(t *testing.T) {
 	}
 	if want := "1 item · 1 project"; !strings.Contains(view, want) {
 		t.Errorf("the filtered header does not say %q:\n%s", want, view)
+	}
+}
+
+// The note the fixture's sga9 carries. It is written nowhere else in the view, so its presence is
+// what says the detail pane is open.
+const loopsNote = "needs to survive a round trip through the queue"
+
+// detailPane is the block the pane drew: the lines under the last rule the body holds, which is the
+// rule the pane hangs from (§1.1).
+func detailPane(t *testing.T, view string) string {
+	t.Helper()
+
+	lines := strings.Split(plain(view), "\n")
+	// The last three lines are the app's own divider and its two-line footer, which sit under the body.
+	body := lines[:max(len(lines)-3, 0)]
+	for i := len(body) - 1; i >= 0; i-- {
+		if trimmed := strings.TrimSpace(body[i]); trimmed != "" && strings.Trim(trimmed, "─") == "" {
+			return strings.Join(body[i+1:], "\n")
+		}
+	}
+
+	t.Fatalf("no rule to hang a detail pane from in:\n%s", view)
+	return ""
+}
+
+// The pane is `show`'s data for the row under the cursor: what identifies the item, its title, and
+// the notes it has collected with the age of each (§1.1).
+func TestLoopsDetailPaneRendersTheSelectedItem(t *testing.T) {
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j", "j")
+
+	pane := detailPane(t, m.View())
+	for _, want := range []string{
+		"sga9", "devresults", "open", "created 19m ago",
+		"Design template + args persistence for localized persisted strings",
+		"notes", "19m", loopsNote,
+	} {
+		if !strings.Contains(pane, want) {
+			t.Errorf("the detail pane does not carry %q:\n%s", want, pane)
+		}
+	}
+}
+
+// A waiting item names whoever it waits on, joined the way `waid show` joins it.
+func TestLoopsDetailPaneNamesWhoAnItemWaitsOn(t *testing.T) {
+	pane := detailPane(t, looped(t, 140, loopsFixture()).View())
+
+	for _, want := range []string{"4h2k", "waiting ← maria", "created 5d ago"} {
+		if !strings.Contains(pane, want) {
+			t.Errorf("the detail pane does not carry %q:\n%s", want, pane)
+		}
+	}
+}
+
+// The pane follows the cursor rather than being opened on one row, so moving the list moves it.
+func TestLoopsDetailPaneFollowsTheCursor(t *testing.T) {
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j")
+
+	pane := detailPane(t, m.View())
+	if !strings.Contains(pane, "nktt") {
+		t.Errorf("the pane did not follow the cursor onto nktt:\n%s", pane)
+	}
+	if strings.Contains(pane, "4h2k") {
+		t.Errorf("the pane is still showing the row the cursor left:\n%s", pane)
+	}
+}
+
+// An item with no notes prints no notes block, the way `waid show` leaves one out.
+func TestLoopsDetailPaneLeavesOutAnEmptyNotesBlock(t *testing.T) {
+	if pane := detailPane(t, looped(t, 140, loopsFixture()).View()); strings.Contains(pane, "notes") {
+		t.Errorf("the pane drew a notes block for an item with none:\n%s", pane)
+	}
+}
+
+// A collapsed project fold is not an item, so the pane says what to do rather than showing the last
+// item it was pointed at (§4).
+func TestLoopsDetailPaneSaysWhenNoItemIsSelected(t *testing.T) {
+	folded, _ := press(t, looped(t, 140, loopsFixture()), "enter")
+
+	pane := detailPane(t, folded.View())
+	if !strings.Contains(pane, "select an item") {
+		t.Errorf("the pane on a project heading does not say what to do:\n%s", pane)
+	}
+	if strings.Contains(pane, "4h2k") {
+		t.Errorf("the pane on a project heading is still showing an item:\n%s", pane)
+	}
+}
+
+// The pane is open by default — §1.1 draws it — and p folds it away when density matters more.
+func TestLoopsDetailPaneCollapsesWithP(t *testing.T) {
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j", "j")
+	if !strings.Contains(plain(m.View()), loopsNote) {
+		t.Fatalf("the detail pane is not open before p was pressed:\n%s", plain(m.View()))
+	}
+
+	collapsed, cmd := press(t, m, "p")
+	if cmd != nil {
+		t.Errorf("p issued %T, want no work", cmd())
+	}
+	if view := plain(collapsed.View()); strings.Contains(view, loopsNote) {
+		t.Errorf("p did not collapse the detail pane:\n%s", view)
+	}
+
+	reopened, _ := press(t, collapsed, "p")
+	if view := plain(reopened.View()); !strings.Contains(view, loopsNote) {
+		t.Errorf("p did not reopen the detail pane:\n%s", view)
+	}
+}
+
+// The pane hangs off the bottom of the body rather than following the last row of the list, so the
+// list does not shift under the cursor as the item it is pointed at grows notes.
+func TestLoopsDetailPaneSitsOnTheBottomOfTheBody(t *testing.T) {
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j", "j")
+
+	lines := strings.Split(plain(m.View()), "\n")
+	if got := lines[len(lines)-4]; !strings.Contains(got, loopsNote) {
+		t.Errorf("the last body line is %q, want the pane's last line:\n%s", got, plain(m.View()))
+	}
+}
+
+// The pane takes at most half the body, so a run of notes narrows the pane rather than squeezing the
+// list out of the tab. The cut is marked, so a trimmed pane does not read as a short one.
+func TestLoopsDetailPaneIsCutToItsShareOfTheBody(t *testing.T) {
+	msg := loopsFixture()
+	for i := range msg.items {
+		if msg.items[i].Id != "sga9" {
+			continue
+		}
+		for range 20 {
+			msg.items[i].Notes = append(msg.items[i].Notes, events.Note{Ts: *stamp(17, 15, 41), Text: loopsNote})
+		}
+	}
+
+	m, _ := press(t, looped(t, 140, msg), "j", "j")
+	pane := detailPane(t, m.View())
+
+	if got, want := len(strings.Split(pane, "\n")), 9; got > want {
+		t.Errorf("the pane drew %d lines, want at most %d:\n%s", got, want, pane)
+	}
+	if !strings.Contains(pane, "…") {
+		t.Errorf("the pane was cut without saying so:\n%s", pane)
 	}
 }

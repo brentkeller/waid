@@ -39,6 +39,14 @@ const (
 	loopsTitleMin  = 24
 )
 
+// The detail pane: the gutter its lines hang from, the column a note's text hangs from, and the
+// fewest rows it will draw itself in before the list's share of the body decides.
+const (
+	loopsDetailIndent = 1
+	loopsNoteIndent   = 2
+	loopsDetailMin    = 4
+)
+
 // loopsLoadedMsg carries a finished read of the event log back into the update loop. Every read is a
 // tea.Cmd, so Update never waits on the filesystem (§6).
 type loopsLoadedMsg struct {
@@ -55,6 +63,10 @@ type loopsModel struct {
 
 	// status is the segment of the status row that is selected; the zero value is what is owed.
 	status loopsStatus
+
+	// collapsed is whether the detail pane has been folded away. The pane is open otherwise: §1.1 draws
+	// it under the list, and `p` collapses it when density matters more.
+	collapsed bool
 
 	cursor   int
 	expanded map[string]bool
@@ -106,6 +118,9 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		tree.Last()
 	case "enter":
 		tree.Toggle()
+	case "p":
+		m.loops.collapsed = !m.loops.collapsed
+		return m, nil, true
 	case "s":
 		m.loops.status = nextLoopsStatus(m.loops.status)
 		m.loops.cursor = 0
@@ -300,15 +315,126 @@ func loopsRow(item events.Item, columns loopsColumns, now time.Time, width int) 
 	return strings.TrimRight(strings.Join(cells, gap), " ")
 }
 
-// loopsBody is the tab between the bar and the footer: the counts, the rule under them, and the tree.
-func (m Model) loopsBody(width int) string {
-	body := []string{m.loopsHeader(width), m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
+// loopsBody is the tab between the bar and the footer: the counts, the rule under them, the tree, and
+// the detail pane under it while it is open (§1.1). The height is the rows the body was given, and is
+// zero until the terminal has said how tall it is.
+func (m Model) loopsBody(width, height int) string {
+	head := []string{m.loopsHeader(width), m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
+	list := m.loopsList(width)
+	if m.loops.collapsed {
+		return strings.Join(slices.Concat(head, list), "\n")
+	}
 
+	rows := height - len(head)
+	pane := m.detailPane(width, rows)
+	// The pane hangs off the bottom of the body rather than following the last row of the list, so the
+	// list does not shift under the cursor as the item it is pointed at grows notes.
+	if grow := rows - len(list) - len(pane); grow > 0 {
+		list = append(list, make([]string, grow)...)
+	}
+	return strings.Join(slices.Concat(head, list, pane), "\n")
+}
+
+// loopsList is the tree's lines, or what the tab says when nothing is owed.
+func (m Model) loopsList(width int) []string {
 	tree := m.loopsTree(width)
 	if tree.Len() == 0 {
-		return strings.Join(append(body, m.theme.Dim.Render("  "+tabEmpty[tabLoops])), "\n")
+		return []string{m.theme.Dim.Render("  " + tabEmpty[tabLoops])}
 	}
-	return strings.Join(append(body, tree.View(width, m.theme)), "\n")
+	return strings.Split(tree.View(width, m.theme), "\n")
+}
+
+// detailPane is the strip under the list: a rule, then `show`'s data for the row the cursor is on. It
+// takes at most half the rows the body has, so a long title or a run of notes narrows the pane rather
+// than squeezing the list out of the tab.
+func (m Model) detailPane(width, rows int) []string {
+	limit := 0
+	if rows > 0 {
+		limit = max(rows/2, loopsDetailMin)
+	}
+
+	pane := []string{m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
+	gutter := strings.Repeat(" ", loopsDetailIndent)
+	for _, line := range cut(m.detailLines(width-loopsDetailIndent), limit, m.theme) {
+		pane = append(pane, strings.TrimRight(gutter+line, " "))
+	}
+	return pane
+}
+
+// detailLines is what the pane holds: the line that identifies the item, its title in full, and the
+// notes it has collected. A row that is not an item — a collapsed project fold — says so rather than
+// leaving the last item the cursor rested on standing (§4).
+func (m Model) detailLines(width int) []string {
+	if width <= 0 {
+		return nil
+	}
+
+	item, selected := m.loopsTree(m.viewWidth()).SelectedItem()
+	if !selected {
+		return []string{m.theme.Dim.Render(truncate("select an item to see its detail", width))}
+	}
+
+	lines := []string{m.theme.Meta.Render(truncate(itemIdentity(item, m.now()), width)), ""}
+	for _, line := range wrap(item.Title, width) {
+		lines = append(lines, m.theme.Row.Render(line))
+	}
+	return append(lines, m.noteLines(item, width)...)
+}
+
+// itemIdentity is the pane's first line: the id, the project, the status with whoever the item waits
+// on, and how long it has been open. The status is joined the way `waid show` joins it rather than
+// laid out the way the list's meta column is, since this line is prose.
+func itemIdentity(item events.Item, now time.Time) string {
+	status := string(item.Status)
+	if item.WaitingOn != nil {
+		status += " ← " + *item.WaitingOn
+	}
+
+	parts := []string{item.Id, projectLabel(item.Project), status, "created " + agoPhrase(item.Created, now)}
+	return strings.Join(parts, " · ")
+}
+
+// projectLabel names a project the way a line of prose has room for: the directory the checkout sits
+// in, since the heading the pane hangs under already carries the whole path. The separator is either
+// platform's, because the log holds the path the machine that wrote it used.
+func projectLabel(path *string) string {
+	if path == nil {
+		return noProject
+	}
+	if at := strings.LastIndexAny(*path, `/\`); at >= 0 && at < len(*path)-1 {
+		return (*path)[at+1:]
+	}
+	return *path
+}
+
+// noteLines is the notes block: every note the item carries, each hung off its own age, with the
+// block left out entirely when there are none — the way `waid show` leaves it out.
+func (m Model) noteLines(item events.Item, width int) []string {
+	if len(item.Notes) == 0 {
+		return nil
+	}
+
+	now := m.now()
+	age := 0
+	for _, note := range item.Notes {
+		age = max(age, lipgloss.Width(render.RelTime(note.Ts, now)))
+	}
+
+	lines := []string{"", m.theme.Heading.Render("notes")}
+	for _, note := range item.Notes {
+		label := strings.Repeat(" ", loopsNoteIndent) + padLeft(render.RelTime(note.Ts, now), age) +
+			strings.Repeat(" ", loopsColumnGap)
+		hang := strings.Repeat(" ", lipgloss.Width(label))
+
+		for i, line := range wrap(note.Text, width-lipgloss.Width(label)) {
+			prefix := label
+			if i > 0 {
+				prefix = hang
+			}
+			lines = append(lines, m.theme.Row.Render(prefix+line))
+		}
+	}
+	return lines
 }
 
 // loopsHeader is the segmented status row with the counts opposite it (§1.1).

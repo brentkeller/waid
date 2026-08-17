@@ -506,11 +506,17 @@ func (m Model) scanAge() string {
 		return ""
 	}
 
-	age := render.RelTime(events.FormatTs(m.scan.loadedAt), m.now())
+	return "⏱ " + agoPhrase(events.FormatTs(m.scan.loadedAt), m.now())
+}
+
+// agoPhrase reads a column's compact age as prose, leaving the one bucket that is already a phrase
+// alone.
+func agoPhrase(iso string, now time.Time) string {
+	age := render.RelTime(iso, now)
 	if age == "just now" {
-		return "⏱ just now"
+		return age
 	}
-	return "⏱ " + age + " ago"
+	return age + " ago"
 }
 
 // plural counts a noun for a column: `1 signal`, `2 signals`.

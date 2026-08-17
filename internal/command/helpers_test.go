@@ -49,9 +49,17 @@ func makeHome(t *testing.T) string {
 func waid(t *testing.T, home string, args ...string) result {
 	t.Helper()
 
+	return waidWith(t, home, cli.Seams{}, args...)
+}
+
+// waidWith is waid with the detection seams supplied, which is how a test drives detection without
+// touching real repos or the network.
+func waidWith(t *testing.T, home string, seams cli.Seams, args ...string) result {
+	t.Helper()
+
 	var out, errOut bytes.Buffer
 	argv := append([]string{"--waid-home", home}, args...)
-	code := cli.Run(argv, cli.Io{Out: &out, Err: &errOut}, command.Registry)
+	code := cli.RunWith(argv, cli.Io{Out: &out, Err: &errOut}, command.Registry, seams)
 	return result{code: code, out: out.String(), err: errOut.String()}
 }
 

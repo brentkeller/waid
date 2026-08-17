@@ -1,10 +1,49 @@
 package harness_test
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/brentkeller/waid/internal/harness"
 )
+
+// detectionHome is the golden fixture with GitHub signals switched on, so the recorded gh response
+// reaches detection. The scan roots stay empty: a real repo's dirty count and HEAD date are not
+// something a comparison can depend on.
+func detectionHome(t testing.TB) string {
+	t.Helper()
+
+	home := harness.GoldenHome(t)
+	path := filepath.Join(home, "config.json")
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	settings := map[string]any{}
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		t.Fatalf("decoding %s: %v", path, err)
+	}
+	settings["ghUser"] = "octocat"
+
+	patched, err := json.Marshal(settings)
+	if err != nil {
+		t.Fatalf("encoding %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, patched, 0o644); err != nil {
+		t.Fatalf("writing %s: %v", path, err)
+	}
+	return home
+}
+
+// ghFixture is the recorded GitHub response both builds are served instead of querying gh.
+func ghFixture(t testing.TB) string {
+	t.Helper()
+
+	return filepath.Join(harness.RepoRoot(t), "internal", "gh", "testdata", "fixture.json")
+}
 
 // The read commands are diffed against Node by what they print, in both the machine and the human
 // shape, since the two are views of the same value and either one can drift alone.
@@ -41,6 +80,48 @@ func TestReadCommandsMatchNode(t *testing.T) {
 		"week json":                     {Args: []string{"week", "--json"}},
 		"week last":                     {Args: []string{"week", "--last"}},
 		"week last json":                {Args: []string{"week", "--last", "--json"}},
+	}
+
+	for name, invocation := range invocations {
+		t.Run(name, func(t *testing.T) {
+			harness.CompareRead(t, harness.GoldenHome, invocation)
+		})
+	}
+}
+
+// Detection is diffed separately, because both builds have to be served the same recorded GitHub
+// response and told to look at a GitHub user before either produces a signal at all.
+func TestDetectionCommandsMatchNode(t *testing.T) {
+	fixture := ghFixture(t)
+	invocations := map[string]harness.Invocation{
+		"scan":                        {Args: []string{"scan"}, GhFixture: fixture},
+		"scan json":                   {Args: []string{"scan", "--json"}, GhFixture: fixture},
+		"scan by project":             {Args: []string{"scan", "-p", "waid"}, GhFixture: fixture},
+		"scan by project json":        {Args: []string{"scan", "-p", "waid", "--json"}, GhFixture: fixture},
+		"scan unknown project":        {Args: []string{"scan", "-p", "nope"}, GhFixture: fixture},
+		"scan unknown project json":   {Args: []string{"scan", "-p", "nope", "--json"}, GhFixture: fixture},
+		"loops":                       {Args: []string{"loops"}, GhFixture: fixture},
+		"loops json":                  {Args: []string{"loops", "--json"}, GhFixture: fixture},
+		"loops by project":            {Args: []string{"loops", "-p", "waid"}, GhFixture: fixture},
+		"loops by project json":       {Args: []string{"loops", "-p", "waid", "--json"}, GhFixture: fixture},
+		"loops by empty project json": {Args: []string{"loops", "-p", "demo project", "--json"}, GhFixture: fixture},
+	}
+
+	for name, invocation := range invocations {
+		t.Run(name, func(t *testing.T) {
+			harness.CompareRead(t, detectionHome, invocation)
+		})
+	}
+}
+
+// The same two commands on the golden home as it stands, where no GitHub user is configured and the
+// signals degrade to a note.
+func TestDetectionCommandsMatchNodeWithoutAGhUser(t *testing.T) {
+	invocations := map[string]harness.Invocation{
+		"scan":       {Args: []string{"scan"}},
+		"scan json":  {Args: []string{"scan", "--json"}},
+		"loops":      {Args: []string{"loops"}},
+		"loops json": {Args: []string{"loops", "--json"}},
 	}
 
 	for name, invocation := range invocations {

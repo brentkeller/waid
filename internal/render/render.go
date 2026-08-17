@@ -79,6 +79,12 @@ func RelTime(iso string, now time.Time) string {
 	}
 }
 
+// Width is the column width of text, counted in UTF-16 code units the way Node counts a string's
+// length, so a column sized from one string lines up with a column padded to it.
+func Width(text string) int {
+	return len(utf16.Encode([]rune(text)))
+}
+
 // Pad fits text to exactly width columns, padding with spaces or truncating with an ellipsis. Width
 // counts UTF-16 code units, so an astral character such as an emoji costs two. Truncating between
 // the halves of a surrogate pair leaves a lone surrogate, which decodes to the replacement

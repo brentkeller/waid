@@ -12,6 +12,8 @@ import (
 
 	"github.com/brentkeller/waid/internal/config"
 	"github.com/brentkeller/waid/internal/errs"
+	"github.com/brentkeller/waid/internal/gh"
+	"github.com/brentkeller/waid/internal/git"
 )
 
 // Process exit codes. Success is 0, anything the user can fix is 1, and everything else is 2.
@@ -33,8 +35,20 @@ type Io struct {
 // DefaultIo writes to the process's own streams.
 var DefaultIo = Io{Out: os.Stdout, Err: os.Stderr}
 
+// Seams are the detection clients a caller supplies in place of the real ones. A nil field leaves
+// the run to reach for git or gh itself, which is what a real invocation does.
+type Seams struct {
+	Git git.Client
+	Gh  gh.Client
+}
+
 // Run executes argv against the registry and returns the process exit code.
-func Run(argv []string, out Io, registry Registry) (code int) {
+func Run(argv []string, out Io, registry Registry) int {
+	return RunWith(argv, out, registry, Seams{})
+}
+
+// RunWith is Run with the detection seams supplied.
+func RunWith(argv []string, out Io, registry Registry, seams Seams) (code int) {
 	defer func() {
 		if r := recover(); r != nil {
 			code = reportPanic(r, out)
@@ -43,11 +57,11 @@ func Run(argv []string, out Io, registry Registry) (code int) {
 
 	// Set as soon as the flags are known, so a failure after that point is reported in kind.
 	asJson := false
-	return report(execute(argv, out, registry, &asJson), asJson, out)
+	return report(execute(argv, out, registry, seams, &asJson), asJson, out)
 }
 
 // execute parses argv, prepares the home, and runs the command it names.
-func execute(argv []string, out Io, registry Registry, asJson *bool) error {
+func execute(argv []string, out Io, registry Registry, seams Seams, asJson *bool) error {
 	parsed, err := ParseArgv(argv)
 	if err != nil {
 		return err
@@ -86,7 +100,11 @@ func execute(argv []string, out Io, registry Registry, asJson *bool) error {
 		Cwd:   workingDir(),
 		Now:   Now(),
 		Ids:   IdGenerator(),
-		Gh:    GhClient(),
+		Git:   seams.Git,
+		Gh:    seams.Gh,
+	}
+	if ctx.Gh == nil {
+		ctx.Gh = GhClient()
 	}
 	if command.wantsSessions() {
 		attachSessions(ctx)

@@ -50,6 +50,15 @@ const (
 	turnMark      = "▸"
 	turnIndent    = 2
 	previewMargin = 1
+	// The rows above the scrolling transcript: the tab's range row and its rule, and the session
+	// heading the pane pins over the turns so a scrolled pane still says what is being read.
+	reviewHeadRows  = 2
+	previewHeadRows = 4
+
+	// pageShare is how much of the pane a page key moves. It is short of the whole pane so the rows a
+	// reader was last on stay on screen across the jump: a whole page replaces everything and has to be
+	// re-oriented to, which is the difference between skimming a transcript and reading one.
+	pageShare = 0.7
 )
 
 // noProject is the group key for a session whose transcript never recorded a cwd.
@@ -114,6 +123,11 @@ type reviewModel struct {
 	// preview is whether the transcript pane is open. It is closed until space opens it, and its
 	// geometry is the width rule rather than a setting of its own (§5).
 	preview bool
+
+	// previewTop is the first line of the transcript the pane is showing. It survives the pane being
+	// closed and reopened on the same session, so space is a glance away from a place in a long read
+	// rather than a return to the top of it.
+	previewTop int
 
 	// previewId is the session the pane is showing, with the turns read for it and the reason the read
 	// failed. reading is a read in flight, which is what separates a transcript with no turns from one
@@ -237,6 +251,8 @@ func (m Model) reviewKey(pressed string) (Model, tea.Cmd, bool) {
 		m.review.preview = !m.review.preview
 		m, cmd := m.previewSync(tree)
 		return m, cmd, true
+	case "pgup", "pgdown", "home", "end":
+		return m.previewPage(pressed)
 	case "s":
 		m.review.window = (m.review.window + 1) % reviewRange(len(m.reviewSegments()))
 		m.review.cursor = 0
@@ -375,6 +391,50 @@ func clipboardCommands() [][]string {
 	}
 }
 
+// previewPage moves the pane's window over the transcript. The extent is measured from the lines the
+// pane is drawing at the size it is drawn in, so a page is a page of what is on screen and the window
+// cannot be moved past the end of a transcript however long the terminal is left held down.
+func (m Model) previewPage(pressed string) (Model, tea.Cmd, bool) {
+	if !m.review.preview {
+		m.hint = keyLabel(pressed) + " scrolls the transcript — press space to open the preview"
+		return m, nil, true
+	}
+
+	rows := max(m.previewRows(), 1)
+	page := max(int(float64(rows)*pageShare), 1)
+	last := max(len(m.turnLines(m.previewWidth()))-rows, 0)
+
+	top := m.review.previewTop
+	switch pressed {
+	case "pgup":
+		top -= page
+	case "pgdown":
+		top += page
+	case "home":
+		top = 0
+	case "end":
+		top = last
+	}
+
+	m.review.previewTop = min(max(top, 0), last)
+	return m, nil, true
+}
+
+// previewWidth is the columns the pane is drawn in: the split's detail column when the terminal is
+// wide enough for one, and the whole body less its gutter when it is not (§5).
+func (m Model) previewWidth() int {
+	if panes := Split(m.viewWidth()); panes.SideBySide {
+		return panes.Detail
+	}
+	return m.viewWidth() - previewMargin
+}
+
+// previewRows is the rows the transcript itself is drawn in, once the tab's own header and the
+// session heading pinned above the turns have taken theirs.
+func (m Model) previewRows() int {
+	return m.bodyRows() - reviewHeadRows - previewHeadRows
+}
+
 // previewSync keeps the open pane pointed at the row under the cursor: a session it has not read yet
 // is read off the update loop, and a project heading empties it. A closed pane reads nothing at all.
 func (m Model) previewSync(tree Tree[sessions.Session]) (Model, tea.Cmd) {
@@ -392,7 +452,7 @@ func (m Model) previewSync(tree Tree[sessions.Session]) (Model, tea.Cmd) {
 	}
 
 	m.review.previewId, m.review.turns, m.review.previewErr = session.Id, nil, ""
-	m.review.reading = true
+	m.review.reading, m.review.previewTop = true, 0
 	return m, m.previewCmd(session.Id)
 }
 
@@ -732,24 +792,32 @@ func (m Model) previewLines(width, height int) []string {
 		return m.previewNote("select a session to preview", width)
 	}
 
-	lines := []string{
+	head := []string{
 		m.theme.Heading.Render(truncate(session.Title, width)),
 		m.theme.Meta.Render(truncate(previewSpan(session), width)),
 		m.theme.Meta.Render(truncate(session.Id, width)),
 		"",
 	}
 
+	var body []string
 	switch {
 	case m.review.previewErr != "":
-		lines = append(lines, m.previewNote(m.review.previewErr, width)...)
+		body = m.previewNote(m.review.previewErr, width)
 	case m.review.reading:
-		lines = append(lines, m.previewNote("reading the transcript…", width)...)
+		body = m.previewNote("reading the transcript…", width)
 	case len(m.review.turns) == 0:
-		lines = append(lines, m.previewNote("(no turns)", width)...)
+		body = m.previewNote("(no turns)", width)
 	default:
-		lines = append(lines, m.turnLines(width)...)
+		body = m.turnLines(width)
 	}
-	return cut(lines, height, m.theme)
+
+	// The heading is pinned so a pane scrolled into the middle of a long transcript still says which
+	// session it is showing. A pane too short to hold the heading at all cuts that instead.
+	rows := height - len(head)
+	if height > 0 && rows <= 0 {
+		return window(head, 0, height, m.theme)
+	}
+	return append(head, window(body, m.review.previewTop, rows, m.theme)...)
 }
 
 // previewNote is the pane with nothing to show in it: no row selected, no transcript on record, or
@@ -841,13 +909,31 @@ func wrap(text string, width int) []string {
 	return lines
 }
 
-// cut trims a block to the rows it has, marking the cut so a truncated transcript does not read as a
-// short one. A height of zero is a terminal that has not said how tall it is, and cuts nothing.
-func cut(lines []string, height int, theme Theme) []string {
+// window is the slice of a block the pane is showing, marked at whichever end it was cut so a block
+// scrolled into the middle of does not read as a short one. The marks ride on the block's own rows
+// rather than in chrome beside it, so a scrolled pane is the same shape as one that fits. A height of
+// zero is a terminal that has not said how tall it is, and cuts nothing.
+func window(lines []string, top, height int, theme Theme) []string {
 	if height <= 0 || len(lines) <= height {
 		return lines
 	}
-	return append(lines[:height-1:height-1], theme.Dim.Render("…"))
+
+	// The offset is clamped here as well as where it is moved, since a resize can shorten the block
+	// under an offset that was in range when the key was pressed.
+	top = min(max(top, 0), len(lines)-height)
+	shown := slices.Clone(lines[top : top+height])
+
+	// A mark replaces a row of the block, so it is dropped rather than crowding the last of the content
+	// out of a pane with only a row or two to give. The mark below outlives the one above, since a pane
+	// that has not been scrolled yet is the commoner one and the end of the block is the news.
+	mark := theme.Dim.Render("…")
+	if top+height < len(lines) && height >= 2 {
+		shown[len(shown)-1] = mark
+	}
+	if top > 0 && height >= 3 {
+		shown[0] = mark
+	}
+	return shown
 }
 
 // reviewHeader is the segmented range row with the window's totals opposite it (§1.3).

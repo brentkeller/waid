@@ -144,7 +144,7 @@ Three tabs, switched with `1` `2` `3` or `tab`:
 | --- | --- | --- |
 | Loops | Declared items grouped by project, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `n` note, `p` toggle the pane. |
 | Scan | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
-| Review | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
+| Review | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `pgup`/`pgdn` scroll it, `home`/`end` jump to either end, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
 
 Keys that work everywhere: `j` `k` to move, `g` / `G` for first and last, `enter` to fold, `/` to
 filter (`esc` clears), `s` to cycle the tab's segmented row — Loops' statuses, Scan's kinds,

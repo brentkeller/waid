@@ -363,7 +363,7 @@ func (m Model) detailPane(width, rows int) []string {
 
 	pane := []string{m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
 	gutter := strings.Repeat(" ", loopsDetailIndent)
-	for _, line := range cut(m.detailLines(width-loopsDetailIndent), limit, m.theme) {
+	for _, line := range window(m.detailLines(width-loopsDetailIndent), 0, limit, m.theme) {
 		pane = append(pane, strings.TrimRight(gutter+line, " "))
 	}
 	return pane

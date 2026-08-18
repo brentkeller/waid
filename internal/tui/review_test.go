@@ -736,3 +736,145 @@ func TestReviewCyclesThroughThePickedDate(t *testing.T) {
 		t.Errorf("the picked date is not marked as selected after cycling back to it:\n%s", plain(m.View()))
 	}
 }
+
+// longTranscript is a transcript taller than any pane the tests draw, with every turn naming its own
+// place in the conversation so an assertion can say which part of it the pane is showing.
+func longTranscript(turns int) []sessions.Turn {
+	transcript := make([]sessions.Turn, 0, turns)
+	for i := range turns {
+		role := "user"
+		if i%2 == 1 {
+			role = "assistant"
+		}
+		transcript = append(transcript, sessions.Turn{Role: role, Text: fmt.Sprintf("turn %02d", i)})
+	}
+	return transcript
+}
+
+// scrolling is a Review model with the preview open on a transcript longer than the pane, which is
+// the only state the paging keys have anything to do in.
+func scrolling(t *testing.T, turns int) Model {
+	t.Helper()
+
+	m := reviewed(t, 140, reviewFixture())
+	m.review.readTurns = func(string) ([]sessions.Turn, error) { return longTranscript(turns), nil }
+
+	opened, cmd := press(t, m, "j", "enter", " ")
+	return deliver(t, opened, cmd)
+}
+
+// A transcript is longer than the pane it is drawn in, so the pane pages through it rather than only
+// ever showing its head — reading a session in the app is what makes the tab worth opening.
+func TestReviewPreviewPagesThroughTheTranscript(t *testing.T) {
+	m := scrolling(t, 30)
+	if view := plain(m.View()); !strings.Contains(view, "turn 00") || strings.Contains(view, "turn 29") {
+		t.Fatalf("the pane does not open on the head of the transcript:\n%s", view)
+	}
+
+	paged, _ := press(t, m, "pgdown")
+	view := plain(paged.View())
+	if strings.Contains(view, "turn 00") {
+		t.Errorf("pgdown left the head of the transcript on screen:\n%s", view)
+	}
+
+	back, _ := press(t, paged, "pgup")
+	if view := plain(back.View()); !strings.Contains(view, "turn 00") {
+		t.Errorf("pgup did not page back to where pgdown started:\n%s", view)
+	}
+}
+
+// end and home reach the two ends of a transcript in one press, which is what a long read needs to
+// not be paged through twice.
+func TestReviewPreviewJumpsToEitherEndOfTheTranscript(t *testing.T) {
+	bottom, _ := press(t, scrolling(t, 30), "end")
+	if view := plain(bottom.View()); !strings.Contains(view, "turn 29") {
+		t.Errorf("end did not reach the last turn of the transcript:\n%s", view)
+	}
+
+	top, _ := press(t, bottom, "home")
+	if view := plain(top.View()); !strings.Contains(view, "turn 00") {
+		t.Errorf("home did not return to the first turn of the transcript:\n%s", view)
+	}
+}
+
+// Paging past either end holds there rather than scrolling the transcript off the pane, so a key held
+// down cannot leave the reader looking at nothing.
+func TestReviewPreviewHoldsAtTheEndsOfTheTranscript(t *testing.T) {
+	m := scrolling(t, 30)
+
+	past, _ := press(t, m, "end", "pgdown", "pgdown", "pgdown")
+	if view := plain(past.View()); !strings.Contains(view, "turn 29") {
+		t.Errorf("paging past the end scrolled the last turn off the pane:\n%s", view)
+	}
+
+	// Holding the key down must not run the offset off into a distance the way back has to be paged
+	// through: one press back from the end has to move the pane.
+	back, _ := press(t, past, "pgup")
+	if view := plain(back.View()); strings.Contains(view, "turn 29") {
+		t.Errorf("pgup after paging past the end did not move the pane:\n%s", view)
+	}
+
+	before, _ := press(t, m, "pgup", "pgup")
+	if view := plain(before.View()); !strings.Contains(view, "turn 00") {
+		t.Errorf("paging past the top scrolled the first turn off the pane:\n%s", view)
+	}
+}
+
+// The pane keeps its heading pinned while the transcript scrolls under it, so a reader deep in a long
+// session can still see which session it is.
+func TestReviewPreviewKeepsItsHeadingWhileScrolling(t *testing.T) {
+	scrolled, _ := press(t, scrolling(t, 30), "end")
+
+	view := plain(scrolled.View())
+	for _, want := range []string{"Wire -i into the CLI", "017516d6-7c60-4081-961e-f2120aa11111"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the scrolled pane no longer carries %q:\n%s", want, view)
+		}
+	}
+}
+
+// Moving to another session starts that session at the top: the offset belongs to the transcript being
+// read, not to the pane.
+func TestReviewPreviewStartsEachSessionAtItsTop(t *testing.T) {
+	scrolled, _ := press(t, scrolling(t, 30), "end")
+
+	moved, cmd := press(t, scrolled, "j")
+	view := plain(deliver(t, moved, cmd).View())
+	if !strings.Contains(view, "turn 00") {
+		t.Errorf("the pane opened the next session where the last one was scrolled to:\n%s", view)
+	}
+}
+
+// The paging keys belong to the pane, so pressing one with the pane closed says how to open it rather
+// than doing nothing (§4).
+func TestReviewPagingKeysAreInertWithThePreviewClosed(t *testing.T) {
+	m := reviewed(t, 140, reviewFixture())
+
+	for _, pressed := range []string{"pgup", "pgdown", "home", "end"} {
+		next, _ := press(t, m, pressed)
+		if !strings.Contains(plain(next.View()), "press space to open the preview") {
+			t.Errorf("%s with the preview closed does not say how to open it:\n%s", pressed, plain(next.View()))
+		}
+	}
+}
+
+// A page is short of the whole pane, so the rows a reader was last on stay on screen across the
+// jump. A whole page would replace everything and have to be re-oriented to, which is the difference
+// between skimming a transcript and reading one.
+func TestReviewPreviewPagesWithAnOverlap(t *testing.T) {
+	m := scrolling(t, 30)
+	if view := plain(m.View()); !strings.Contains(view, "turn 02") || !strings.Contains(view, "turn 03") {
+		t.Fatalf("the pane is not the height this test measures a page against:\n%s", view)
+	}
+
+	paged, _ := press(t, m, "pgdown")
+	view := plain(paged.View())
+	// A whole page would land past turn 03, and half a page would stop short and still carry turn 02.
+	// Between them is the overlap: the tail of the last screen stays, the head of it goes.
+	if !strings.Contains(view, "turn 03") {
+		t.Errorf("pgdown moved a whole pane, want the tail of it carried across:\n%s", view)
+	}
+	if strings.Contains(view, "turn 02") {
+		t.Errorf("pgdown moved less than a page, so the overlap has eaten it:\n%s", view)
+	}
+}

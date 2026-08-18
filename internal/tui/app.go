@@ -115,6 +115,8 @@ var tabBindings = [numTabs][]binding{
 	},
 	tabReview: {
 		{[]string{" "}, "space", "preview"},
+		{[]string{"pgup", "pgdown"}, "pgup / pgdn", "scroll the open preview"},
+		{[]string{"home", "end"}, "home / end", "top / bottom of the transcript"},
 		{[]string{"R"}, "R", "resume in claude"},
 		{[]string{"o"}, "o", "open repo"},
 		{[]string{"y"}, "y", "copy the session id"},
@@ -370,25 +372,30 @@ func keyLabel(pressed string) string {
 }
 
 func (m Model) View() string {
-	width, height := m.viewWidth(), m.height
+	width := m.viewWidth()
 
 	bar := m.tabBar(width)
 	divider := m.theme.Divider.Render(strings.Repeat("─", width))
 	footer := m.footer()
 
-	// The rows left between the bar and the footer are measured rather than assumed, since a view that
-	// fills them — the preview — has to know how many it has before it draws.
-	rows := 0
-	if height > 0 {
-		rows = height - lines(bar) - lines(divider) - lines(footer)
-	}
-
+	rows := m.bodyRows()
 	body := m.body(width, rows)
 	if rows > 0 {
 		body = padLines(body, rows)
 	}
 
 	return strings.Join([]string{bar, body, divider, footer}, "\n")
+}
+
+// bodyRows is the rows the chrome leaves between the tab bar and the footer. They are measured rather
+// than assumed, since a view that fills them — the preview — has to know how many it has before it
+// draws, and the keys that page it have to agree with what was drawn. It is zero until the terminal
+// says how tall it is.
+func (m Model) bodyRows() int {
+	if m.height <= 0 {
+		return 0
+	}
+	return m.height - lines(m.tabBar(m.viewWidth())) - 1 - lines(m.footer())
 }
 
 // tabBar is the three lines at the top: the cap over the active tab, the labels, and the rule the

@@ -80,16 +80,8 @@ func reviewFixture() reviewLoadedMsg {
 				Started: stamp(17, 8, 0), Ended: stamp(17, 8, 1), Prompts: 0,
 			},
 		},
-		closures: []closure{
-			{id: "sga9", project: &waid, at: instantAt(17, 13, 0)},
-			{id: "4h2k", project: &devresults, at: instantAt(13, 9, 0)},
-		},
 		at: reviewNow,
 	}
-}
-
-func instantAt(day, hour, minute int) time.Time {
-	return time.Date(2026, 8, day, hour, minute, 0, 0, time.Local)
 }
 
 // reviewed is a model sized, switched to Review, and holding a finished read of the history.
@@ -149,15 +141,19 @@ func TestReviewExpandsAProjectIntoItsSessions(t *testing.T) {
 	}
 }
 
-// The header totals the window: the sessions, the prompts they took, and the items closed inside it
+// The header totals the window with the two the tab lists: the sessions and the prompts they took
 // (§1.3).
 func TestReviewHeaderTotalsTheWindow(t *testing.T) {
 	view := plain(reviewed(t, 140, reviewFixture()).View())
 
-	for _, want := range []string{"4 sessions", "53 prompts", "1 item closed"} {
+	for _, want := range []string{"4 sessions", "53 prompts"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the review header does not carry %q:\n%s", want, view)
 		}
+	}
+	// The tab lists sessions and nothing else, so a total counting closes has nothing under it to look at.
+	if strings.Contains(view, "closed") {
+		t.Errorf("the review header totals something the tab does not list:\n%s", view)
 	}
 }
 
@@ -191,10 +187,8 @@ func TestReviewRangeRowCyclesTheWindow(t *testing.T) {
 	if !strings.Contains(view, "‹last week›") {
 		t.Errorf("the range row does not mark last week as selected:\n%s", view)
 	}
-	for _, want := range []string{"1 session · 7 prompts", "1 item closed"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("last week does not carry %q:\n%s", want, view)
-		}
+	if !strings.Contains(view, "1 session · 7 prompts") {
+		t.Errorf("last week does not carry its totals:\n%s", view)
 	}
 	if strings.Contains(view, `C:\dev\dr\devresults\devresults`) {
 		t.Errorf("a project with no sessions last week is still listed:\n%s", view)

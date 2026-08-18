@@ -13,7 +13,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/brentkeller/waid/internal/config"
-	"github.com/brentkeller/waid/internal/events"
 	"github.com/brentkeller/waid/internal/project"
 	"github.com/brentkeller/waid/internal/render"
 	"github.com/brentkeller/waid/internal/sessions"
@@ -64,18 +63,9 @@ const (
 // noProject is the group key for a session whose transcript never recorded a cwd.
 const noProject = "(no project)"
 
-// closure is one item closed, with when and where. The window is applied at count time rather than
-// at read time, so all three ranges are answerable from one read of the log.
-type closure struct {
-	id      string
-	project *string
-	at      time.Time
-}
-
 // reviewLoadedMsg carries a finished read of the session history back into the update loop.
 type reviewLoadedMsg struct {
 	sessions []sessions.Session
-	closures []closure
 	// paths is where each session's transcript was when the cache was written, keyed by session id.
 	// It is what the preview reads; a session missing from it has no transcript on record.
 	paths map[string]string
@@ -111,7 +101,6 @@ type copiedMsg struct {
 // the list and the cursor describing different things.
 type reviewModel struct {
 	sessions []sessions.Session
-	closures []closure
 	paths    map[string]string
 	loadedAt time.Time
 
@@ -154,17 +143,15 @@ type reviewModel struct {
 	readTurns func(path string) ([]sessions.Turn, error)
 }
 
-// reviewLoader is the real read: the transcripts on disk, synced into the session cache, and the
-// closures the log holds. The app is the one caller dispatch does not sync for, so a read that only
-// loaded the cache would show a history as old as the last command run in a shell. Neither the sync
-// nor the log reaches the network, but both are files, so they are read off the update loop like
-// every other read (§6).
+// reviewLoader is the real read: the transcripts on disk, synced into the session cache. The app is
+// the one caller dispatch does not sync for, so a read that only loaded the cache would show a
+// history as old as the last command run in a shell. The sync does not reach the network, but it is
+// files, so it is read off the update loop like every other read (§6).
 func reviewLoader(opts Options) func(full bool) tea.Msg {
 	return func(full bool) tea.Msg {
 		cached, note := syncedSessions(opts.Cfg, full)
 		return reviewLoadedMsg{
 			sessions: harvested(cached),
-			closures: closures(opts.Cfg),
 			paths:    transcriptPaths(cached),
 			at:       time.Now(),
 			note:     note,
@@ -217,30 +204,6 @@ func readTranscript(path string) ([]sessions.Turn, error) {
 	return sessions.ReadTurns(path, sessions.ReadLines)
 }
 
-// closures reads every close the log holds, resolved against the folded state so each one carries
-// the project its item belongs to. An item closed, reopened and closed again contributes one closure
-// per close; the count for a window folds the repeats out.
-func closures(cfg config.Config) []closure {
-	state := events.Load(cfg.EventsPath)
-
-	var closed []closure
-	for _, record := range events.ReadRecords(cfg.EventsPath) {
-		id, hasId := record.Value["id"].(string)
-		ts, hasTs := record.Value["ts"].(string)
-		if record.Value["ev"] != "close" || !hasId || !hasTs {
-			continue
-		}
-
-		at, parsed := render.ParseTime(ts)
-		item, found := state.Find(id)
-		if !parsed || !found {
-			continue
-		}
-		closed = append(closed, closure{id: item.Id, project: item.Project, at: at})
-	}
-	return closed
-}
-
 // refreshReview re-reads the history and sets the tab bar turning. The window and the query are
 // answered from what is already loaded, so this is only ever an explicit refresh or a return from a
 // suspension. A press while a read is already in flight is ignored rather than queued.
@@ -264,7 +227,7 @@ func reviewCmd(load func(full bool) tea.Msg, full bool) tea.Cmd {
 // back shorter than the list was showing. The pane follows it, since a reload can move the row the
 // cursor was resting on and can have grown the transcript it is showing.
 func (m Model) reviewLoaded(msg reviewLoadedMsg) (Model, tea.Cmd) {
-	m.review.sessions, m.review.closures, m.review.loadedAt = msg.sessions, msg.closures, msg.at
+	m.review.sessions, m.review.loadedAt = msg.sessions, msg.at
 	m.review.paths = msg.paths
 	m.review.syncing = false
 	m.progress = m.progressText()
@@ -636,21 +599,6 @@ func matchesSession(session sessions.Session, query string) bool {
 	return false
 }
 
-// reviewClosed counts the items closed inside the window. An item closed, reopened and closed again
-// in one window is still one closure, which is what `waid week` already counts.
-func (m Model) reviewClosed() int {
-	start, end := m.reviewWindow()
-
-	counted := map[string]bool{}
-	for _, closed := range m.review.closures {
-		if closed.at.Before(start) || !closed.at.Before(end) || counted[closed.id] {
-			continue
-		}
-		counted[closed.id] = true
-	}
-	return len(counted)
-}
-
 // reviewTree builds the tree from the current state. Groups are closed by default, which is the whole
 // reason Agents reads better than the command it replaces (§1.3).
 func (m Model) reviewTree(width int) Tree[sessions.Session] {
@@ -1000,15 +948,11 @@ func (m Model) reviewHeader(width int) string {
 	return m.headerLine(row, rowWidth, m.reviewTotals(), width)
 }
 
-// reviewTotals is what the header says on the right: the window's sessions, the prompts they took,
-// and the items closed inside it. A window that closed nothing says nothing, the way the Repos header
-// leaves out a dismissal count of zero.
+// reviewTotals is what the header says on the right: the window's sessions and the prompts they
+// took. The tab lists sessions and nothing else, so a total counting anything else has nothing under
+// it to look at.
 func (m Model) reviewTotals() string {
 	visible := m.reviewVisible()
 
-	parts := []string{plural(len(visible), "session"), plural(promptsIn(visible), "prompt")}
-	if closed := m.reviewClosed(); closed > 0 {
-		parts = append(parts, fmt.Sprintf("%s closed", plural(closed, "item")))
-	}
-	return strings.Join(parts, " · ")
+	return plural(len(visible), "session") + " · " + plural(promptsIn(visible), "prompt")
 }

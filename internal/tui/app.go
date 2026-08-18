@@ -67,7 +67,7 @@ var tabTitles = [numTabs]string{"Loops", "Repos", "Agents"}
 // tabFooters are the key hints each tab keeps in the footer — the keys worth having in front of you
 // while working the tab, as opposed to the full table `?` opens.
 var tabFooters = [numTabs]string{
-	tabLoops:  "x done · w waiting · e edit · n note · a add · / filter · s status · ? keys",
+	tabLoops:  "x done · w waiting · e edit · P project · n note · a add · / filter · s status · ? keys",
 	tabScan:   "p promote · d dismiss · o open in browser · r refresh · / filter · ? keys",
 	tabReview: "space preview · R resume · o open repo · y copy id · s range · d date · ? keys",
 }
@@ -101,6 +101,16 @@ var globalBindings = []binding{
 	{[]string{"q", "ctrl+c"}, "q / ctrl-c", "quit"},
 }
 
+// promptBindings are the keys that mean something only while a prompt is taking text. They are a
+// section of their own rather than globals: a prompt holds the keyboard, so these are the keys that
+// are bound exactly when nothing else is.
+var promptBindings = []binding{
+	{[]string{"enter"}, "enter", "commit the answer"},
+	{[]string{"esc"}, "esc", "abandon it"},
+	{[]string{"ctrl+u"}, "ctrl-u", "empty the input, leaving the prompt open"},
+	{[]string{"tab", "shift+tab"}, "tab / shift-tab", "move through a project search's matches"},
+}
+
 // tabBindings are the keys that mean something on one tab only. A key listed here and pressed
 // elsewhere is inert, and the footer names the tab that owns it.
 var tabBindings = [numTabs][]binding{
@@ -109,6 +119,7 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"w"}, "w", "waiting"},
 		{[]string{"e"}, "e", "edit title"},
 		{[]string{"n"}, "n", "note"},
+		{[]string{"P"}, "P", "file under a project"},
 		{[]string{"s"}, "s", "cycle the status filter — open, waiting, done, all"},
 		{[]string{"p"}, "p", "toggle the detail pane"},
 	},
@@ -497,6 +508,7 @@ func (m Model) keyTable() string {
 	}{
 		{"global", globalBindings},
 		{tabTitles[m.tab], tabBindings[m.tab]},
+		{"while typing", promptBindings},
 	}
 
 	label := 0
@@ -523,8 +535,37 @@ func (m Model) keyTable() string {
 // footer is two lines: the status line and the tab's key hints. It keeps its height whether or not
 // it has anything to say, so the list above it does not shift as messages come and go.
 func (m Model) footer() string {
-	return m.status() + "\n" + m.theme.Footer.Render(" "+tabFooters[m.tab])
+	// A project search puts its matches where the hints go, since the hints are for keys and the
+	// search is asking which of several projects the answer means. It is the one prompt that takes
+	// more than the status line, and the body is measured off this, so the list simply gives way.
+	if m.prompt.kind == promptProject {
+		return m.status() + "\n" + m.projectChoices()
+	}
+	return m.status() + "\n" + m.theme.Footer.Render(" "+fitHints(tabFooters[m.tab], m.viewWidth()-1))
 }
+
+// fitHints drops hints from a line too long for the terminal, so a narrow window loses the tail of
+// the list rather than spilling it past the frame. The last hint is the way to the full key table and
+// is kept whatever else goes, since it is what makes the dropped ones reachable.
+func fitHints(hints string, width int) string {
+	parts := strings.Split(hints, hintSeparator)
+	if len(parts) < 2 {
+		return hints
+	}
+
+	kept, last := parts[:len(parts)-1], parts[len(parts)-1]
+	for len(kept) > 1 {
+		line := strings.Join(append(kept, last), hintSeparator)
+		if lipgloss.Width(line) <= width {
+			return line
+		}
+		kept = kept[:len(kept)-1]
+	}
+	return strings.Join([]string{kept[0], last}, hintSeparator)
+}
+
+// hintSeparator is what the footer puts between two key hints.
+const hintSeparator = " · "
 
 // status is the footer's upper line. A query being typed holds it alone, since the cursor is in it;
 // otherwise the filter in force sits beside the freshest thing the app has to say — the reason a key

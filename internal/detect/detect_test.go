@@ -642,3 +642,20 @@ func TestSignalsKeepsAPanickingProbeFromTakingThePoolWithIt(t *testing.T) {
 	}
 	assertEqualStrings(t, keys(result.Signals), want)
 }
+
+// The pass carries the repos it discovered, so what the app knows about the checkouts on disk costs
+// no walk of its own. A repo with nothing to report is still a repo, so it is carried too.
+func TestSignalsCarriesEveryDiscoveredRepoIncludingTheQuietOnes(t *testing.T) {
+	root := t.TempDir()
+	noisy := makeRepo(t, root, "alpha")
+	quiet := makeRepo(t, root, "beta")
+
+	result := Signals(testConfig(t, root, nil), Deps{
+		State: state(),
+		Now:   now,
+		Git:   fakeGit{noisy: {branch: str("feature"), dirty: num(5)}},
+		Gh:    fakeGh{},
+	})
+
+	assertEqualStrings(t, result.Repos, []string{noisy, quiet})
+}

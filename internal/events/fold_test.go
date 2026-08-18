@@ -282,3 +282,38 @@ func TestFoldOfAnEmptyLogReturnsEmptySlices(t *testing.T) {
 		t.Fatalf("state = %+v, want empty non-nil slices", state)
 	}
 }
+
+// A project written as null moves the item out of every project, which is what makes an assignment
+// reversible for an item that had none to begin with.
+func TestUpdateWithANullProjectClearsIt(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"filed","project":"C:\\dev\\waid"}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","project":null}`,
+	})
+
+	if len(state.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(state.Items))
+	}
+	if project := state.Items[0].Project; project != nil {
+		t.Fatalf("project = %q, want it cleared", *project)
+	}
+}
+
+// A project written as a path moves the item into it, leaving everything else the item holds alone.
+func TestUpdateWithAProjectRefilesTheItem(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"filed","status":"waiting","waitingOn":"maria"}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","project":"C:\\dev\\waid"}`,
+	})
+
+	item := state.Items[0]
+	if item.Project == nil || *item.Project != `C:\dev\waid` {
+		t.Fatalf("project = %v, want C:\\dev\\waid", item.Project)
+	}
+	if item.Status != StatusWaiting || item.WaitingOn == nil || *item.WaitingOn != "maria" {
+		t.Fatalf("the refile moved the status to %q waiting on %v", item.Status, item.WaitingOn)
+	}
+	if item.Title != "filed" {
+		t.Fatalf("title = %q, want it left alone", item.Title)
+	}
+}

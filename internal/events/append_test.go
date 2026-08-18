@@ -367,3 +367,32 @@ func eventFromLine(t *testing.T, line int, raw string) WaidEvent {
 		return nil
 	}
 }
+
+// A ProjectEvent carries its project whether or not there is one, since the fold reads the field's
+// presence: an omitted project leaves the item where it was, and only an explicit null moves it out
+// of every project.
+func TestEncodeProjectEventCarriesAnExplicitNull(t *testing.T) {
+	line, err := Encode(ProjectEvent{Ts: "2026-08-17T12:00:00.000Z", Ev: "update", Id: "7k3m"})
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+
+	want := `{"ts":"2026-08-17T12:00:00.000Z","ev":"update","id":"7k3m","project":null}`
+	if got := string(line); got != want {
+		t.Errorf("Encode wrote\n%s\nwant\n%s", got, want)
+	}
+}
+
+// An UpdateEvent carrying no project omits the field, so correcting a title or marking an item
+// waiting cannot move it out of the project it is filed under.
+func TestEncodeUpdateEventOmitsAnAbsentProject(t *testing.T) {
+	title := "Push the tui branch"
+	line, err := Encode(UpdateEvent{Ts: "2026-08-17T12:00:00.000Z", Ev: "update", Id: "7k3m", Title: &title})
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+
+	if strings.Contains(string(line), "project") {
+		t.Errorf("an update with no project wrote %s, want the field omitted", line)
+	}
+}

@@ -124,6 +124,17 @@ func undoRetitle(id, title string) undoEntry {
 	}
 }
 
+// undoRefile puts back the project the item was filed under before it was moved. item is the item as
+// it stood before the write, so an item that belonged to no project is written back to none — which
+// is what the event carries a null project for.
+func undoRefile(item events.Item) undoEntry {
+	return undoEntry{
+		events:  []events.WaidEvent{events.ProjectEvent{Ev: "update", Id: item.Id, Project: item.Project}},
+		receipt: receipt{verb: verbFiled, subject: item.Id, detail: projectLabel(item.Project)},
+		item:    &item,
+	}
+}
+
 // pushUndo records the inverse of a write just made. The append is capped to the stack's own length
 // so it allocates a fresh array: Model is copied by value through the update loop, and two copies
 // sharing a backing array would overwrite each other's last entry.

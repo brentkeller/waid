@@ -22,6 +22,10 @@ const (
 	verbRetitled = "retitled"
 )
 
+// verbFiled is what a move between projects reads as, in both directions: filing an item under a
+// project and filing it back under none are the same write with a different answer.
+const verbFiled = "filed"
+
 const (
 	// receiptDetailMax is the column the trailing text is cut to, so a long title cannot push the
 	// footer onto a second line and shift the list above it.

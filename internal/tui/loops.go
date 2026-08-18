@@ -136,6 +136,8 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		return m.editSelected(tree)
 	case "n":
 		return m.noteSelected(tree)
+	case "P":
+		return m.projectPrompt(tree)
 	default:
 		return m, nil, false
 	}

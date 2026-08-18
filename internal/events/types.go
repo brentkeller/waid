@@ -85,6 +85,18 @@ type UpdateEvent struct {
 	WaitingOn *string  `json:"waitingOn,omitempty"`
 }
 
+// ProjectEvent refiles an item, and is an update like any other — the fold reads the same `update`
+// line. It is a shape of its own because UpdateEvent omits an absent project, which is what keeps a
+// retitle or a waiting-on from moving the item out of the project it is filed under. Refiling has to
+// say the opposite: the project is always written, and a null is how an item is moved out of every
+// project.
+type ProjectEvent struct {
+	Ts      string  `json:"ts"`
+	Ev      string  `json:"ev"`
+	Id      string  `json:"id"`
+	Project *string `json:"project"`
+}
+
 // NoteEvent appends a note to an item.
 type NoteEvent struct {
 	Ts   string `json:"ts"`
@@ -123,6 +135,7 @@ type UndismissEvent struct {
 
 func (AddEvent) event()       {}
 func (UpdateEvent) event()    {}
+func (ProjectEvent) event()   {}
 func (NoteEvent) event()      {}
 func (CloseEvent) event()     {}
 func (ReopenEvent) event()    {}
@@ -131,6 +144,7 @@ func (UndismissEvent) event() {}
 
 func (e AddEvent) timestamp() string       { return e.Ts }
 func (e UpdateEvent) timestamp() string    { return e.Ts }
+func (e ProjectEvent) timestamp() string   { return e.Ts }
 func (e NoteEvent) timestamp() string      { return e.Ts }
 func (e CloseEvent) timestamp() string     { return e.Ts }
 func (e ReopenEvent) timestamp() string    { return e.Ts }
@@ -139,6 +153,7 @@ func (e UndismissEvent) timestamp() string { return e.Ts }
 
 func (e AddEvent) stamp(ts string) WaidEvent       { e.Ts = firstTs(e.Ts, ts); return e }
 func (e UpdateEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }
+func (e ProjectEvent) stamp(ts string) WaidEvent   { e.Ts = firstTs(e.Ts, ts); return e }
 func (e NoteEvent) stamp(ts string) WaidEvent      { e.Ts = firstTs(e.Ts, ts); return e }
 func (e CloseEvent) stamp(ts string) WaidEvent     { e.Ts = firstTs(e.Ts, ts); return e }
 func (e ReopenEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }

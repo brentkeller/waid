@@ -38,6 +38,8 @@ func key(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyEnd}
 	case "ctrl+c":
 		return tea.KeyMsg{Type: tea.KeyCtrlC}
+	case "ctrl+u":
+		return tea.KeyMsg{Type: tea.KeyCtrlU}
 	case " ":
 		return tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}
 	default:
@@ -276,5 +278,36 @@ func TestTheAppTitlesTheWindowOnStart(t *testing.T) {
 	}
 	if got, want := fmt.Sprint(batch[0]()), "waid · Loops"; got != want {
 		t.Errorf("window title = %q, want %q", got, want)
+	}
+}
+
+// A terminal too narrow for every hint loses them from the end rather than spilling the line past the
+// frame, and the way to the full key table survives whatever else goes.
+func TestFooterHintsFitTheTerminal(t *testing.T) {
+	m := chrome(t, 80)
+
+	line := plain(m.footer())
+	hints := strings.Split(line, "\n")[1]
+
+	if got := lipgloss.Width(hints); got > 80 {
+		t.Errorf("the hints are %d columns wide at 80, want them inside the frame:\n%s", got, hints)
+	}
+	if !strings.HasSuffix(strings.TrimRight(hints, " "), "? keys") {
+		t.Errorf("the hints are %q, want the key table still offered", hints)
+	}
+	if !strings.Contains(hints, "x done") {
+		t.Errorf("the hints are %q, want the first of them kept", hints)
+	}
+}
+
+// A terminal with room for every hint keeps every hint.
+func TestFooterHintsAreWholeWhenTheyFit(t *testing.T) {
+	m := chrome(t, 140)
+
+	hints := strings.Split(plain(m.footer()), "\n")[1]
+	for _, want := range []string{"x done", "P project", "s status", "? keys"} {
+		if !strings.Contains(hints, want) {
+			t.Errorf("the hints are %q, want %q kept at 140 columns", hints, want)
+		}
 	}
 }

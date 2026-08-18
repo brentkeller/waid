@@ -77,6 +77,11 @@ type Result struct {
 	DismissedCount int `json:"dismissedCount"`
 	// Notes are non-fatal degradations, today only an unavailable gh.
 	Notes []string `json:"notes"`
+	// Repos are the checkouts the pass discovered, quiet ones included. The walk is made anyway to
+	// find the signals, so carrying its result is what lets the app name the projects on disk without
+	// walking again. It stays out of --json: the commands report signals, and a repo list is a
+	// different question they are not asked.
+	Repos []string `json:"-"`
 }
 
 // candidate is a signal plus the instant it is timed by, which ranks it before the timestamp is
@@ -146,7 +151,7 @@ func Signals(cfg config.Config, deps Deps) Result {
 		}
 		notes = append(notes, fmt.Sprintf("GitHub signals unavailable: %s", reason))
 	}
-	return Result{Signals: signals, DismissedCount: dismissedCount, Notes: notes}
+	return Result{Signals: signals, DismissedCount: dismissedCount, Notes: notes, Repos: discovered}
 }
 
 // byRank puts kind first, then oldest first — an ancient review request is the most urgent thing on

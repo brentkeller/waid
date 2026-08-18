@@ -86,9 +86,9 @@ func (m Model) editSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	// The input opens empty rather than filled with the title being replaced: a correction is a new
-	// title, and clearing a prefilled one costs a keypress per character.
-	m.prompt = prompt{kind: promptRename, label: "edit", subject: item.Id, prior: item.Title}
+	// The input opens on the title being corrected, since a correction is usually a word of a title
+	// rather than a fresh one. ctrl-u empties it for the times it is a fresh one.
+	m.prompt = prompt{kind: promptRename, label: "edit", subject: item.Id, prior: item.Title, value: item.Title}
 	return m, nil, true
 }
 

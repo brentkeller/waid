@@ -18,6 +18,7 @@ const (
 	promptNote
 	promptAdd
 	promptDate
+	promptProject
 )
 
 // prompt is the inline input the footer takes text in. It holds the keyboard the way the filter does,
@@ -37,22 +38,34 @@ type prompt struct {
 	// subject names it for the footer; this is the path the write carries, since the two differ.
 	project *string
 
+	// choice is the match a project search is on, which enter takes. It is reset by every keystroke
+	// that changes the search, since the list under it is a different list.
+	choice int
+
 	value string
 }
 
-// promptKey edits the answer. esc abandons it, enter commits it.
+// promptKey edits the answer. esc abandons it, enter commits it, and ctrl-u empties it — which is what
+// makes a prompt that opens on an existing value rewritable from nothing. shift-backspace is not
+// offered for it: terminals send the same byte for that as for a plain backspace.
 func (m Model) promptKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.prompt = prompt{}
 	case tea.KeyEnter:
 		return m.commitPrompt()
+	case tea.KeyTab, tea.KeyDown:
+		return m.moveChoice(1), nil
+	case tea.KeyShiftTab, tea.KeyUp:
+		return m.moveChoice(-1), nil
+	case tea.KeyCtrlU:
+		m.prompt.value, m.prompt.choice = "", 0
 	case tea.KeyBackspace:
 		if runes := []rune(m.prompt.value); len(runes) > 0 {
-			m.prompt.value = string(runes[:len(runes)-1])
+			m.prompt.value, m.prompt.choice = string(runes[:len(runes)-1]), 0
 		}
 	case tea.KeyRunes, tea.KeySpace:
-		m.prompt.value += msg.String()
+		m.prompt.value, m.prompt.choice = m.prompt.value+msg.String(), 0
 	}
 	return m, nil
 }
@@ -64,6 +77,11 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 	m.prompt = prompt{}
 
 	value := strings.TrimSpace(answered.value)
+	// A project search is the one prompt an empty answer is a write for: it files the item under no
+	// project, which nothing else says.
+	if answered.kind == promptProject {
+		return m.refile(answered.subject, value, answered.choice)
+	}
 	if value == "" {
 		return m, nil
 	}

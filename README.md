@@ -143,7 +143,7 @@ Three tabs, switched with `1` `2` `3` or `tab`:
 
 | Tab | Shows | Acts |
 | --- | --- | --- |
-| Loops | Declared items grouped by project, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `n` note, `p` toggle the pane. |
+| Loops | Declared items grouped by project, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `P` file under a project, `n` note, `p` toggle the pane. |
 | Repos | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
 | Agents | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `pgup`/`pgdn` scroll it, `home`/`end` jump to either end, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
 
@@ -153,6 +153,13 @@ Agents' today/yesterday/week/last week plus whatever day `d` picked — `a` to a
 refresh — on Agents that re-reads every transcript on disk, so a session run since the app opened
 shows up — `u` to undo, `?` for the key table, `q` to quit. A key that belongs to another tab says so
 in the footer rather than doing nothing quietly.
+
+A prompt taking text — a title, a note, a project — commits on `enter`, abandons on `esc`, and
+empties on `ctrl-u`. `e` and `P` open on the value they are replacing, so a correction is a word of
+typing and `ctrl-u` is how one starts from nothing. `P` searches: type any part of a project the log
+or the scan roots know, `tab` moves through the matches the footer lists, and `enter` files the item
+under the one it is on. An absolute path nothing matches is taken as typed, and an empty answer files
+the item under no project at all.
 
 Writes land on the keypress with no confirm step, so the footer's receipt is what says a press did
 anything, and `u` reverses the last one — as another event, since the log is append-only. The stack

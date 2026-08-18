@@ -50,9 +50,8 @@ func (m Model) renameSelected() (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	// The input opens empty rather than filled with the title being replaced: a correction is a new
-	// title, and clearing a prefilled one costs a keypress per character.
-	m.prompt = prompt{kind: promptRename, label: "rename", subject: target.subject, prior: target.detail}
+	// The input opens on the title being corrected, for the reason Loops' edit does.
+	m.prompt = prompt{kind: promptRename, label: "rename", subject: target.subject, prior: target.detail, value: target.detail}
 	return m, nil, true
 }
 

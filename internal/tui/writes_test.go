@@ -173,7 +173,7 @@ func TestEditRewritesTheTitle(t *testing.T) {
 		t.Errorf("e opened no prompt for the title:\n%s", view)
 	}
 
-	m, _ = press(t, m, "Design template", "enter")
+	m, _ = press(t, m, "ctrl+u", "Design template", "enter")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"update","id":"sga9","title":"Design template"}`})
@@ -301,7 +301,7 @@ func TestLoopsPromptsAbandonWithoutWriting(t *testing.T) {
 func TestLoopsPromptsHoldTheKeyboard(t *testing.T) {
 	m, _ := working(t)
 
-	m, _ = press(t, m, "e", "q")
+	m, _ = press(t, m, "e", "ctrl+u", "q")
 	if m.prompt.value != "q" {
 		t.Errorf("q typed into the prompt left %q, want it treated as text", m.prompt.value)
 	}
@@ -444,5 +444,58 @@ func TestAddAbandonsWithoutWriting(t *testing.T) {
 		if log := written(t, path); len(log) != 0 {
 			t.Errorf("an add abandoned with %s wrote %v", ending, log)
 		}
+	}
+}
+
+// e opens the input on the title it is correcting, so an edit that changes a word is a word's worth
+// of typing rather than a retype of the whole line.
+func TestEditOpensOnTheTitleItCorrects(t *testing.T) {
+	m, _ := working(t)
+
+	m, _ = press(t, m, "e")
+
+	if got, want := m.prompt.value, "Deploy blocked until the migration is approved"; got != want {
+		t.Errorf("the edit opened on %q, want the title it corrects %q", got, want)
+	}
+	if view := plain(m.View()); !strings.Contains(view, "edit 4h2k Deploy blocked") {
+		t.Errorf("the prefilled title is not in the footer:\n%s", view)
+	}
+}
+
+// Committing a prefilled title unchanged is not a write: the log would hold an update saying nothing.
+func TestEditCommittedUnchangedWritesNothing(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "e", "enter")
+
+	assertLog(t, path, nil)
+	if _, written := m.lastReceipt(); written {
+		t.Error("an unchanged title left a receipt, want the edit treated as abandoned")
+	}
+}
+
+// ctrl-u empties the input, which is what makes a prefilled prompt rewritable from nothing. It is not
+// shift-backspace: terminals send the same byte for that as for a plain backspace.
+func TestCtrlUClearsThePromptInput(t *testing.T) {
+	m, _ := working(t)
+
+	m, _ = press(t, m, "e", "ctrl+u")
+
+	if m.prompt.value != "" {
+		t.Errorf("ctrl-u left %q in the input, want it emptied", m.prompt.value)
+	}
+	if m.prompt.kind != promptRename {
+		t.Error("ctrl-u closed the prompt, want it left open to type into")
+	}
+}
+
+// ctrl-u clears whatever prompt is open, not only the one that opens prefilled.
+func TestCtrlUClearsAnAddInProgress(t *testing.T) {
+	m, _ := working(t)
+
+	m, _ = press(t, m, "a", "h", "i", "ctrl+u")
+
+	if m.prompt.value != "" {
+		t.Errorf("ctrl-u left %q in the add, want it emptied", m.prompt.value)
 	}
 }

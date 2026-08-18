@@ -198,7 +198,7 @@ func TestPromoteReceiptOffersRenameAndEditsTheTitle(t *testing.T) {
 		t.Errorf("e did not open the rename prompt:\n%s", plain(m.View()))
 	}
 
-	m, _ = press(t, m, "Push the tui branch")
+	m, _ = press(t, m, "ctrl+u", "Push the tui branch")
 	typed, _ := press(t, m, "q")
 	if typed.prompt.value != "Push the tui branchq" {
 		t.Errorf("q typed into the prompt left %q, want it treated as text", typed.prompt.value)

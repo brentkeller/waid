@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -244,4 +245,36 @@ func goldenChrome(t *testing.T, width int) {
 
 	final := tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second)).(Model)
 	teatest.RequireEqualOutput(t, []byte(plain(final.View())))
+}
+
+// The window title names the live tab, so a `waid ui` window is identifiable from a terminal's tab
+// strip without switching to it.
+func TestSwitchingTabsRetitlesTheWindow(t *testing.T) {
+	_, cmd := press(t, New(Options{}), "2")
+
+	if cmd == nil {
+		t.Fatal("switching tabs set no window title")
+	}
+	if got, want := fmt.Sprint(cmd()), "waid · Repos"; got != want {
+		t.Errorf("window title = %q, want %q", got, want)
+	}
+}
+
+// A key that leaves the tab where it was leaves the title alone, so the terminal is not retitled on
+// every press.
+func TestKeysThatDoNotSwitchTabsLeaveTheTitleAlone(t *testing.T) {
+	if _, cmd := press(t, New(Options{}), "2", "2"); cmd != nil {
+		t.Errorf("pressing the live tab's digit produced %v, want no command", cmd())
+	}
+}
+
+// The title is set from Init, so the window is named before the first keypress.
+func TestTheAppTitlesTheWindowOnStart(t *testing.T) {
+	batch, ok := New(Options{}).Init()().(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("Init did not batch its commands")
+	}
+	if got, want := fmt.Sprint(batch[0]()), "waid · Loops"; got != want {
+		t.Errorf("window title = %q, want %q", got, want)
+	}
 }

@@ -31,6 +31,12 @@ type Options struct {
 // The receipts are replayed once the terminal is back, which is what leaves a triage pass in real
 // scrollback rather than losing it with the screen (§3.1).
 func Run(opts Options) error {
+	// The app titles the window after the tab it is on, so the title the shell left is pushed to the
+	// terminal's title stack and popped back on the way out. Terminals without the stack ignore both
+	// and keep the last title the app set, which is what they would have done anyway.
+	fmt.Fprint(os.Stdout, "\x1b[22;2t")
+	defer fmt.Fprint(os.Stdout, "\x1b[23;2t")
+
 	final, err := start(New(opts))
 	if m, ok := final.(Model); ok {
 		replayTo(os.Stdout, m.receipts)
@@ -200,7 +206,7 @@ func New(opts Options) Model {
 // Init issues the first reads. Nothing loads inside New, so a model can be built and inspected
 // without touching the filesystem, git or the network.
 func (m Model) Init() tea.Cmd {
-	var cmds []tea.Cmd
+	cmds := []tea.Cmd{tea.SetWindowTitle(m.windowTitle())}
 	if m.loops.load != nil {
 		cmds = append(cmds, m.loops.load)
 	}
@@ -279,6 +285,7 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	m.hint = ""
 	pressed := msg.String()
+	was := m.tab
 	switch pressed {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -306,8 +313,14 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.hint = inertHint(m.tab, pressed)
 		}
 	}
+	if m.tab != was {
+		return m, tea.SetWindowTitle(m.windowTitle())
+	}
 	return m, nil
 }
+
+// windowTitle names the live tab, which is what a terminal shows in a tab strip or window list.
+func (m Model) windowTitle() string { return "waid · " + tabTitles[m.tab] }
 
 // tabKey offers a press to the live tab. It reports whether the tab dealt with the key, which
 // includes a key that was inert for a reason the tab left in the footer (§4).

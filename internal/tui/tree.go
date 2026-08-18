@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Scan and Review are the same shape — a project heading with children folded under it — so they
+// Repos and Agents are the same shape — a project heading with children folded under it — so they
 // render the same component (§2). Two hand-written trees would drift within a month and each would
 // look correct in isolation, so only the child row and the action set differ between the tabs.
 const (
@@ -39,8 +39,8 @@ type Tree[T any] struct {
 	Cursor   int
 	Expanded map[string]bool
 
-	// ExpandedByDefault decides a group the Expanded map says nothing about. Scan opens its groups
-	// so the signals are readable at a glance; Review closes them, which is the whole reason it
+	// ExpandedByDefault decides a group the Expanded map says nothing about. Repos opens its groups
+	// so the signals are readable at a glance; Agents closes them, which is the whole reason it
 	// reads better than the command (§1.3).
 	ExpandedByDefault bool
 

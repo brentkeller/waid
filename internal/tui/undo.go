@@ -17,7 +17,7 @@ import (
 const undoLimit = 20
 
 // undoEntry is one write's inverse: the events that reverse it, the receipt the reversal leaves, and
-// the signal it puts back on Scan.
+// the signal it puts back on Repos.
 type undoEntry struct {
 	events []events.WaidEvent
 

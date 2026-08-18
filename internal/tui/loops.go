@@ -218,7 +218,7 @@ func matchesItem(item events.Item, query string) bool {
 }
 
 // loopsTree builds the tree from the current state. Groups open by default: Loops is a working list
-// rather than history, so what is owed is readable at a glance the way Scan's signals are (§1.2).
+// rather than history, so what is owed is readable at a glance the way Repos' signals are (§1.2).
 func (m Model) loopsTree(width int) Tree[events.Item] {
 	now := m.now()
 	visible := m.loopsVisible()

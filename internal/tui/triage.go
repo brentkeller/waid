@@ -11,7 +11,7 @@ import (
 	"github.com/brentkeller/waid/internal/triage"
 )
 
-// The two writes Scan makes go through internal/triage, the same code the promote and dismiss
+// The two writes Repos makes go through internal/triage, the same code the promote and dismiss
 // commands write through, and they land on the keypress with no confirm step: in an app you live in,
 // "press Enter to commit" is a modal interruption repeated all day (§3).
 //
@@ -70,7 +70,7 @@ func (m Model) rename(id, prior, title string) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// A title corrected on Loops is a row on screen; one corrected on Scan belongs to an item the log
+	// A title corrected on Loops is a row on screen; one corrected on Repos belongs to an item the log
 	// has not been re-read for, so the loaded list is moved only where it holds the item.
 	inverse := undoRetitle(id, prior)
 	if item, loaded := m.loadedItem(id); loaded {

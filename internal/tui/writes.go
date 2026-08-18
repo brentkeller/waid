@@ -10,7 +10,7 @@ import (
 
 // The writes made against items: the four Loops binds to the row under the cursor — close an item,
 // mark it waiting on someone, correct its title, note something against it — and the add every tab
-// offers. They follow the rule Scan's triage already does (§3) — the write lands on the keypress with
+// offers. They follow the rule Repos' triage already does (§3) — the write lands on the keypress with
 // no confirm step, and the footer's receipt is what says a press did anything.
 //
 // Each one edits the loaded copy of the item beside appending to the log, so the row moves in the
@@ -77,7 +77,7 @@ func (m Model) waitOn(id, who string) (Model, tea.Cmd) {
 	return m.record(receipt{verb: "waiting", subject: id, detail: who}), nil
 }
 
-// editSelected corrects the title of the item under the cursor. Scan's `e` acts on the receipt of the
+// editSelected corrects the title of the item under the cursor. Repos' `e` acts on the receipt of the
 // promotion it just made, since the row it addresses has already left the list; here the row is on
 // screen, so the cursor is what says which title is being corrected (§4).
 func (m Model) editSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {

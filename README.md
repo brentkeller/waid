@@ -109,7 +109,7 @@ dismissed now; anything else is a user error, since the likeliest cause is a typ
 meant to be copied out of the `DETECTED` block verbatim.
 
 The interactive picker (`-i`) that used to stage marks on this screen is gone, superseded by the
-app's [Scan tab](#the-app-waid-ui), which triages with the same two keys and more context.
+app's [Repos tab](#the-app-waid-ui), which triages with the same two keys and more context.
 
 ### Sessions
 
@@ -134,8 +134,8 @@ error rather than a fallback to text.
 
 ```
 ╭───────────╮
-│ Loops  12 │ Scan  8 │ Review │                                     ⟳ scanning  5/9 repos
-┴───────────┴─────────┴────────┴──────────────────────────────────────────────────────────
+│ Loops  12 │ Repos  8 │ Agents │                                    ⟳ scanning  5/9 repos
+┴───────────┴──────────┴────────┴─────────────────────────────────────────────────────────
 ```
 
 Three tabs, switched with `1` `2` `3` or `tab`:
@@ -143,12 +143,12 @@ Three tabs, switched with `1` `2` `3` or `tab`:
 | Tab | Shows | Acts |
 | --- | --- | --- |
 | Loops | Declared items grouped by project, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `n` note, `p` toggle the pane. |
-| Scan | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
-| Review | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `pgup`/`pgdn` scroll it, `home`/`end` jump to either end, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
+| Repos | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
+| Agents | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `pgup`/`pgdn` scroll it, `home`/`end` jump to either end, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
 
 Keys that work everywhere: `j` `k` to move, `g` / `G` for first and last, `enter` to fold, `/` to
-filter (`esc` clears), `s` to cycle the tab's segmented row — Loops' statuses, Scan's kinds,
-Review's today/yesterday/week/last week plus whatever day `d` picked — `a` to add an item, `r` to
+filter (`esc` clears), `s` to cycle the tab's segmented row — Loops' statuses, Repos' kinds,
+Agents' today/yesterday/week/last week plus whatever day `d` picked — `a` to add an item, `r` to
 refresh, `u` to undo, `?` for the key table, `q` to quit. A key that belongs to another tab says so
 in the footer rather than doing nothing quietly.
 

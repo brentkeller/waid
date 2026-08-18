@@ -7,7 +7,7 @@ import (
 )
 
 // promptKind is what an open prompt is collecting, and what its answer does — a write, for all but
-// promptDate, which moves the Review window instead. promptNone is the zero value, so a Model with
+// promptDate, which moves the Agents window instead. promptNone is the zero value, so a Model with
 // nothing to ask has no prompt.
 type promptKind int
 

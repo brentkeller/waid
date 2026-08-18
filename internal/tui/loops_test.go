@@ -302,7 +302,7 @@ func TestLoopsDigitsStayWithTheTabs(t *testing.T) {
 
 	switched, _ := press(t, m, "2")
 	if switched.tab != tabScan {
-		t.Errorf("2 on Loops selected %s, want Scan", tabTitles[switched.tab])
+		t.Errorf("2 on Loops selected %s, want Repos", tabTitles[switched.tab])
 	}
 	if switched.loops.status != loopsOwed {
 		t.Errorf("2 on Loops moved the status row to %q", switched.loops.status)

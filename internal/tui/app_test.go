@@ -198,7 +198,7 @@ func TestInertKeyLeavesAFooterHint(t *testing.T) {
 	}
 
 	unbound, _ := press(t, owned, "z")
-	if !strings.Contains(unbound.hint, "Scan") {
+	if !strings.Contains(unbound.hint, "Repos") {
 		t.Errorf("hint for an unbound key is %q, want it to name the tab it was pressed on", unbound.hint)
 	}
 
@@ -216,7 +216,7 @@ func TestTabBarShowsTheTabsTheirCountsAndProgress(t *testing.T) {
 	m.progress = "scanning  5/9 repos"
 
 	bar := strings.Split(plain(m.View()), "\n")[1]
-	for _, want := range []string{"Loops  12", "Scan  8", "Review", m.progress} {
+	for _, want := range []string{"Loops  12", "Repos  8", "Agents", m.progress} {
 		if !strings.Contains(bar, want) {
 			t.Errorf("the tab bar does not carry %q:\n%s", want, bar)
 		}

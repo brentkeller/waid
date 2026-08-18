@@ -56,7 +56,7 @@ const (
 
 const numTabs = 3
 
-var tabTitles = [numTabs]string{"Loops", "Scan", "Review"}
+var tabTitles = [numTabs]string{"Loops", "Repos", "Agents"}
 
 // tabFooters are the key hints each tab keeps in the footer — the keys worth having in front of you
 // while working the tab, as opposed to the full table `?` opens.
@@ -82,7 +82,7 @@ type binding struct {
 var globalBindings = []binding{
 	// The digits are the bar's on every tab. §1.1 also offers them to the Loops status row, but a digit
 	// that switches tabs on two tabs and jumps a filter on the third is a mode to keep track of, and the
-	// segmented rows Scan and Review draw have no digits either — `s` cycles all three.
+	// segmented rows Repos and Agents draw have no digits either — `s` cycles all three.
 	{[]string{"1", "2", "3", "tab", "shift+tab"}, "1 2 3 / tab", "switch tab, from any tab"},
 	{[]string{"j", "k", "up", "down"}, "j k ↑ ↓", "move the cursor, skipping headings"},
 	{[]string{"g", "G"}, "g / G", "first / last row"},
@@ -169,10 +169,10 @@ type Model struct {
 	// loops is the Loops tab's own state: the folded log and the tree over it.
 	loops loopsModel
 
-	// scan is the Scan tab's own state: the last good detection pass and the filters over it.
+	// scan is the Repos tab's own state: the last good detection pass and the filters over it.
 	scan scanModel
 
-	// review is the Review tab's own state: the harvested history and the window over it.
+	// review is the Agents tab's own state: the harvested history and the window over it.
 	review reviewModel
 
 	// clock is the app's present. It advances while the app runs, so the age of what is on screen
@@ -566,8 +566,8 @@ func (m Model) headerLine(row string, rowWidth int, counts string, width int) st
 	return row + strings.Repeat(" ", gap) + m.theme.Count.Render(counts)
 }
 
-// segmentRow draws the toggle every tab hangs off the left of its header — Loops' statuses, Scan's
-// kinds, Review's ranges — marking the selected segment. The printed width comes back alongside the
+// segmentRow draws the toggle every tab hangs off the left of its header — Loops' statuses, Repos'
+// kinds, Agents' ranges — marking the selected segment. The printed width comes back alongside the
 // row, since the styling makes the string longer than the columns it occupies.
 func (m Model) segmentRow(labels []string, active int) (string, int) {
 	var row strings.Builder

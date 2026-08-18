@@ -169,7 +169,7 @@ func (m Model) scanCount() int {
 	return count
 }
 
-// scanKey handles the keys the chrome does not own while Scan is the live tab. It reports whether
+// scanKey handles the keys the chrome does not own while Repos is the live tab. It reports whether
 // the press meant anything here, which includes a key that was inert for a reason worth printing.
 func (m Model) scanKey(pressed string) (Model, tea.Cmd, bool) {
 	tree := m.scanTree(m.viewWidth())
@@ -355,8 +355,8 @@ func signalUrl(signal detect.Signal) string {
 	return fmt.Sprintf("https://github.com/%s/pull/%s", repository, number)
 }
 
-// openTarget hands a URL or a path to whatever the desktop opens it with — a pull request from Scan,
-// a checkout from Review. It is a variable so a test can watch it rather than open windows.
+// openTarget hands a URL or a path to whatever the desktop opens it with — a pull request from Repos,
+// a checkout from Agents. It is a variable so a test can watch it rather than open windows.
 var openTarget = func(target string) error {
 	switch runtime.GOOS {
 	case "windows":

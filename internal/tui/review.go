@@ -104,7 +104,7 @@ type copiedMsg struct {
 }
 
 // reviewModel is the Review tab: the whole harvested history, the window over it, and the tree's
-// state. Like Scan, the tree is rebuilt from these on demand so a window and a query can never leave
+// state. Like Repos, the tree is rebuilt from these on demand so a window and a query can never leave
 // the list and the cursor describing different things.
 type reviewModel struct {
 	sessions []sessions.Session
@@ -594,7 +594,7 @@ func (m Model) reviewClosed() int {
 }
 
 // reviewTree builds the tree from the current state. Groups are closed by default, which is the whole
-// reason Review reads better than the command it replaces (§1.3).
+// reason Agents reads better than the command it replaces (§1.3).
 func (m Model) reviewTree(width int) Tree[sessions.Session] {
 	visible := m.reviewVisible()
 	columns := reviewColumnsFor(visible)
@@ -943,7 +943,7 @@ func (m Model) reviewHeader(width int) string {
 }
 
 // reviewTotals is what the header says on the right: the window's sessions, the prompts they took,
-// and the items closed inside it. A window that closed nothing says nothing, the way the Scan header
+// and the items closed inside it. A window that closed nothing says nothing, the way the Repos header
 // leaves out a dismissal count of zero.
 func (m Model) reviewTotals() string {
 	visible := m.reviewVisible()

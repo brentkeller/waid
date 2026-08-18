@@ -72,9 +72,9 @@ type scanModel struct {
 	// them — detection already excludes a dismissed key from the next one.
 	triaged map[string]bool
 
-	// loading is a pass in flight, and spinner is the frame the tab bar is showing for it.
+	// loading is a pass in flight, which is what keeps the tab bar turning. The frame it is showing
+	// hangs off the root model, since the history sync turns the same spinner.
 	loading bool
-	spinner int
 
 	// failure is why the last pass did not land, standing until one does. The result above it is
 	// whatever was last read successfully.
@@ -129,9 +129,25 @@ func spinnerTick() tea.Cmd {
 	return tea.Tick(spinnerInterval, func(time.Time) tea.Msg { return spinnerTickMsg{} })
 }
 
-// spinnerText is the tab bar's right-hand slot while a pass runs.
+// spinnerText is the tab bar's right-hand slot while work is in flight. Detection and a history sync
+// are named apart, since a sync re-reads every transcript and is the slower of the two. The sync
+// leads when both are running: it is the one that was asked for, and detection runs on its own.
 func (m Model) spinnerText() string {
-	return spinnerFrames[m.scan.spinner%len(spinnerFrames)] + " scanning"
+	label := " scanning"
+	if m.review.syncing {
+		label = " syncing"
+	}
+	return spinnerFrames[m.spinner%len(spinnerFrames)] + label
+}
+
+// progressText is the bar's right-hand slot as the reads stand: the spinner while there is work in
+// flight, and nothing once the last of it lands. It is what a finished read sets the slot to, so one
+// read landing does not clear the other's spinner.
+func (m Model) progressText() string {
+	if m.scan.loading || m.review.syncing {
+		return m.spinnerText()
+	}
+	return ""
 }
 
 // scanLoaded takes a finished pass. The tab's count and the age both move with it, and the cursor is
@@ -141,7 +157,7 @@ func (m Model) spinnerText() string {
 // last pass that landed left them (§7).
 func (m Model) scanLoaded(msg scanLoadedMsg) Model {
 	m.scan.loading = false
-	m.progress = ""
+	m.progress = m.progressText()
 	if msg.err != nil {
 		m.scan.failure = msg.err.Error()
 		return m

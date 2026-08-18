@@ -115,7 +115,8 @@ app's [Repos tab](#the-app-waid-ui), which triages with the same two keys and mo
 
 Read commands refresh `cache/sessions.json` implicitly when it is missing or more than 5 minutes
 old, so `sync` is rarely needed by hand. `--no-sync` suppresses it. A sync that fails is not fatal:
-the command runs on the cached sessions and says so.
+the command runs on the cached sessions and says so. The app syncs on the same terms: incrementally
+when it opens and after a resume, and fully on `r`.
 
 Sessions are harvested from Claude Code transcripts under `claudeDir` — title, project, prompt
 count, and timestamps. Nothing is sent anywhere.
@@ -149,7 +150,8 @@ Three tabs, switched with `1` `2` `3` or `tab`:
 Keys that work everywhere: `j` `k` to move, `g` / `G` for first and last, `enter` to fold, `/` to
 filter (`esc` clears), `s` to cycle the tab's segmented row — Loops' statuses, Repos' kinds,
 Agents' today/yesterday/week/last week plus whatever day `d` picked — `a` to add an item, `r` to
-refresh, `u` to undo, `?` for the key table, `q` to quit. A key that belongs to another tab says so
+refresh — on Agents that re-reads every transcript on disk, so a session run since the app opened
+shows up — `u` to undo, `?` for the key table, `q` to quit. A key that belongs to another tab says so
 in the footer rather than doing nothing quietly.
 
 Writes land on the keypress with no confirm step, so the footer's receipt is what says a press did

@@ -3,7 +3,9 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/teatest"
 
+	"github.com/brentkeller/waid/internal/config"
 	"github.com/brentkeller/waid/internal/detect"
 	"github.com/brentkeller/waid/internal/events"
 	"github.com/brentkeller/waid/internal/sessions"
@@ -95,10 +98,10 @@ func reviewed(t *testing.T, width int, msg reviewLoadedMsg) Model {
 
 	m := offline(chrome(t, width), detect.Result{})
 	m.clock = func() time.Time { return reviewNow }
-	m.review.load = func() tea.Msg { return msg }
+	m.review.load = func(bool) tea.Msg { return msg }
 
 	m, _ = press(t, m, "3")
-	next, _ := m.Update(m.review.load())
+	next, _ := m.Update(m.review.load(false))
 	return next.(Model)
 }
 
@@ -224,7 +227,7 @@ func TestReviewQueryFiltersTheList(t *testing.T) {
 // (§6).
 func TestInitLoadsTheHistory(t *testing.T) {
 	m := offline(New(Options{}), detect.Result{})
-	m.review.load = func() tea.Msg { return reviewFixture() }
+	m.review.load = func(bool) tea.Msg { return reviewFixture() }
 
 	found := false
 	for _, msg := range messages(m.Init()) {
@@ -877,4 +880,162 @@ func TestReviewPreviewPagesWithAnOverlap(t *testing.T) {
 	if strings.Contains(view, "turn 02") {
 		t.Errorf("pgdown moved less than a page, so the overlap has eaten it:\n%s", view)
 	}
+}
+
+// reviewHome plants a transcript tree with no cache beside it, which is the state a machine is in
+// before any command has synced: the sessions exist on disk and nothing has read them yet.
+func reviewHome(t *testing.T) config.Config {
+	t.Helper()
+
+	home := t.TempDir()
+	cfg, err := config.Load(home)
+	if err != nil {
+		t.Fatalf("loading config: %v", err)
+	}
+	cfg.ClaudeDir = t.TempDir()
+	plantTranscript(t, cfg, "a1b2c3d4", "normal.jsonl")
+	return cfg
+}
+
+// plantTranscript copies one of the shared transcript fixtures into the tree under a session id.
+func plantTranscript(t *testing.T, cfg config.Config, id, fixture string) {
+	t.Helper()
+
+	dir := filepath.Join(cfg.ClaudeDir, "projects", "C--dev-waid")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("creating %s: %v", dir, err)
+	}
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "transcripts", fixture))
+	if err != nil {
+		t.Fatalf("reading fixture %s: %v", fixture, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, id+".jsonl"), raw, 0o644); err != nil {
+		t.Fatalf("planting %s: %v", id, err)
+	}
+}
+
+// The app is the one caller dispatch does not sync sessions for, so the tab's own read syncs the
+// cache from the transcripts on disk. A read that only loaded the cache would open on a history as
+// old as the last command run in a shell.
+func TestReviewLoadSyncsTheTranscriptsOnDisk(t *testing.T) {
+	cfg := reviewHome(t)
+
+	msg, ok := reviewLoader(Options{Cfg: cfg})(false).(reviewLoadedMsg)
+	if !ok {
+		t.Fatal("the history read produced no reviewLoadedMsg")
+	}
+	if len(msg.sessions) != 1 {
+		t.Fatalf("the read returned %d sessions, want the one transcript on disk synced into the cache", len(msg.sessions))
+	}
+	if _, recorded := msg.paths[msg.sessions[0].Id]; !recorded {
+		t.Error("the synced session carries no transcript path, so the preview could not read it")
+	}
+}
+
+// A transcript written after the last read is what a refresh is for: the session just worked in is
+// the one missing from a cache synced before it started.
+func TestReviewRefreshPicksUpATranscriptWrittenSinceTheLastRead(t *testing.T) {
+	cfg := reviewHome(t)
+	load := reviewLoader(Options{Cfg: cfg})
+	load(false)
+
+	plantTranscript(t, cfg, "b2c3d4e5", "no-ai-title.jsonl")
+
+	msg := load(true).(reviewLoadedMsg)
+	if len(msg.sessions) != 2 {
+		t.Fatalf("the refresh returned %d sessions, want both transcripts on disk", len(msg.sessions))
+	}
+	if !strings.Contains(msg.note, "re-read") {
+		t.Errorf("the refresh left %q for the footer, want what it re-read", msg.note)
+	}
+}
+
+// r asks for a full read. The cache reuses any transcript whose size and mtime have not moved, and
+// the press is what someone reaches for when the history on screen and the one on disk disagree.
+func TestReviewRefreshAsksForAFullRead(t *testing.T) {
+	m := reviewed(t, 140, reviewFixture())
+
+	var asked []bool
+	m.review.load = func(full bool) tea.Msg {
+		asked = append(asked, full)
+		return reviewFixture()
+	}
+
+	refreshed, cmd := press(t, m, "r")
+	messages(cmd)
+	if !slices.Equal(asked, []bool{true}) {
+		t.Errorf("r asked for %v, want one full read", asked)
+	}
+	if !strings.Contains(refreshed.progress, "syncing") {
+		t.Errorf("the tab bar says %q while the refresh runs, want the sync named", refreshed.progress)
+	}
+}
+
+// The read the app starts itself is incremental: it re-parses the transcripts written since the last
+// sync, which is what opens the tab on the sessions run since a shell last ran a command.
+func TestInitAsksForAnIncrementalRead(t *testing.T) {
+	m := offline(New(Options{}), detect.Result{})
+
+	var asked []bool
+	m.review.load = func(full bool) tea.Msg {
+		asked = append(asked, full)
+		return reviewFixture()
+	}
+
+	messages(m.Init())
+	if !slices.Equal(asked, []bool{false}) {
+		t.Errorf("Init asked for %v, want one incremental read", asked)
+	}
+}
+
+// A refresh re-reads the transcript the pane is showing. The session under the cursor is the one most
+// likely to have grown, so leaving the turns as they were read is the staleness the refresh was
+// pressed to clear.
+func TestReviewRefreshReReadsTheOpenTranscript(t *testing.T) {
+	m, cmd := press(t, previewing(t, 140), " ")
+	m = deliver(t, m, cmd)
+
+	reads := 0
+	m.review.readTurns = func(string) ([]sessions.Turn, error) {
+		reads++
+		return longTranscript(4), nil
+	}
+	m.review.load = func(bool) tea.Msg { return reviewFixture() }
+
+	refreshed, cmd := press(t, m, "r")
+	follow(t, refreshed, cmd)
+	if reads != 1 {
+		t.Errorf("the refresh read the open transcript %d times, want it re-read once", reads)
+	}
+}
+
+// The place in the read survives a refresh: a transcript that grew while it was open is one being
+// followed, and dropping the pane back to the top would lose the read to every refresh.
+func TestReviewRefreshKeepsThePlaceInTheOpenTranscript(t *testing.T) {
+	m := scrolling(t, 30)
+	m, _ = press(t, m, "pgdown")
+	top := m.review.previewTop
+	if top == 0 {
+		t.Fatal("the pane is still at the top of the transcript, so this test measures nothing")
+	}
+
+	m.review.load = func(bool) tea.Msg { return reviewFixture() }
+	refreshed, cmd := press(t, m, "r")
+	refreshed = deliver(t, refreshed, cmd)
+	if refreshed.review.previewTop != top {
+		t.Errorf("the pane came back at line %d, want the place it was left at (%d)", refreshed.review.previewTop, top)
+	}
+}
+
+// follow delivers what a command produced and runs whatever each Update issued in turn, which is the
+// second read a message can start — a finished history read pointing the open pane at a transcript.
+func follow(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+
+	for _, msg := range messages(cmd) {
+		next, issued := m.Update(msg)
+		m = next.(Model)
+		messages(issued)
+	}
+	return m
 }

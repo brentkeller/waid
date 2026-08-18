@@ -81,6 +81,9 @@ type reviewLoadedMsg struct {
 	paths map[string]string
 	// at is when the read ran.
 	at time.Time
+	// note is what the read leaves for the footer: a sync that could not be written, or what an
+	// explicit refresh cost. An empty note leaves the footer as it was.
+	note string
 }
 
 // previewLoadedMsg carries a finished read of one transcript back into the update loop. The id is
@@ -137,26 +140,54 @@ type reviewModel struct {
 	previewErr string
 	reading    bool
 
-	// load is the history seam. It runs off the update loop and comes back as a reviewLoadedMsg.
-	load func() tea.Msg
+	// load is the history seam. It runs off the update loop and comes back as a reviewLoadedMsg. A full
+	// read re-parses every transcript on disk; an incremental one re-reads only the transcripts whose
+	// stats moved since the last sync.
+	load func(full bool) tea.Msg
+
+	// syncing is a read in flight. It is what keeps the tab bar turning, since a full read re-parses
+	// every transcript on disk, which is the longest the app ever waits on a read.
+	syncing bool
 
 	// readTurns is the transcript seam. A transcript is a file rather than a network call, but it is
 	// the largest read the app makes, so it runs off the update loop like every other one (§6).
 	readTurns func(path string) ([]sessions.Turn, error)
 }
 
-// reviewLoader is the real read: the session cache and the closures the log holds. Neither reaches
-// the network, but both are files, so they are read off the update loop like every other read (§6).
-func reviewLoader(opts Options) func() tea.Msg {
-	return func() tea.Msg {
-		cached := sessions.Load(opts.Cfg).Sessions
+// reviewLoader is the real read: the transcripts on disk, synced into the session cache, and the
+// closures the log holds. The app is the one caller dispatch does not sync for, so a read that only
+// loaded the cache would show a history as old as the last command run in a shell. Neither the sync
+// nor the log reaches the network, but both are files, so they are read off the update loop like
+// every other read (§6).
+func reviewLoader(opts Options) func(full bool) tea.Msg {
+	return func(full bool) tea.Msg {
+		cached, note := syncedSessions(opts.Cfg, full)
 		return reviewLoadedMsg{
 			sessions: harvested(cached),
 			closures: closures(opts.Cfg),
 			paths:    transcriptPaths(cached),
 			at:       time.Now(),
+			note:     note,
 		}
 	}
+}
+
+// syncedSessions rebuilds the session cache from the transcripts on disk and returns what it holds. A
+// sync that fails is not worth failing the read over: the cached sessions are still a history, so
+// they are shown and the reason is carried back with them, the way the CLI notes a failed sync rather
+// than refusing the command (§7).
+func syncedSessions(cfg config.Config, full bool) ([]sessions.CachedSession, string) {
+	result, err := sessions.Sync(cfg, sessions.SyncOptions{Full: full})
+	if err != nil {
+		return sessions.Load(cfg).Sessions, fmt.Sprintf("session sync failed (%v); showing the cached sessions", err)
+	}
+
+	// Only the explicit refresh says what it did. A sync nobody asked for has nothing to report beyond
+	// the history it just put on screen.
+	if full {
+		return result.Sessions, "re-read " + plural(result.Stats.Parsed, "transcript")
+	}
+	return result.Sessions, ""
 }
 
 // harvested drops the cache's stat fields, which are an implementation detail of syncing rather than
@@ -210,28 +241,53 @@ func closures(cfg config.Config) []closure {
 	return closed
 }
 
-// refreshReview re-reads the history. The window and the query are answered from what is already
-// loaded, so this is only ever the explicit refresh.
-func (m Model) refreshReview() (Model, tea.Cmd) {
-	if m.review.load == nil {
+// refreshReview re-reads the history and sets the tab bar turning. The window and the query are
+// answered from what is already loaded, so this is only ever an explicit refresh or a return from a
+// suspension. A press while a read is already in flight is ignored rather than queued.
+func (m Model) refreshReview(full bool) (Model, tea.Cmd) {
+	if m.review.load == nil || m.review.syncing {
 		return m, nil
 	}
-	return m, m.review.load
+
+	m.review.syncing = true
+	m.progress = m.spinnerText()
+	return m, tea.Batch(reviewCmd(m.review.load, full), spinnerTick())
+}
+
+// reviewCmd is the history seam as a command, since the seam takes an argument and a tea.Cmd takes
+// none.
+func reviewCmd(load func(full bool) tea.Msg, full bool) tea.Cmd {
+	return func() tea.Msg { return load(full) }
 }
 
 // reviewLoaded takes a finished read, pulling the cursor back into range in case the history came
 // back shorter than the list was showing. The pane follows it, since a reload can move the row the
-// cursor was resting on.
+// cursor was resting on and can have grown the transcript it is showing.
 func (m Model) reviewLoaded(msg reviewLoadedMsg) (Model, tea.Cmd) {
 	m.review.sessions, m.review.closures, m.review.loadedAt = msg.sessions, msg.closures, msg.at
 	m.review.paths = msg.paths
+	m.review.syncing = false
+	m.progress = m.progressText()
+	if msg.note != "" {
+		m.hint = msg.note
+	}
+
+	// The pane is pointed at nothing before the cursor is resolved, so a refresh re-reads the transcript
+	// it is showing rather than standing on the turns a session had when it was first opened. The place
+	// in the read is kept across the re-read, since a transcript that grew is one being followed.
+	showing, top := m.review.previewId, m.review.previewTop
+	m.review.previewId = ""
 
 	tree := m.reviewTree(m.viewWidth())
 	m.review.cursor = tree.Cursor
-	return m.previewSync(tree)
+	m, cmd := m.previewSync(tree)
+	if m.review.previewId == showing {
+		m.review.previewTop = top
+	}
+	return m, cmd
 }
 
-// reviewKey handles the keys the chrome does not own while Review is the live tab. The actions are
+// reviewKey handles the keys the chrome does not own while Agents is the live tab. The actions are
 // not wired yet; they are bound in the key table, so they are silent rather than reported as unbound.
 func (m Model) reviewKey(pressed string) (Model, tea.Cmd, bool) {
 	tree := m.reviewTree(m.viewWidth())
@@ -261,7 +317,9 @@ func (m Model) reviewKey(pressed string) (Model, tea.Cmd, bool) {
 		m.prompt = prompt{kind: promptDate, label: "date", subject: "(YYYY-MM-DD)"}
 		return m, nil, true
 	case "r":
-		m, cmd := m.refreshReview()
+		// The refresh is full: the cache skips a transcript whose size and mtime have not moved, and the
+		// press is what someone reaches for when the history on screen and the one on disk disagree.
+		m, cmd := m.refreshReview(true)
 		return m, cmd, true
 	case "R":
 		return m.resumeSelected(tree)
@@ -314,7 +372,7 @@ func (m Model) resumed(msg resumedMsg) (Model, tea.Cmd) {
 		m.hint = fmt.Sprintf("resume failed: %v", msg.err)
 		return m, nil
 	}
-	return m.refreshReview()
+	return m.refreshReview(false)
 }
 
 // openSession opens the checkout the session under the cursor ran in, which is what a page-less tab

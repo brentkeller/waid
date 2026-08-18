@@ -75,7 +75,7 @@ func offline(m Model, result detect.Result) Model {
 	m.clock = func() time.Time { return scanNow }
 	m.loops.load = func() tea.Msg { return loopsLoadedMsg{at: scannedAt} }
 	m.scan.load = func() tea.Msg { return scanLoadedMsg{result: result, at: scannedAt} }
-	m.review.load = func() tea.Msg { return reviewLoadedMsg{at: scannedAt} }
+	m.review.load = func(bool) tea.Msg { return reviewLoadedMsg{at: scannedAt} }
 	return m
 }
 

@@ -141,6 +141,10 @@ type Model struct {
 	counts   [numTabs]int
 	progress string
 
+	// spinner is the frame the progress slot is showing. It is the root model's rather than a tab's,
+	// since detection and the history sync turn the same one.
+	spinner int
+
 	// filter is the query typed after `/`; filtering is true only while it is being edited, so the
 	// keys arriving in between are text rather than commands.
 	filter    string
@@ -204,7 +208,9 @@ func (m Model) Init() tea.Cmd {
 		cmds = append(cmds, m.scan.load, spinnerTick())
 	}
 	if m.review.load != nil {
-		cmds = append(cmds, m.review.load)
+		// The first history read is incremental: it re-parses the transcripts written since the last sync,
+		// which is what makes the tab open on the sessions run since a shell last ran a command.
+		cmds = append(cmds, reviewCmd(m.review.load, false))
 	}
 	return tea.Batch(cmds...)
 }
@@ -248,10 +254,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.copied(msg), nil
 	case spinnerTickMsg:
 		// The spinner stops with the work it is reporting, so nothing ticks while the app is idle.
-		if !m.scan.loading {
+		if m.progressText() == "" {
 			return m, nil
 		}
-		m.scan.spinner++
+		m.spinner++
 		m.progress = m.spinnerText()
 		return m, spinnerTick()
 	}

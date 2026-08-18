@@ -6,8 +6,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// promptKind is what an open prompt is collecting, and which write its answer makes. promptNone is
-// the zero value, so a Model with nothing to ask has no prompt.
+// promptKind is what an open prompt is collecting, and what its answer does — a write, for all but
+// promptDate, which moves the Review window instead. promptNone is the zero value, so a Model with
+// nothing to ask has no prompt.
 type promptKind int
 
 const (
@@ -16,6 +17,7 @@ const (
 	promptWaiting
 	promptNote
 	promptAdd
+	promptDate
 )
 
 // prompt is the inline input the footer takes text in. It holds the keyboard the way the filter does,
@@ -75,6 +77,8 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 		return m.addNote(answered.subject, value)
 	case promptAdd:
 		return m.addItem(answered.project, value)
+	case promptDate:
+		return m.pickDate(value), nil
 	}
 	return m, nil
 }

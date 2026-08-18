@@ -133,6 +133,17 @@ func LocalYmdISO(iso string) string {
 	return LocalYmd(parsed)
 }
 
+// ParseYmd reads a `YYYY-MM-DD` calendar date in local time. It is the inverse of LocalYmd, and
+// reports whether the text was a date at all — which is what DayBounds, being lenient about its
+// input, cannot say.
+func ParseYmd(ymd string) (time.Time, bool) {
+	parsed, err := time.ParseInLocation(ymdLayout, ymd, time.Local)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed, true
+}
+
 // DayBounds returns the half-open local-time window [start, end) covering one calendar day.
 func DayBounds(ymd string) (start, end time.Time) {
 	parts := strings.Split(ymd, "-")

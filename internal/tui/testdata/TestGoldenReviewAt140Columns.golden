@@ -1,7 +1,7 @@
                ╭────────╮
 │ Loops │ Scan │ Review │                                                                                                         ⠋ scanning
 ┴───────┴──────┴────────┴───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ‹today›  week  last week                                                                           4 sessions · 53 prompts · 1 item closed
+ ‹today›  yesterday  week  last week                                                                4 sessions · 53 prompts · 1 item closed
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▾ C:\dev\dr\devresults\devresults                                                                                    1 session · 28 prompts
    ▸ 09:10  Background workers speak the requester's language                                                                     28 prompts
@@ -21,4 +21,4 @@
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
- space preview · R resume in claude · o open repo · y copy id · ? keys
+ space preview · R resume · o open repo · y copy id · s range · d date · ? keys

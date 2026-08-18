@@ -164,13 +164,13 @@ func TestReviewRangeRowCyclesTheWindow(t *testing.T) {
 	m := reviewed(t, 140, reviewFixture())
 
 	view := plain(m.View())
-	for _, want := range []string{"‹today›", "week", "last week"} {
+	for _, want := range []string{"‹today›", "yesterday", "week", "last week"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the range row does not carry %q:\n%s", want, view)
 		}
 	}
 
-	week, cmd := press(t, m, "s")
+	week, cmd := press(t, m, "s", "s")
 	if cmd != nil {
 		t.Error("cycling the range issued a command, want the window moved over the loaded state")
 	}
@@ -641,4 +641,98 @@ func goldenReview(t *testing.T, width int) {
 
 	m, _ := press(t, reviewed(t, width, reviewFixture()), "enter")
 	teatest.RequireEqualOutput(t, []byte(plain(m.View())))
+}
+
+// yesterdayFixture is the history with a session on the day before the pinned instant, which neither
+// the fixture's day window nor its week window covers.
+func yesterdayFixture() reviewLoadedMsg {
+	waid := `C:\dev\waid`
+
+	msg := reviewFixture()
+	msg.sessions = append(msg.sessions, sessions.Session{
+		Id: "017516d6-7c60-4081-961e-f2120aa77777", Title: "Fold the log into state",
+		Project: &waid, Branch: text("tui"),
+		Started: stamp(16, 20, 0), Ended: stamp(16, 21, 15), Prompts: 5,
+	})
+	return msg
+}
+
+// Yesterday is a segment of its own rather than something to type, since it is the day asked for
+// most often after today.
+func TestReviewRangeRowCoversYesterday(t *testing.T) {
+	m, _ := press(t, reviewed(t, 140, yesterdayFixture()), "s")
+
+	view := plain(m.View())
+	if !strings.Contains(view, "‹yesterday›") {
+		t.Errorf("the range row does not mark yesterday as selected:\n%s", view)
+	}
+	if !strings.Contains(view, "1 session · 5 prompts") {
+		t.Errorf("yesterday does not total the session it holds:\n%s", view)
+	}
+	if strings.Contains(view, "4 sessions") {
+		t.Errorf("today's sessions are counted in yesterday's window:\n%s", view)
+	}
+}
+
+// d takes a calendar day at the footer's prompt, which is how a window older than last week is
+// reached at all.
+func TestReviewPicksACalendarDayFromThePrompt(t *testing.T) {
+	m := reviewed(t, 140, reviewFixture())
+	m, _ = press(t, m, "d", "2", "0", "2", "6", "-", "0", "8", "-", "1", "3", "enter")
+
+	if m.review.window != rangeDate {
+		t.Fatalf("a picked date left the window on %q, want the date segment", reviewRangeLabels[m.review.window])
+	}
+	view := plain(m.View())
+	if !strings.Contains(view, "‹2026-08-13›") {
+		t.Errorf("the range row does not carry the picked date:\n%s", view)
+	}
+	if !strings.Contains(view, "1 session · 7 prompts") {
+		t.Errorf("the picked day does not total the session it holds:\n%s", view)
+	}
+	if strings.Contains(view, "Wire -i into the CLI") {
+		t.Errorf("a session from another day is listed under the picked date:\n%s", view)
+	}
+}
+
+// A mistyped day leaves the window where it was: silently showing an empty window would read as a
+// day with no work in it.
+func TestReviewRejectsWhatIsNotACalendarDay(t *testing.T) {
+	m := reviewed(t, 140, reviewFixture())
+	m, _ = press(t, m, "d", "n", "o", "p", "e", "enter")
+
+	if m.review.window != rangeToday {
+		t.Errorf("a mistyped date moved the window to %q, want it left on today", reviewRangeLabels[m.review.window])
+	}
+	if !strings.Contains(m.hint, "YYYY-MM-DD") {
+		t.Errorf("the footer hint after a mistyped date is %q, want the format it expected", m.hint)
+	}
+	if strings.Contains(plain(m.View()), "‹nope›") {
+		t.Errorf("the range row grew a segment for a date that was rejected:\n%s", plain(m.View()))
+	}
+}
+
+// The picked date stays on the row once it has been picked, so s can move away from it and back.
+func TestReviewCyclesThroughThePickedDate(t *testing.T) {
+	m := reviewed(t, 140, reviewFixture())
+	m, _ = press(t, m, "d", "2", "0", "2", "6", "-", "0", "8", "-", "1", "3", "enter")
+
+	m, _ = press(t, m, "s")
+	if m.review.window != rangeToday {
+		t.Fatalf("s left the range on %q, want it wrapped round to today", reviewRangeLabels[m.review.window])
+	}
+
+	m, _ = press(t, m, "s", "s", "s")
+	view := plain(m.View())
+	if !strings.Contains(view, "‹last week›") {
+		t.Fatalf("s did not walk the fixed windows in order:\n%s", view)
+	}
+
+	m, _ = press(t, m, "s")
+	if m.review.window != rangeDate {
+		t.Errorf("s left the range on %q, want the picked date after last week", reviewRangeLabels[m.review.window])
+	}
+	if !strings.Contains(plain(m.View()), "‹2026-08-13›") {
+		t.Errorf("the picked date is not marked as selected after cycling back to it:\n%s", plain(m.View()))
+	}
 }

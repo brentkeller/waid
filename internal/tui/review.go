@@ -26,11 +26,15 @@ type reviewRange int
 
 const (
 	rangeToday reviewRange = iota
+	rangeYesterday
 	rangeWeek
 	rangeLastWeek
+	// rangeDate is the day typed at the prompt. It is a segment of the row only once a day has been
+	// picked, so the row carries no empty slot on a tab nobody has typed a date into.
+	rangeDate
 )
 
-var reviewRangeLabels = [...]string{"today", "week", "last week"}
+var reviewRangeLabels = [...]string{"today", "yesterday", "week", "last week"}
 
 // Column widths for a session row. The start time and the prompt count are fixed by their data; the
 // title takes what is left and is the first thing squeezed, since the fold above it already says
@@ -99,8 +103,10 @@ type reviewModel struct {
 	paths    map[string]string
 	loadedAt time.Time
 
-	// window is the segment of the range row that is selected.
+	// window is the segment of the range row that is selected, and date is the day typed at the prompt.
+	// The date outlives a move away from its segment, so the row can be cycled back to it.
 	window reviewRange
+	date   string
 
 	cursor   int
 	expanded map[string]bool
@@ -232,8 +238,11 @@ func (m Model) reviewKey(pressed string) (Model, tea.Cmd, bool) {
 		m, cmd := m.previewSync(tree)
 		return m, cmd, true
 	case "s":
-		m.review.window = (m.review.window + 1) % reviewRange(len(reviewRangeLabels))
+		m.review.window = (m.review.window + 1) % reviewRange(len(m.reviewSegments()))
 		m.review.cursor = 0
+		return m, nil, true
+	case "d":
+		m.prompt = prompt{kind: promptDate, label: "date", subject: "(YYYY-MM-DD)"}
 		return m, nil, true
 	case "r":
 		m, cmd := m.refreshReview()
@@ -429,13 +438,45 @@ func (m Model) previewLoaded(msg previewLoadedMsg) Model {
 func (m Model) reviewWindow() (start, end time.Time) {
 	now := m.now()
 	switch m.review.window {
+	case rangeYesterday:
+		return render.DayBounds(render.LocalYmd(now.AddDate(0, 0, -1)))
 	case rangeWeek:
 		return render.WeekBounds(now, 0)
 	case rangeLastWeek:
 		return render.WeekBounds(now, -1)
-	default:
-		return render.DayBounds(render.LocalYmd(now))
+	case rangeDate:
+		if m.review.date != "" {
+			return render.DayBounds(m.review.date)
+		}
 	}
+	return render.DayBounds(render.LocalYmd(now))
+}
+
+// reviewSegments are the range row's labels: the fixed windows, and the picked day after them once
+// one has been typed. The row's length is what s cycles over, so a tab with no date picked cycles
+// the four fixed windows alone.
+func (m Model) reviewSegments() []string {
+	segments := slices.Clone(reviewRangeLabels[:])
+	if m.review.date != "" {
+		segments = append(segments, m.review.date)
+	}
+	return segments
+}
+
+// pickDate moves the window onto a typed calendar day. A day the layout does not accept leaves the
+// window where it was: an empty window would read as a day with no work in it rather than as a
+// mistyped date (§4).
+func (m Model) pickDate(typed string) Model {
+	parsed, ok := render.ParseYmd(typed)
+	if !ok {
+		m.hint = fmt.Sprintf("%q is not a date — use YYYY-MM-DD", typed)
+		return m
+	}
+
+	m.review.date = render.LocalYmd(parsed)
+	m.review.window = rangeDate
+	m.review.cursor = 0
+	return m
 }
 
 // reviewVisible are the sessions the list is showing: the window and the typed query applied over
@@ -811,7 +852,7 @@ func cut(lines []string, height int, theme Theme) []string {
 
 // reviewHeader is the segmented range row with the window's totals opposite it (§1.3).
 func (m Model) reviewHeader(width int) string {
-	row, rowWidth := m.segmentRow(reviewRangeLabels[:], int(m.review.window))
+	row, rowWidth := m.segmentRow(m.reviewSegments(), int(m.review.window))
 	return m.headerLine(row, rowWidth, m.reviewTotals(), width)
 }
 

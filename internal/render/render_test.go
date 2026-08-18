@@ -244,3 +244,24 @@ func TestWeekBoundsConvertsAwayFromTheHeldZone(t *testing.T) {
 		t.Fatalf("start = %q, want %q", got, "2026-08-10")
 	}
 }
+
+func TestParseYmdReadsALocalCalendarDate(t *testing.T) {
+	parsed, ok := ParseYmd("2026-08-14")
+	if !ok {
+		t.Fatal("ParseYmd(a well-formed date) reported failure")
+	}
+	if got := LocalYmd(parsed); got != "2026-08-14" {
+		t.Errorf("ParseYmd(%q) = %q, want %q", "2026-08-14", got, "2026-08-14")
+	}
+	if parsed.Location() != time.Local {
+		t.Errorf("ParseYmd read the date in %v, want the local zone", parsed.Location())
+	}
+}
+
+func TestParseYmdRejectsWhatIsNotACalendarDate(t *testing.T) {
+	for _, typed := range []string{"", "yesterday", "2026-8-14", "14-08-2026", "2026-13-01", "2026-02-30"} {
+		if _, ok := ParseYmd(typed); ok {
+			t.Errorf("ParseYmd(%q) reported success, want a rejection", typed)
+		}
+	}
+}

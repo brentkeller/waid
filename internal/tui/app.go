@@ -63,7 +63,7 @@ var tabTitles = [numTabs]string{"Loops", "Scan", "Review"}
 var tabFooters = [numTabs]string{
 	tabLoops:  "x done · w waiting · e edit · n note · a add · / filter · s status · ? keys",
 	tabScan:   "p promote · d dismiss · o open in browser · r refresh · / filter · ? keys",
-	tabReview: "space preview · R resume in claude · o open repo · y copy id · ? keys",
+	tabReview: "space preview · R resume · o open repo · y copy id · s range · d date · ? keys",
 }
 
 // tabEmpty is what a tab says when it has nothing to show.
@@ -118,6 +118,7 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"R"}, "R", "resume in claude"},
 		{[]string{"o"}, "o", "open repo"},
 		{[]string{"y"}, "y", "copy the session id"},
+		{[]string{"d"}, "d", "pick a calendar day"},
 		{[]string{"s"}, "s", "cycle the range"},
 	},
 }

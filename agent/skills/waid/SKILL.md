@@ -25,10 +25,11 @@ command.**
 
 | Read-only — run freely | Writes — needs approval |
 | --- | --- |
-| `loops` `scan` `list` `show` `today` `week` `doctor` `sync` | `add` `done` `reopen` `note` `promote` `dismiss` |
+| `loops` `scan` `list` `show` `today` `week` `transcript` `doctor` `sync` | `add` `done` `reopen` `note` `promote` `dismiss` `undismiss` |
 
-`promote` is a write: it appends an `add` and a `dismiss`. `sync` only rebuilds the disposable
-cache, so it counts as a read.
+`promote` is a write: it appends an `add` and a `dismiss`. `undismiss` is one as well, and only
+accepts a key that is dismissed now. `sync` only rebuilds the disposable cache, so it counts as a
+read.
 
 Every flow has the same shape: gather with read-only commands, present a **numbered** proposal,
 stop, and run only what comes back approved. Silence is not approval, and neither is a previous
@@ -100,5 +101,10 @@ title, project or tag, use their version verbatim.
 - **Titles** are one line saying what needs doing, with no `TODO:` prefix and no date. Add
   `--tag bug` for a defect and `--waiting-on <who>` when the block is a person, which sets the
   item's status to `waiting`.
+- **`waid ui` is the user's, not yours.** The app owns the terminal for as long as it runs, and
+  with stdout redirected it exits 1 rather than falling back to text, so never launch it. Point
+  the user at it when they would rather do a pass themselves than read a numbered list: its Repos
+  tab promotes and dismisses signals with `p` and `d`, and its Loops tab closes, retitles and
+  refiles items.
 - If `waid` is not on `PATH`, every command works as `go run ./cmd/waid <command>` from
   `C:\dev\waid`.

@@ -49,7 +49,7 @@ installed path stays proven.
 | `waid dismiss <key>` | Hide a detected signal without tracking it. |
 | `waid undismiss <key>` | Restore a dismissed signal so detection reports it again. |
 | `waid doctor` | Validate config, log integrity, gh auth, cache freshness, repo counts. |
-| `waid ui` | The terminal app: loops, scan and review in one screen. |
+| `waid ui` | The terminal app: loops, repos and agents in one screen. |
 
 ### Global flags
 
@@ -131,7 +131,9 @@ deleted is a user error too.
 
 The same data the commands print, in a long-running screen that folds, filters, and writes as you
 go. It runs on the alternate screen and needs a real terminal: with stdout redirected it is a user
-error rather than a fallback to text.
+error rather than a fallback to text. The window title follows the live tab — `waid · Loops`,
+`waid · Repos`, `waid · Agents` — so the app is picked out of a row of terminal tabs by what it
+is showing.
 
 ```
 ╭───────────╮
@@ -139,7 +141,7 @@ error rather than a fallback to text.
 ┴───────────┴──────────┴────────┴─────────────────────────────────────────────────────────
 ```
 
-Three tabs, switched with `1` `2` `3` or `tab`:
+Three tabs, switched with `1` `2` `3` or `tab` / `shift-tab`:
 
 | Tab | Shows | Acts |
 | --- | --- | --- |

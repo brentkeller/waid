@@ -218,6 +218,24 @@ defaults below; unknown keys are reported by `waid doctor`.
 
 Discovery skips `node_modules`, `bin`, `obj`, and `.git`, and never descends into a repo.
 
+## Agent integration
+
+`agent/` holds what agents read, and neither file is used from this repo — both are vendored out
+to `~/.claude` and consumed there.
+
+| Path | Consumed as | Vendored by |
+| --- | --- | --- |
+| `agent/skills/waid/SKILL.md` | `/waid` — wrap up, triage, review the week | the `skills` CLI |
+| `agent/CLAUDE.snippet.md` | `~/.claude/WAID.md`, imported by `CLAUDE.md` | a copy |
+
+Both are pulled from a pushed commit rather than a checkout, so a change to either has to land
+here before it reaches a session. `brentkeller/dotfiles` is what pulls them, with `just waid`,
+and installs them with `just install`.
+
+`CLAUDE.snippet.md` loads in every session on the machine, so it stays around five lines. The
+last of them — record only what outlives the session — is what keeps the log a list of open loops
+instead of a transcript.
+
 ## Development
 
 ```

@@ -138,3 +138,7 @@ func GroupByProject(items []events.Item) []Group {
 }
 
 func ptr(value string) *string { return &value }
+
+// IsAbsolute reports whether a value is shaped like a path rather than a name: a Windows
+// drive-letter or a POSIX absolute path.
+func IsAbsolute(value string) bool { return absolute.MatchString(strings.TrimSpace(value)) }

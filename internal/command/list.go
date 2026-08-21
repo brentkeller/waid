@@ -138,10 +138,15 @@ func renderList(data ListResult, ctx *cli.Ctx) string {
 		return "no items"
 	}
 
+	return strings.Join(treeLines(data.roots, ctx.Now), "\n")
+}
+
+// treeLines renders a whole forest, shared with waid loops so the two nest identically.
+func treeLines(roots []tree.Node, now time.Time) []string {
 	lines := []string{}
 	nested := false
-	for _, root := range data.roots {
-		block := TreeLines(root, ctx.Now, 0)
+	for _, root := range roots {
+		block := TreeLines(root, now, 0)
 		// A branch is given air on either side of it; a run of bare top-level rows is not, since
 		// blank lines between single rows is the wall of text the tree replaces.
 		if len(lines) > 0 && (len(block) > 1 || nested) {
@@ -150,7 +155,7 @@ func renderList(data ListResult, ctx *cli.Ctx) string {
 		lines = append(lines, block...)
 		nested = len(block) > 1
 	}
-	return strings.Join(lines, "\n")
+	return lines
 }
 
 // TreeLines renders one node and everything under it, a level of indent per generation. A synthetic

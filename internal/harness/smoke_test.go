@@ -120,21 +120,17 @@ func TestSmokeAddedItemComesBackFromLoops(t *testing.T) {
 		t.Fatalf("loops exited %d: %s", loops.Code, loops.Stderr)
 	}
 	var report struct {
-		Groups []struct {
-			Items []struct {
-				Title string `json:"title"`
-			} `json:"items"`
-		} `json:"groups"`
+		Items []struct {
+			Title string `json:"title"`
+		} `json:"items"`
 	}
 	if err := json.Unmarshal([]byte(loops.Stdout), &report); err != nil {
 		t.Fatalf("decoding loops: %v\n%s", err, loops.Stdout)
 	}
 
 	titles := []string{}
-	for _, group := range report.Groups {
-		for _, entry := range group.Items {
-			titles = append(titles, entry.Title)
-		}
+	for _, entry := range report.Items {
+		titles = append(titles, entry.Title)
 	}
 	if len(titles) != 1 || titles[0] != "ship the README" {
 		t.Errorf("loops reported %v, want [ship the README]", titles)

@@ -43,7 +43,8 @@ func runScan(ctx *cli.Ctx) (ScanResult, error) {
 	state := events.Load(ctx.Cfg.EventsPath)
 	detected := detect.Signals(ctx.Cfg, detectionDeps(ctx, state))
 
-	path, err := resolveSignalProject(ctx, state, detected.Signals)
+	requested, _ := ctx.Flags.String("project")
+	path, err := resolveSignalPath(ctx, state, detected.Signals, requested)
 	if err != nil {
 		return ScanResult{}, err
 	}
@@ -66,18 +67,17 @@ func detectionDeps(ctx *cli.Ctx, state events.State) detect.Deps {
 	}
 }
 
-// resolveSignalProject resolves -p against the known projects extended with the repos detection just
-// found. A repo waid has never recorded an item or session against is still a legitimate target for
-// -p, which is why this runs after detection rather than before it.
-func resolveSignalProject(ctx *cli.Ctx, state events.State, signals []detect.Signal) (*string, error) {
+// resolveSignalPath resolves a requested path — scan's -p, loops' --origin — against the known
+// projects extended with the repos detection just found. A repo waid has never recorded an item or
+// session against is still a legitimate target, which is why this runs after detection rather than
+// before it.
+func resolveSignalPath(ctx *cli.Ctx, state events.State, signals []detect.Signal, requested string) (*string, error) {
 	known := project.KnownProjects(state.Items, sessionProjects(ctx.Sessions))
 	for _, signal := range signals {
 		if signal.Project != nil && !slices.Contains(known, *signal.Project) {
 			known = append(known, *signal.Project)
 		}
 	}
-
-	requested, _ := ctx.Flags.String("project")
 	return project.Resolve(requested, known, ctx.Cwd)
 }
 

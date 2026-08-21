@@ -202,13 +202,13 @@ func TestPromoteWritesAnAddThenADismissAndMovesTheSignalIntoLoops(t *testing.T) 
 
 	_, loops := loopsJson(t, home, seams)
 	assertKeys(t, loops.itemIds(), []string{record.Id})
-	projects := []string{}
-	for _, group := range loops.Groups {
-		if group.Project != nil {
-			projects = append(projects, *group.Project)
+	origins := []string{}
+	for _, entry := range loops.Items {
+		if entry.Origin != nil {
+			origins = append(origins, *entry.Origin)
 		}
 	}
-	assertKeys(t, projects, []string{repo})
+	assertKeys(t, origins, []string{repo})
 	if got := item(t, home, record.Id).Tags; len(got) != 1 || got[0] != "promoted" {
 		t.Errorf("the promoted item carries tags %v, want [promoted]", got)
 	}

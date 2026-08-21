@@ -65,6 +65,19 @@ func loopsFixture() loopsLoadedMsg {
 	}
 }
 
+// loopsNested is the §4 fixture with one row pushed a level deeper, so the log nests three deep:
+// 4h2k hangs under nktt, which hangs under vq2n. Depth is where the indent, the fold counts and the
+// (unassigned) rule read differently from a flat level, and the fixture beside it stops at two.
+func loopsNested() loopsLoadedMsg {
+	msg := loopsFixture()
+	for i := range msg.items {
+		if msg.items[i].Id == "4h2k" {
+			msg.items[i].Parent = text("nktt")
+		}
+	}
+	return msg
+}
+
 // looped is a model sized, left on Loops, and holding a finished read of the log.
 func looped(t *testing.T, width int, msg loopsLoadedMsg) Model {
 	t.Helper()
@@ -708,4 +721,37 @@ func goldenLoops(t *testing.T, width int) {
 	t.Helper()
 
 	teatest.RequireEqualOutput(t, []byte(plain(looped(t, width, loopsFixture()).View())))
+}
+
+// The same two widths over a log that nests three deep, since the fixture above stops at two and a
+// third level is where the indent, a fold hanging under a fold and the (unassigned) rule applied to
+// an inner level are all first visible (§9).
+func TestGoldenLoopsNestedAt80Columns(t *testing.T) { goldenNested(t, 80) }
+
+func TestGoldenLoopsNestedAt140Columns(t *testing.T) { goldenNested(t, 140) }
+
+func goldenNested(t *testing.T, width int) {
+	t.Helper()
+
+	teatest.RequireEqualOutput(t, []byte(plain(looped(t, width, loopsNested()).View())))
+}
+
+// A filtered tree, where the one match is a leaf three levels down: the ancestors it hangs under are
+// kept as the path to it, and the branches holding no match are dropped whole (§4).
+func TestGoldenLoopsFilteredAt80Columns(t *testing.T) { goldenFiltered(t, 80) }
+
+func TestGoldenLoopsFilteredAt140Columns(t *testing.T) { goldenFiltered(t, 140) }
+
+func goldenFiltered(t *testing.T, width int) {
+	t.Helper()
+
+	m, _ := press(t, looped(t, width, loopsNested()), "/", "m", "i", "g", "r", "a", "t", "i", "o", "n", "enter")
+	teatest.RequireEqualOutput(t, []byte(plain(m.View())))
+}
+
+// A deep tree at the narrow width, which is the case the indent cap exists for: past a few levels
+// the step stops growing so the title column survives a branch deeper than 80 columns has room to
+// walk. Only the narrow width is snapshotted — a cap that holds at 80 is not tested again at 140.
+func TestGoldenLoopsDeepAt80Columns(t *testing.T) {
+	teatest.RequireEqualOutput(t, []byte(plain(looped(t, 80, loopsChain(8)).View())))
 }

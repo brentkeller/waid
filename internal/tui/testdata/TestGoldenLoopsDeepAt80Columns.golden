@@ -1,0 +1,24 @@
+╭──────────╮
+│ Loops  8 │ Repos │ Agents │                                         ⠋ scanning
+┴──────────┴───────┴────────┴───────────────────────────────────────────────────
+ ‹open›  waiting  done  all                                             8 items
+────────────────────────────────────────────────────────────────────────────────
+ ▾ level 0                                                                1 open
+   ▾ level 1                                                              1 open
+     ▾ level 2                                                            1 open
+       ▾ level 3                                                          1 open
+         ▾ level 4                                                        1 open
+         ▾ level 5                                                        1 open
+         ▾ level 6                                                        1 open
+           n007  open  level 7                                                4h
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+ n000 · (no project) · open · created 4h ago
+
+ level 0
+────────────────────────────────────────────────────────────────────────────────
+
+ x done · w waiting · e edit · m move · n note · a add · / filter · ? keys

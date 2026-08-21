@@ -1,0 +1,24 @@
+╭──────────╮
+│ Loops  6 │ Repos │ Agents │                                                                                                     ⠋ scanning
+┴──────────┴───────┴────────┴───────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ‹open›  waiting  done  all                                                                                                         6 items
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▾ Localized notifications                                                                                                            2 open
+   ▾ Background workers speak the requester's language                                                                                1 open
+       4h2k  waiting  Deploy blocked until the migration is approved                                                             @maria   5d
+   ▾ (unassigned)                                                                                                                     1 open
+       sga9  open     Design template + args persistence for localized persisted strings                                                 19m
+ ▾ (unassigned)                                                                                                                       2 open
+     9xz1  open     TUI design spike                                                                                                      1h
+     p0rt  open     Read the port design once more                                                                                        2h
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ vq2n · devresults · open · created 3d ago
+
+ Localized notifications
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+ x done · w waiting · e edit · m move · n note · a add · / filter · s status · ? keys

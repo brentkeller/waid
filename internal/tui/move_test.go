@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/exp/teatest"
+
 	"github.com/brentkeller/waid/internal/tree"
 )
 
@@ -25,12 +27,9 @@ func filing(t *testing.T) (Model, string) {
 	t.Helper()
 
 	m, path := working(t)
-	for i := range m.loops.items {
-		if m.loops.items[i].Id == "4h2k" {
-			m.loops.items[i].Parent = text("nktt")
-		}
-	}
-	return m, path
+
+	loaded, _ := m.Update(loopsNested())
+	return loaded.(Model), path
 }
 
 // parentOf is the parent the loaded copy of an item holds, which is what says a move landed in the
@@ -272,5 +271,54 @@ func TestUndoOfAMoveRestoresTheParentTheItemHeld(t *testing.T) {
 
 	if got := parentOf(t, m, "4h2k"); got == nil || *got != "nktt" {
 		t.Errorf("the undone item sits under %v, want it back under nktt", got)
+	}
+}
+
+// A golden of the picker mid-move at the two widths §8 names: the header naming what is being moved
+// and what comes with it, the synthetic top-level row, the folds opened along the path to the
+// current parent, and the lifted subtree absent from what is left (§9).
+func TestGoldenMoveAt80Columns(t *testing.T) { goldenMove(t, 80) }
+
+func TestGoldenMoveAt140Columns(t *testing.T) { goldenMove(t, 140) }
+
+func goldenMove(t *testing.T, width int) {
+	t.Helper()
+
+	// Two rows down is 4h2k, the deepest row of the three-deep fixture.
+	m, _ := press(t, looped(t, width, loopsNested()), "j", "j", "m")
+	teatest.RequireEqualOutput(t, []byte(plain(m.View())))
+}
+
+// The other direction of the same pair: an item moved off the top level is put back on it, which the
+// inverse event carries as an explicit null. An update that omitted the key would leave the item
+// under its new parent, so the top level is the half worth pinning separately.
+func TestUndoOfAMoveOffTheTopLevelPutsItBack(t *testing.T) {
+	m, path := filing(t)
+
+	// G is the last row of the list, which the fixture leaves at the top level; j off the synthetic
+	// row the picker opens on is the branch's root.
+	m, _ = press(t, m, "G", "m")
+	if got := focused(t, m); got != moveTopKey {
+		t.Fatalf("the picker opened on %q, want the top-level row", got)
+	}
+
+	m, _ = press(t, m, "j", "enter")
+	if got := parentOf(t, m, "p0rt"); got == nil || *got != "vq2n" {
+		t.Fatalf("the item sits under %v, want it moved under vq2n", got)
+	}
+
+	m, _ = press(t, m, "u")
+
+	ts := loopsStamped()
+	assertLog(t, path, []string{
+		`{"ts":"` + ts + `","ev":"update","id":"p0rt","parent":"vq2n"}`,
+		`{"ts":"` + ts + `","ev":"update","id":"p0rt","parent":null}`,
+	})
+
+	if got := parentOf(t, m, "p0rt"); got != nil {
+		t.Errorf("the undone item sits under %q, want it back at the top level", *got)
+	}
+	if view := plain(m.View()); !strings.Contains(view, "filed p0rt  "+topLevel) {
+		t.Errorf("the undo receipt does not name the top level:\n%s", view)
 	}
 }

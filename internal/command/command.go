@@ -17,6 +17,7 @@ var Registry = cli.Registry{
 	"doctor":     cli.Module[DoctorResult]{Run: runDoctor, Render: renderDoctor},
 	"add":        cli.Module[AddResult]{Run: runAdd, Render: renderAdd},
 	"done":       cli.Module[DoneResult]{Run: runDone, Render: renderDone},
+	"move":       cli.Module[MoveResult]{Run: runMove, Render: renderMove},
 	"reopen":     cli.Module[ReopenResult]{Run: runReopen, Render: renderReopen},
 	"note":       cli.Module[NoteResult]{Run: runNote, Render: renderNote},
 	"list":       cli.Module[ListResult]{Run: runList, Render: renderList},

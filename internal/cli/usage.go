@@ -13,6 +13,7 @@ Usage: waid <command> [options]
   waid list [--status s] [--project p] [--tag t] [--all]
   waid add "<title>" [-p <project>] [--waiting-on <who>] [--tag <t>] [--session <id>]
   waid done <id>                      waid reopen <id>
+  waid move <id> [-p <parent>|--top]  Refile an item under a parent, or to the top level
   waid note <id> "<text>"
   waid show <id>                      Full item with notes and history
   waid transcript <id>                A session's turns, oldest first

@@ -6,6 +6,9 @@ import (
 	"github.com/brentkeller/waid/internal/detect"
 	"github.com/brentkeller/waid/internal/events"
 	"github.com/brentkeller/waid/internal/sessions"
+	// The Loops rows are a Tree[T] the writes take as a parameter named tree, so the package that
+	// answers questions about the item hierarchy is aliased out of that name's way.
+	itemtree "github.com/brentkeller/waid/internal/tree"
 )
 
 // The writes made against items: the four Loops binds to the row under the cursor — close an item,
@@ -26,6 +29,12 @@ func (m Model) doneSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
 	// line and a receipt for nothing (§4).
 	if item.Status == events.StatusDone {
 		m.hint = item.Id + " is already closed"
+		return m, nil, true
+	}
+	// A heading closes only once the work beneath it is finished (§5). The guard is the one `waid
+	// done` calls, so the two surfaces cannot disagree about when that is.
+	if err := itemtree.GuardClose(events.State{Items: m.loops.items}, item.Id); err != nil {
+		m.hint = err.Error()
 		return m, nil, true
 	}
 

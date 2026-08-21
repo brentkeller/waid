@@ -5,6 +5,7 @@ import (
 
 	"github.com/brentkeller/waid/internal/cli"
 	"github.com/brentkeller/waid/internal/events"
+	"github.com/brentkeller/waid/internal/tree"
 )
 
 // DoneResult is the closed item, echoed back so --json callers need no follow-up read.
@@ -16,8 +17,14 @@ type DoneResult struct {
 }
 
 func runDone(ctx *cli.Ctx) (DoneResult, error) {
-	item, err := targetItem(ctx, "done")
+	state := events.Load(ctx.Cfg.EventsPath)
+	item, err := targetItemIn(state, ctx, "done")
 	if err != nil {
+		return DoneResult{}, err
+	}
+	// A heading closes only once the work beneath it is finished (§5). The guard is shared with the
+	// app so the two surfaces cannot disagree about when that is.
+	if err := tree.GuardClose(state, item.Id); err != nil {
 		return DoneResult{}, err
 	}
 

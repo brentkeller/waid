@@ -45,9 +45,9 @@ func requiredId(ctx *cli.Ctx, command string) (string, error) {
 	return id, nil
 }
 
-// requireItem looks an item up by id, rejecting the input when the id is unknown.
-func requireItem(ctx *cli.Ctx, id string) (events.Item, error) {
-	item, found := events.Load(ctx.Cfg.EventsPath).Find(id)
+// requireItem looks an item up in a folded log, rejecting the input when the id is unknown.
+func requireItem(state events.State, id string) (events.Item, error) {
+	item, found := state.Find(id)
 	if !found {
 		return events.Item{}, errs.Userf("unknown item id: %s", id)
 	}
@@ -56,9 +56,15 @@ func requireItem(ctx *cli.Ctx, id string) (events.Item, error) {
 
 // targetItem resolves the item a mutation taking nothing but an id operates on.
 func targetItem(ctx *cli.Ctx, command string) (events.Item, error) {
+	return targetItemIn(events.Load(ctx.Cfg.EventsPath), ctx, command)
+}
+
+// targetItemIn is targetItem against a log the caller has already folded, for the mutations that
+// ask the log a further question about the item before writing.
+func targetItemIn(state events.State, ctx *cli.Ctx, command string) (events.Item, error) {
 	id, err := requiredId(ctx, command)
 	if err != nil {
 		return events.Item{}, err
 	}
-	return requireItem(ctx, id)
+	return requireItem(state, id)
 }

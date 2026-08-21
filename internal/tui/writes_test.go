@@ -499,3 +499,32 @@ func TestCtrlUClearsAnAddInProgress(t *testing.T) {
 		t.Errorf("ctrl-u left %q in the add, want it emptied", m.prompt.value)
 	}
 }
+
+// x obeys the same guard `waid done` does: a heading with open work beneath it does not close, and
+// the footer says what is holding it open (§5).
+func TestDoneRefusesAnItemWithOpenDescendants(t *testing.T) {
+	msg := loopsFixture()
+	child := msg.items[3]
+	child.Parent = text(msg.items[0].Id)
+	msg.items[3] = child
+
+	m := looped(t, 140, msg)
+	m.loops.load = func() tea.Msg { return msg }
+
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	m.opts.Cfg.EventsPath = path
+
+	m, _ = press(t, m, "j")
+	if item, ok := m.loopsTree(m.viewWidth()).SelectedItem(); !ok || item.Id != msg.items[0].Id {
+		t.Fatalf("the cursor is on %v, want the parent %s", item, msg.items[0].Id)
+	}
+
+	m, _ = press(t, m, "x")
+
+	if log := written(t, path); len(log) != 0 {
+		t.Errorf("x on a parent with open work wrote %v", log)
+	}
+	if !strings.Contains(m.hint, "cannot close "+msg.items[0].Id) {
+		t.Errorf("hint = %q, want it to refuse the close", m.hint)
+	}
+}

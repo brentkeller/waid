@@ -28,7 +28,7 @@ func runNote(ctx *cli.Ctx) (NoteResult, error) {
 		return NoteResult{}, errs.Userf("note requires text")
 	}
 
-	item, err := requireItem(ctx, id)
+	item, err := requireItem(events.Load(ctx.Cfg.EventsPath), id)
 	if err != nil {
 		return NoteResult{}, err
 	}

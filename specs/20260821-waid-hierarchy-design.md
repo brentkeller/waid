@@ -226,14 +226,66 @@ everything, because its headings are items that get noted, tagged and closed.
 `Expanded map[string]bool` generalises untouched — keyed by item id for Loops, by path for the other
 two.
 
-On Loops, `P` keeps its key and changes what it searches: titles, not paths. `promptProject` becomes
-`promptParent`, and `refile.go` keeps its shape — `projectCandidates()` returns nodes,
-`chosenProject` becomes `chosenParent` and gains the cycle check. `h` and `l` collapse and expand;
-`enter` stays toggle. Undo pushes an inverse `ParentEvent` carrying the prior parent, as `undoRefile`
-does now.
-
 Indent is capped past a few levels, so a deep branch cannot squeeze the title column to nothing on a
 narrow terminal.
+
+### 7.1 Moving is navigation, not typing
+
+`P`, `promptProject` and `promptParent` are all deleted. The tree is already on screen, and making
+someone type a title they can see is worse than letting them point at it.
+
+`m` lifts the item under the cursor — and its descendants — out of the tree. What remains is the tree
+*as it will be after the move*, navigated with the ordinary keys. `enter` drops, `esc` cancels.
+
+```
+ moving  c3  fix N+1 in importer  + 2 children        esc cancels · enter drops
+────────────────────────────────────────────────────────────────────────────────
+     ── top level ──
+   ▾ DevResults                                     4 open
+     ▸ Bulk imports → background worker             1 open
+ › ▸ Search rewrite                                 1 open
+   ▸ waid                                           3 open
+```
+
+Lifting the subtree out is what makes this safe rather than merely convenient: **the app never has to
+reject a move, because the invalid destinations are not on screen to choose.** A node cannot be
+dropped inside itself when its own descendants have left the tree with it. The `errs.UserError` in §6
+remains for the CLI, where a fragment can still name a descendant.
+
+The rest follows from that:
+
+- **Every real row is a target, leaves included.** Dropping onto a leaf makes it a parent. That is not
+  how tiers are normally created (§7.2) but it is a coherent thing to do and there is no reason to
+  forbid it.
+- **`(unassigned)` headings are not targets**, as everywhere else. Dropping "into unassigned" is
+  dropping onto that level's parent, which is already a row.
+- **A synthetic `── top level ──` row** is pinned above the tree, in move mode only. The roots are
+  items, so without it there is no row meaning "no parent" — and a dedicated key would be one more
+  thing to know for a destination the eye can already find.
+- **Folds start collapsed** except along the path to the item's current parent. Any tree worth
+  building then fits one screen as roots-plus-one-branch, which is what keeps navigation cheap enough
+  that no search is needed. `h`/`l` expand along the way; `enter` cannot toggle here because it
+  commits.
+- **The cursor opens on the item's current parent**, so an immediate `enter` is a no-op rather than a
+  surprise, and a nudge to a sibling project is one keystroke.
+- **Undo** pushes an inverse `ParentEvent` carrying the prior parent, as `undoRefile` does now.
+
+Typed filtering inside move mode was considered and deferred. `/` already implements the
+ancestor-preserving filter (§4), so it can be folded in later if a tree ever outgrows a screen; doing
+it now would be solving a problem collapsed-by-default appears to remove.
+
+### 7.2 Creating a tier
+
+`a` is global and already files under `m.cursorProject()` — "the project the row the cursor is on
+already says". That pattern generalises directly:
+
+- **`a` adds a sibling**: a child of the cursor row's parent. This is today's behaviour exactly, and
+  is unchanged when pressed from Repos or Agents.
+- **`A` adds a child** of the cursor row. This is how a new tier is created: cursor on `DevResults`,
+  `A`, type a title, and the project exists — then `m` items into it.
+
+Creating a project is therefore a first-class action rather than something achieved sideways by
+moving a task onto another task.
 
 ## 8. Migration
 
@@ -250,9 +302,14 @@ rather than where the files happen to live.
 - **Tree** — cycles, unknown parent, sibling ordering, the mixes-parents-and-leaves rule for
   `(unassigned)`, filter-keeps-ancestors.
 - **Close guard** — open descendants, all-closed descendants, leaf.
-- **Move** — self-parent, descendant-parent, ambiguous fragment.
-- **App** — `teatest` goldens for a three-deep tree, a filtered tree, and a deep tree at narrow
-  width.
+- **Move** — self-parent, descendant-parent, ambiguous fragment. All three are CLI-only concerns; the
+  corresponding app test asserts the opposite, that a lifted subtree is absent from the destinations
+  offered.
+- **Move mode** — the lift, the collapsed-by-default fold state, the cursor opening on the current
+  parent, `── top level ──` as a destination, `esc` leaving no event behind, and undo restoring the
+  prior parent.
+- **App** — `teatest` goldens for a three-deep tree, a filtered tree, a deep tree at narrow width, and
+  a move in progress.
 - `testdata/golden` is regenerated. The Node differential comparison is already retired, so there is
   no cross-build constraint on output shape.
 
@@ -264,7 +321,7 @@ rather than where the files happen to live.
 3. CLI: `-p` resolution, `move`, the close guard, multi-id `done`, `--origin`, recursive `loops`.
 4. `Tree[T]` flattening, with Repos and Agents ported first — their behaviour is unchanged, so their
    existing goldens are the proof the refactor is sound.
-5. Loops on the flat tree: selectable headings, `h`/`l`, `P` over nodes, reparent undo.
+5. Loops on the flat tree: selectable headings, `h`/`l`, `a`/`A`, move mode, reparent undo.
 
 Steps 1–3 are shippable without touching the app; step 4 is a refactor with no user-visible change.
 
@@ -281,4 +338,12 @@ Steps 1–3 are shippable without touching the app; step 4 is a refactor with no
 - **The event log stays.** Git-diffable, hand-editable, lock-free; the hierarchy needs nothing a
   database provides.
 - **`-p` still accepts an absolute path**, so the existing `WAID.md` agent instruction keeps working.
+- **Moving is navigation, not typing.** `m` lifts the subtree and the tree is browsed to its
+  destination. `P` and the parent prompt are deleted rather than kept alongside it.
+- **Lifting the subtree replaces cycle rejection in the app.** An invalid destination is one that is
+  not drawn, so the TUI never reports a move it refuses to make.
+- **Move mode collapses folds by default**, which is what makes navigation cheap enough that typed
+  filtering could be deferred rather than built.
+- **`a` adds a sibling and `A` adds a child.** Creating a tier is a first-class action, not a side
+  effect of moving one task onto another.
 - **Tags are out of scope**, and unchanged by any of this.

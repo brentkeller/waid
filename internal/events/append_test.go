@@ -394,16 +394,16 @@ func eventFromLine(t *testing.T, line int, raw string) WaidEvent {
 	}
 }
 
-// A ProjectEvent carries its project whether or not there is one, since the fold reads the field's
-// presence: an omitted project leaves the item where it was, and only an explicit null moves it out
-// of every project.
-func TestEncodeProjectEventCarriesAnExplicitNull(t *testing.T) {
-	line, err := Encode(ProjectEvent{Ts: "2026-08-17T12:00:00.000Z", Ev: "update", Id: "7k3m"})
+// A ParentEvent carries its parent whether or not there is one, since the fold reads the field's
+// presence: an omitted parent leaves the item where it was, and only an explicit null moves it to
+// the top level.
+func TestEncodeParentEventCarriesAnExplicitNull(t *testing.T) {
+	line, err := Encode(ParentEvent{Ts: "2026-08-17T12:00:00.000Z", Ev: "update", Id: "7k3m"})
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
 
-	want := `{"ts":"2026-08-17T12:00:00.000Z","ev":"update","id":"7k3m","project":null}`
+	want := `{"ts":"2026-08-17T12:00:00.000Z","ev":"update","id":"7k3m","parent":null}`
 	if got := string(line); got != want {
 		t.Errorf("Encode wrote\n%s\nwant\n%s", got, want)
 	}
@@ -420,5 +420,18 @@ func TestEncodeUpdateEventOmitsAnAbsentProject(t *testing.T) {
 
 	if strings.Contains(string(line), "project") {
 		t.Errorf("an update with no project wrote %s, want the field omitted", line)
+	}
+}
+
+// An add carrying a parent writes it, so an item can land under one in a single line rather than an
+// add followed by a move.
+func TestEncodeAddEventCarriesItsParent(t *testing.T) {
+	parent := "aaaa"
+	got := encode(t, AddEvent{Ts: "2026-08-17T15:32:04.642Z", Ev: "add", Id: "624q", Title: "tmp probe", Status: StatusOpen, Parent: &parent})
+
+	want := `{"ts":"2026-08-17T15:32:04.642Z","ev":"add","id":"624q","title":"tmp probe",` +
+		`"status":"open","parent":"aaaa","origin":null,"session":null,"tags":[],"waitingOn":null}`
+	if got != want {
+		t.Errorf("Encode\n got %s\nwant %s", got, want)
 	}
 }

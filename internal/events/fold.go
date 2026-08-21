@@ -66,6 +66,7 @@ func Fold(rawLines []string) State {
 				Title:     *title,
 				Status:    *status,
 				WaitingOn: str(record["waitingOn"]),
+				Parent:    str(record["parent"]),
 				Origin:    readOrigin(record),
 				Session:   str(record["session"]),
 				Tags:      strArray(record["tags"]),
@@ -153,6 +154,9 @@ func applyToItem(
 		if title := str(raw); title != nil {
 			item.Title = *title
 		}
+	}
+	if raw, present := record["parent"]; present {
+		item.Parent = str(raw)
 	}
 	if raw, present := originKey(record); present {
 		item.Origin = str(raw)

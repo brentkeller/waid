@@ -37,6 +37,10 @@ type Item struct {
 	Status Status `json:"status"`
 	// WaitingOn is free text, only meaningful while Status is StatusWaiting.
 	WaitingOn *string `json:"waitingOn"`
+	// Parent is the id of the item this one sits under; nil is top level. The fold stores it
+	// verbatim — whether the id resolves, and whether the chain it starts loops, is a question about
+	// the whole set and belongs to internal/tree.
+	Parent *string `json:"parent"`
 	// Origin is the absolute path the item came from. It is provenance, not a grouping key.
 	Origin *string `json:"origin"`
 	// Session is the Claude Code session the item was captured from.
@@ -59,13 +63,16 @@ type WaidEvent interface {
 	timestamp() string
 }
 
-// AddEvent introduces an item.
+// AddEvent introduces an item. Parent is the one field Node never wrote, so it is omitted rather
+// than nulled when there is none: an add says where the item lands only when it lands somewhere,
+// and every line already in the log re-encodes byte for byte.
 type AddEvent struct {
 	Ts        string   `json:"ts"`
 	Ev        string   `json:"ev"`
 	Id        string   `json:"id"`
 	Title     string   `json:"title"`
 	Status    Status   `json:"status"`
+	Parent    *string  `json:"parent,omitempty"`
 	Origin    *string  `json:"origin"`
 	Session   *string  `json:"session"`
 	Tags      []string `json:"tags"`
@@ -85,16 +92,15 @@ type UpdateEvent struct {
 	WaitingOn *string  `json:"waitingOn,omitempty"`
 }
 
-// ProjectEvent refiles an item, and is an update like any other — the fold reads the same `update`
-// line. It is a shape of its own because UpdateEvent omits an absent project, which is what keeps a
-// retitle or a waiting-on from moving the item out of the project it is filed under. Refiling has to
-// say the opposite: the project is always written, and a null is how an item is moved out of every
-// project.
-type ProjectEvent struct {
-	Ts      string  `json:"ts"`
-	Ev      string  `json:"ev"`
-	Id      string  `json:"id"`
-	Project *string `json:"project"`
+// ParentEvent moves an item, and is an update like any other — the fold reads the same `update`
+// line. It is a shape of its own because UpdateEvent omits an absent field, which is what keeps a
+// retitle or a waiting-on from moving the item out of the tree it sits in. A move has to say the
+// opposite: the parent is always written, and a null is how an item is moved to the top level.
+type ParentEvent struct {
+	Ts     string  `json:"ts"`
+	Ev     string  `json:"ev"`
+	Id     string  `json:"id"`
+	Parent *string `json:"parent"`
 }
 
 // NoteEvent appends a note to an item.
@@ -135,7 +141,7 @@ type UndismissEvent struct {
 
 func (AddEvent) event()       {}
 func (UpdateEvent) event()    {}
-func (ProjectEvent) event()   {}
+func (ParentEvent) event()    {}
 func (NoteEvent) event()      {}
 func (CloseEvent) event()     {}
 func (ReopenEvent) event()    {}
@@ -144,7 +150,7 @@ func (UndismissEvent) event() {}
 
 func (e AddEvent) timestamp() string       { return e.Ts }
 func (e UpdateEvent) timestamp() string    { return e.Ts }
-func (e ProjectEvent) timestamp() string   { return e.Ts }
+func (e ParentEvent) timestamp() string    { return e.Ts }
 func (e NoteEvent) timestamp() string      { return e.Ts }
 func (e CloseEvent) timestamp() string     { return e.Ts }
 func (e ReopenEvent) timestamp() string    { return e.Ts }
@@ -153,7 +159,7 @@ func (e UndismissEvent) timestamp() string { return e.Ts }
 
 func (e AddEvent) stamp(ts string) WaidEvent       { e.Ts = firstTs(e.Ts, ts); return e }
 func (e UpdateEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }
-func (e ProjectEvent) stamp(ts string) WaidEvent   { e.Ts = firstTs(e.Ts, ts); return e }
+func (e ParentEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }
 func (e NoteEvent) stamp(ts string) WaidEvent      { e.Ts = firstTs(e.Ts, ts); return e }
 func (e CloseEvent) stamp(ts string) WaidEvent     { e.Ts = firstTs(e.Ts, ts); return e }
 func (e ReopenEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }

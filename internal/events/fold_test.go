@@ -382,3 +382,61 @@ func TestUpdateWithANullOriginClearsIt(t *testing.T) {
 		t.Fatalf("origin = %q, want it cleared", *origin)
 	}
 }
+
+// The parent is stored verbatim off the add line: the fold is per-line and cannot see the rest of
+// the graph, so an id it cannot resolve is `internal/tree`'s problem rather than a Problem here.
+func TestAddStoresTheParentItCarries(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"the area"}`,
+		`{"ts":"2026-08-14T18:01:00.000Z","ev":"add","id":"bbbb","title":"under it","parent":"aaaa"}`,
+	})
+
+	if parent := state.Items[0].Parent; parent != nil {
+		t.Fatalf("the add carrying no parent folded to %q, want top level", *parent)
+	}
+	if parent := state.Items[1].Parent; parent == nil || *parent != "aaaa" {
+		t.Fatalf("parent = %v, want aaaa", parent)
+	}
+}
+
+func TestUpdateWithAParentSetsIt(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"the area"}`,
+		`{"ts":"2026-08-14T18:01:00.000Z","ev":"add","id":"bbbb","title":"loose"}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"bbbb","parent":"aaaa"}`,
+	})
+
+	item := state.Items[1]
+	if item.Parent == nil || *item.Parent != "aaaa" {
+		t.Fatalf("parent = %v, want aaaa", item.Parent)
+	}
+	if item.Title != "loose" || item.Status != StatusOpen {
+		t.Fatalf("the move rewrote the item to %+v", item)
+	}
+}
+
+// A null parent is how an item is moved back to the top level, which is why the move event always
+// writes the field rather than omitting it when there is nothing to write.
+func TestUpdateWithANullParentClearsIt(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"under it","parent":"zzzz"}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","parent":null}`,
+	})
+
+	if parent := state.Items[0].Parent; parent != nil {
+		t.Fatalf("parent = %q, want it cleared to top level", *parent)
+	}
+}
+
+// An update carrying no parent key leaves it alone, so a retitle or a waiting-on cannot move an
+// item out of the tree it sits in.
+func TestUpdateCarryingNoParentKeyLeavesItAlone(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"under it","parent":"zzzz"}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","title":"renamed"}`,
+	})
+
+	if parent := state.Items[0].Parent; parent == nil || *parent != "zzzz" {
+		t.Fatalf("parent = %v, want it left alone", parent)
+	}
+}

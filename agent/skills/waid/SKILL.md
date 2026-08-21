@@ -25,7 +25,7 @@ command.**
 
 | Read-only — run freely | Writes — needs approval |
 | --- | --- |
-| `loops` `scan` `list` `show` `today` `week` `transcript` `doctor` `sync` | `add` `done` `reopen` `note` `promote` `dismiss` `undismiss` |
+| `loops` `scan` `list` `show` `today` `week` `transcript` `doctor` `sync` | `add` `done` `reopen` `move` `note` `promote` `dismiss` `undismiss` |
 
 `promote` is a write: it appends an `add` and a `dismiss`. `undismiss` is one as well, and only
 accepts a key that is dismissed now. `sync` only rebuilds the disposable cache, so it counts as a
@@ -35,12 +35,12 @@ Every flow has the same shape: gather with read-only commands, present a **numbe
 stop, and run only what comes back approved. Silence is not approval, and neither is a previous
 turn's approval — approval covers the list in front of the user and nothing else. If the user
 approves a subset ("1 and 3"), run exactly that subset and say what you skipped. If they correct a
-title, project or tag, use their version verbatim.
+title, parent or tag, use their version verbatim.
 
 ## Wrap up
 
-1. `waid loops -p . --json` — see what is already tracked for this project so you never propose a
-   duplicate of an open item.
+1. `waid loops --origin . --json` — see what is already tracked for work that came from this repo,
+   so you never propose a duplicate of an open item.
 2. Read back over the session for work that **outlives it**: a bug found and not fixed, work
    deliberately deferred, something blocked on another person, a follow-up promised out loud. Do
    **not** propose items for routine steps completed inside the session — that noise is exactly
@@ -90,12 +90,20 @@ title, project or tag, use their version verbatim.
 ## Conventions
 
 - **Always pass `--json`** and read the parsed output — never scrape the human rendering.
-- **`-p` must resolve.** It takes an absolute path, `.` for the current directory, or a substring
-  matching exactly one known project. A substring matching none or several exits 1 and lists the
-  candidates; pick from that list and rerun rather than guessing at a path.
+- **`-p` must resolve.** On `add` and `move` it names a **parent item**: a substring matching
+  exactly one item's title. A substring matching none or several exits 1 and lists the candidates;
+  pick from that list and rerun rather than guessing. On `add` it also still takes an absolute path,
+  or `.` for the current directory, which records where the work came from and leaves the item at the
+  top level — that is the form to use when the work belongs to a repo rather than under an existing
+  item. `move` takes a parent only. On `scan` it still names a repo path.
+- **`--origin <fragment>`** narrows `list` and `loops` to items recorded against a path, resolving
+  the way project paths always have. It is how you ask "what is tracked for this repo".
 - **Signal keys contain `\` and `#`** — `dirty:C:\dev\waid`, `review:owner/repo#12`. Pass the key
   exactly as it reads after JSON parsing (the `\\` in the raw JSON is one backslash), quoted, so
   the shell does not eat it.
+- **Items nest, and a parent will not close while anything under it is open.** `waid done` takes
+  several ids, so when a heading and its children are all finished, propose one `waid done <child>
+  <child> <parent>` rather than a run of separate closures.
 - **Exit codes:** 1 is a user error — read the message on stderr and fix the argument. 2 is a bug
   in `waid` — report it to the user and stop; do not retry.
 - **Titles** are one line saying what needs doing, with no `TODO:` prefix and no date. Add

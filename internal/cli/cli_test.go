@@ -82,6 +82,16 @@ func TestUsageDoesNotOfferInteractive(t *testing.T) {
 	}
 }
 
+// A retired flag fails with a message naming its successor, so advertising one in the usage text
+// would be sending readers at a guaranteed error.
+func TestUsageDoesNotOfferRetiredFlags(t *testing.T) {
+	for name := range retired {
+		if strings.Contains(Usage, "--"+name) {
+			t.Errorf("usage still offers the retired --%s:\n%s", name, Usage)
+		}
+	}
+}
+
 func TestRunPrintsVersionWithoutTouchingTheHome(t *testing.T) {
 	c := &capture{}
 	home := filepath.Join(testHome(t), "unborn")

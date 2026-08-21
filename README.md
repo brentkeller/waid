@@ -37,11 +37,12 @@ installed path stays proven.
 | `waid sync [--full]` | Rebuild the derived session cache. Incremental unless `--full`. |
 | `waid today [--date YYYY-MM-DD]` | Sessions and item activity for a day, grouped by project. |
 | `waid week [--last]` | Rollup by project for this week, or the previous one. |
-| `waid loops [-p <project>]` | Declared open items, then detected signals. The default view. |
+| `waid loops [-p <parent>] [--origin <frag>]` | Declared open items as a tree, then detected signals. The default view. |
 | `waid scan [-p <project>]` | Detected signals only. |
-| `waid list [--status s] [--project p] [--tag t] [--all]` | Declared items. Hides done unless `--all` or `--status done`. |
-| `waid add "<title>" [-p <project>] [--waiting-on <who>] [--tag <t>] [--session <id>]` | Record an item. |
-| `waid done <id>` / `waid reopen <id>` | Close or reopen an item. |
+| `waid list [--status s] [--origin <frag>] [--tag t] [--all]` | Declared items as a tree. Hides done unless `--all` or `--status done`. |
+| `waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>]` | Record an item, under a parent or with an origin. |
+| `waid done <id>...` / `waid reopen <id>` | Close one or more items, or reopen one. |
+| `waid move <id> -p <parent>` / `waid move <id> --top` | Refile an item under another, or move it to the top level. |
 | `waid note <id> "<text>"` | Append a note to an item. |
 | `waid show <id>` | Full item with its notes and event history. |
 | `waid transcript <id>` | A session's turns, oldest first. |
@@ -67,12 +68,23 @@ internal error with a stack on stderr.
 ### Items
 
 An item has a 4-character Crockford base32 id, a title, a status (`open`, `waiting`, `done`), an
-optional project, tags, and an optional `waitingOn`. `--waiting-on` implies `waiting` status;
-`reopen` clears it.
+optional parent, an optional origin path, tags, and an optional `waitingOn`. `--waiting-on` implies
+`waiting` status; `reopen` clears it.
 
-`-p` / `--project` accepts an absolute path, `.` for the current directory, or any substring that
-matches exactly one known project. A substring matching none or several is a user error, and the
-candidates are listed.
+Items form a tree: any item can be the parent of another, so a heading is an item like any other and
+`list` and `loops` print the nesting. `waid move` reparents one, rejecting itself and anything
+already beneath it. An item refuses to close while an item under it is still open, which is why
+`waid done` takes several ids — the children and their heading close in one invocation.
+
+`-p` names a **parent**: any case-insensitive substring matching exactly one item's title. A
+substring matching none or several is a user error, and the candidates are listed. An absolute path,
+or `.` for the current directory, is recorded as the item's `origin` instead and leaves it at the top
+level — where the work came from rather than where it is filed, which is what `promote` has always
+recorded and what keeps `waid add "<title>" -p <project path>` working unchanged. `move` takes a
+parent only; a path there is a user error rather than a silent no-op.
+
+`--origin <fragment>` filters `list` and `loops` by that recorded path, and resolves the same way
+project paths always have. `-p` on `scan` still names a repo, since detection is keyed by path.
 
 ### Signals
 
@@ -145,7 +157,7 @@ Three tabs, switched with `1` `2` `3` or `tab` / `shift-tab`:
 
 | Tab | Shows | Acts |
 | --- | --- | --- |
-| Loops | Declared items grouped by project, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `P` file under a project, `n` note, `p` toggle the pane. |
+| Loops | Declared items grouped by project, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `P` move under a parent, `n` note, `p` toggle the pane. |
 | Repos | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
 | Agents | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `pgup`/`pgdn` scroll it, `home`/`end` jump to either end, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
 
@@ -156,12 +168,12 @@ refresh — on Agents that re-reads every transcript on disk, so a session run s
 shows up — `u` to undo, `?` for the key table, `q` to quit. A key that belongs to another tab says so
 in the footer rather than doing nothing quietly.
 
-A prompt taking text — a title, a note, a project — commits on `enter`, abandons on `esc`, and
+A prompt taking text — a title, a note, a parent — commits on `enter`, abandons on `esc`, and
 empties on `ctrl-u`. `e` and `P` open on the value they are replacing, so a correction is a word of
-typing and `ctrl-u` is how one starts from nothing. `P` searches: type any part of a project the log
-or the scan roots know, `tab` moves through the matches the footer lists, and `enter` files the item
-under the one it is on. An absolute path nothing matches is taken as typed, and an empty answer files
-the item under no project at all.
+typing and `ctrl-u` is how one starts from nothing. `P` searches: type any part of another item's
+title, `tab` moves through the matches the footer lists, and `enter` files the item under the one it
+is on. The item being moved and everything beneath it are never offered, so a move cannot make an
+item its own descendant's child, and an empty answer moves it to the top level.
 
 Writes land on the keypress with no confirm step, so the footer's receipt is what says a press did
 anything, and `u` reverses the last one — as another event, since the log is append-only. The stack

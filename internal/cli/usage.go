@@ -8,11 +8,12 @@ Usage: waid <command> [options]
   waid sync [--full]                  Rebuild the derived session cache
   waid today [--date YYYY-MM-DD]      Sessions + item activity for a day
   waid week [--last]                  Rollup by project for this week (or last)
-  waid loops [-p <project>]           Declared open/waiting items, then detected signals
+  waid loops [-p <parent>] [--origin <frag>]
+                                      Open items as a tree, then detected signals
   waid scan [-p <project>]            Detected signals only
   waid list [--status s] [--origin <frag>] [--tag t] [--all]
-  waid add "<title>" [-p <project>] [--waiting-on <who>] [--tag <t>] [--session <id>]
-  waid done <id>                      waid reopen <id>
+  waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>]
+  waid done <id>...                   Close one or more; waid reopen <id>
   waid move <id> [-p <parent>|--top]  Refile an item under a parent, or to the top level
   waid note <id> "<text>"
   waid show <id>                      Full item with notes and history
@@ -21,6 +22,11 @@ Usage: waid <command> [options]
   waid undismiss <key>                Restore a dismissed signal
   waid doctor                         Validate config, log integrity, gh auth, cache freshness
   waid ui                             The terminal app: loops, repos and agents in one screen
+
+-p names a parent: any substring, ignoring case, matching exactly one item's title. An absolute
+path, or . for the current directory, records where the work came from instead and leaves the item
+at the top level. --origin filters list and loops by that recorded path. On scan, -p still names a
+repo, since detection is keyed by path.
 
 Global flags:
   --json                              Print a single JSON document to stdout

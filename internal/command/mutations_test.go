@@ -16,14 +16,18 @@ func TestDoneClosesAnItem(t *testing.T) {
 	if run.code != cli.ExitOK {
 		t.Fatalf("exit code = %d: %s", run.code, run.err)
 	}
-	var record struct {
+	var closed []struct {
 		Id     string `json:"id"`
 		Title  string `json:"title"`
 		Status string `json:"status"`
 		Ts     string `json:"ts"`
 	}
-	run.decode(t, &record)
+	run.decode(t, &closed)
 
+	if len(closed) != 1 {
+		t.Fatalf("closed = %d entries, want 1", len(closed))
+	}
+	record := closed[0]
 	if record.Id != id || record.Title != "Ship the thing" || record.Status != "done" {
 		t.Errorf("record = %+v, want the closed item", record)
 	}

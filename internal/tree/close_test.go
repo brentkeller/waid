@@ -123,3 +123,47 @@ func equalStrings(got, want []string) bool {
 	}
 	return true
 }
+
+// A run closing a parent alongside the descendants holding it open is what several ids are for, so
+// the batch's own members do not hold each other open.
+func TestGuardClosesAllowsAParentClosedWithItsOpenDescendants(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("root", "Root", ""),
+		addLine("kid1", "First child", "root"),
+		addLine("gkid", "Grandchild", "kid1"),
+	})
+
+	if err := GuardCloses(state, []string{"root", "kid1", "gkid"}); err != nil {
+		t.Errorf("closing the whole subtree = %v, want it allowed", err)
+	}
+}
+
+// A descendant left out of the batch still holds its ancestor open.
+func TestGuardClosesRefusesWhenADescendantIsLeftOut(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("root", "Root", ""),
+		addLine("kid1", "First child", "root"),
+		addLine("gkid", "Grandchild", "kid1"),
+	})
+
+	var user *errs.UserError
+	if err := GuardCloses(state, []string{"root", "kid1"}); !errors.As(err, &user) {
+		t.Fatalf("closing all but the grandchild = %v, want a user error", err)
+	}
+	if !strings.Contains(strings.Join(user.Candidates, "\n"), "gkid") {
+		t.Errorf("candidates = %q, want the grandchild named", user.Candidates)
+	}
+}
+
+// The batch is judged as a whole, so an id later in the list is guarded too.
+func TestGuardClosesGuardsEveryId(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("leaf", "Leaf", ""),
+		addLine("root", "Root", ""),
+		addLine("kid1", "First child", "root"),
+	})
+
+	if err := GuardCloses(state, []string{"leaf", "root"}); err == nil {
+		t.Error("closing a leaf then a held-open parent = nil, want a refusal")
+	}
+}

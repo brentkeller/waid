@@ -35,14 +35,25 @@ var Registry = cli.Registry{
 
 // requiredId reads the item id a mutation operates on from the first positional.
 func requiredId(ctx *cli.Ctx, command string) (string, error) {
-	id := ""
-	if len(ctx.Args) > 0 {
-		id = strings.TrimSpace(ctx.Args[0])
+	ids, err := requiredIds(ctx, command)
+	if err != nil {
+		return "", err
 	}
-	if id == "" {
-		return "", errs.Userf("%s requires an item id", command)
+	return ids[0], nil
+}
+
+// requiredIds reads the item ids a mutation operates on from the positionals, in the order given.
+func requiredIds(ctx *cli.Ctx, command string) ([]string, error) {
+	ids := []string{}
+	for _, arg := range ctx.Args {
+		if id := strings.TrimSpace(arg); id != "" {
+			ids = append(ids, id)
+		}
 	}
-	return id, nil
+	if len(ids) == 0 {
+		return nil, errs.Userf("%s requires an item id", command)
+	}
+	return ids, nil
 }
 
 // requireItem looks an item up in a folded log, rejecting the input when the id is unknown.
@@ -67,4 +78,24 @@ func targetItemIn(state events.State, ctx *cli.Ctx, command string) (events.Item
 		return events.Item{}, err
 	}
 	return requireItem(state, id)
+}
+
+// targetItemsIn is targetItemIn for a mutation taking several ids. Every id is resolved before the
+// caller writes anything, so an unknown id anywhere in the list cannot leave a half-finished
+// mutation behind.
+func targetItemsIn(state events.State, ctx *cli.Ctx, command string) ([]events.Item, error) {
+	ids, err := requiredIds(ctx, command)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]events.Item, 0, len(ids))
+	for _, id := range ids {
+		item, err := requireItem(state, id)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }

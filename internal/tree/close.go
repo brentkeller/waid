@@ -15,14 +15,37 @@ import (
 // provably has no loose ends left under it. The error names every open descendant by id and title,
 // since closing them is what the refusal asks for and the ids are what closes them.
 func GuardClose(state events.State, id string) error {
-	open := OpenDescendants(state, id)
-	if len(open) == 0 {
-		return nil
+	return GuardCloses(state, []string{id})
+}
+
+// GuardCloses is GuardClose over a set of ids closed together. The ids in the set do not hold each
+// other open: closing the children first is what a list of ids is for, so a run naming a parent
+// alongside the descendants beneath it is allowed, while one leaving a descendant out is not.
+//
+// The whole set is judged before anything is written, so a refusal over one id cannot leave the
+// others closed behind it.
+func GuardCloses(state events.State, ids []string) error {
+	closing := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		closing[id] = true
 	}
-	return &errs.UserError{
-		Message:    fmt.Sprintf("cannot close %s: %s still open beneath it", id, count(len(open))),
-		Candidates: labels(open),
+
+	for _, id := range ids {
+		open := []events.Item{}
+		for _, descendant := range OpenDescendants(state, id) {
+			if !closing[descendant.Id] {
+				open = append(open, descendant)
+			}
+		}
+		if len(open) == 0 {
+			continue
+		}
+		return &errs.UserError{
+			Message:    fmt.Sprintf("cannot close %s: %s still open beneath it", id, count(len(open))),
+			Candidates: labels(open),
+		}
 	}
+	return nil
 }
 
 // OpenDescendants returns every item under id that is not closed, depth first in log order. An id

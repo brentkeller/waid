@@ -51,6 +51,9 @@ func listed(view, id string) bool {
 func TestDoneClosesTheItemUnderTheCursor(t *testing.T) {
 	m, path := working(t)
 
+	// G puts the cursor on the last row of the list, which is the fixture's waiting item.
+	m, _ = press(t, m, "G")
+
 	m, cmd := press(t, m, "x")
 	if cmd != nil {
 		t.Error("x issued a command, want the write made on the keypress")
@@ -66,7 +69,7 @@ func TestDoneClosesTheItemUnderTheCursor(t *testing.T) {
 	if !strings.Contains(view, "closed 4h2k  Deploy blocked until the migration is approved") {
 		t.Errorf("the footer carries no receipt for the close:\n%s", view)
 	}
-	if got, want := m.counts[tabLoops], 4; got != want {
+	if got, want := m.counts[tabLoops], 5; got != want {
 		t.Errorf("the Loops badge is %d after the close, want %d", got, want)
 	}
 }
@@ -76,7 +79,7 @@ func TestDoneClosesTheItemUnderTheCursor(t *testing.T) {
 func TestUndoOfADoneRestoresTheItemItClosed(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "x", "u")
+	m, _ = press(t, m, "G", "x", "u")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
@@ -117,7 +120,7 @@ func TestDoneIsInertOnAnAlreadyClosedItem(t *testing.T) {
 func TestWaitingAsksWhoAndWritesTheUpdate(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "j", "w")
+	m, _ = press(t, m, "w")
 	if m.prompt.kind != promptWaiting {
 		t.Fatalf("w opened no prompt for who the item waits on")
 	}
@@ -147,7 +150,7 @@ func TestWaitingAsksWhoAndWritesTheUpdate(t *testing.T) {
 func TestUndoOfAWaitingReopensTheItem(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "j", "w", "maria", "enter", "u")
+	m, _ = press(t, m, "w", "maria", "enter", "u")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
@@ -168,7 +171,7 @@ func TestUndoOfAWaitingReopensTheItem(t *testing.T) {
 func TestEditRewritesTheTitle(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "j", "e")
+	m, _ = press(t, m, "e")
 	if view := plain(m.View()); !strings.Contains(view, "edit sga9") {
 		t.Errorf("e opened no prompt for the title:\n%s", view)
 	}
@@ -201,7 +204,7 @@ func TestEditRewritesTheTitle(t *testing.T) {
 func TestNoteAppendsToTheItemUnderTheCursor(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "n")
+	m, _ = press(t, m, "G", "n")
 	if view := plain(m.View()); !strings.Contains(view, "note 4h2k") {
 		t.Errorf("n opened no prompt for the text:\n%s", view)
 	}
@@ -236,27 +239,27 @@ func TestANoteLeavesNothingToUndo(t *testing.T) {
 	}
 }
 
-// A project heading is not an item, so none of the four writes anything from one and the footer says
-// why (§4).
-func TestLoopsWritesAreInertOnAProjectHeading(t *testing.T) {
+// The (unassigned) bucket is a rendering artifact rather than an item, so none of the four writes
+// anything from one and the footer says why (§4).
+func TestLoopsWritesAreInertOnTheBucket(t *testing.T) {
 	m, path := working(t)
 
-	// enter folds the project, which puts the cursor on the heading standing in for its children.
-	folded, _ := press(t, m, "enter")
+	// enter folds the bucket, which puts the cursor on the row standing in for its children.
+	folded, _ := press(t, m, "j", "j", "enter")
 
 	for _, pressed := range []string{"x", "w", "e", "n"} {
 		next, _ := press(t, folded, pressed)
 		if log := written(t, path); len(log) != 0 {
-			t.Errorf("%s on a project heading wrote %v", pressed, log)
+			t.Errorf("%s on the bucket wrote %v", pressed, log)
 		}
 		if !strings.Contains(next.hint, "project") {
-			t.Errorf("%s on a project heading left the hint %q, want it to name the row", pressed, next.hint)
+			t.Errorf("%s on the bucket left the hint %q, want it to name the row", pressed, next.hint)
 		}
 		if next.prompt.kind != promptNone {
-			t.Errorf("%s on a project heading opened a prompt", pressed)
+			t.Errorf("%s on the bucket opened a prompt", pressed)
 		}
 		if len(next.receipts) != 0 {
-			t.Errorf("%s on a project heading left a receipt", pressed)
+			t.Errorf("%s on the bucket left a receipt", pressed)
 		}
 	}
 }
@@ -452,7 +455,7 @@ func TestAddAbandonsWithoutWriting(t *testing.T) {
 func TestEditOpensOnTheTitleItCorrects(t *testing.T) {
 	m, _ := working(t)
 
-	m, _ = press(t, m, "e")
+	m, _ = press(t, m, "G", "e")
 
 	if got, want := m.prompt.value, "Deploy blocked until the migration is approved"; got != want {
 		t.Errorf("the edit opened on %q, want the title it corrects %q", got, want)
@@ -504,9 +507,7 @@ func TestCtrlUClearsAnAddInProgress(t *testing.T) {
 // the footer says what is holding it open (§5).
 func TestDoneRefusesAnItemWithOpenDescendants(t *testing.T) {
 	msg := loopsFixture()
-	child := msg.items[3]
-	child.Parent = text(msg.items[0].Id)
-	msg.items[3] = child
+	parent := msg.items[0]
 
 	m := looped(t, 140, msg)
 	m.loops.load = func() tea.Msg { return msg }
@@ -514,9 +515,11 @@ func TestDoneRefusesAnItemWithOpenDescendants(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
 	m.opts.Cfg.EventsPath = path
 
-	m, _ = press(t, m, "j")
-	if item, ok := m.loopsTree(m.viewWidth()).SelectedItem(); !ok || item.Id != msg.items[0].Id {
-		t.Fatalf("the cursor is on %v, want the parent %s", item, msg.items[0].Id)
+	// enter folds the branch the cursor opens in, which is the one way onto its heading while an
+	// expanded fold is chrome.
+	m, _ = press(t, m, "enter")
+	if item, ok := m.loopsTree(m.viewWidth()).SelectedItem(); !ok || item.Id != parent.Id {
+		t.Fatalf("the cursor is on %v, want the parent %s", item, parent.Id)
 	}
 
 	m, _ = press(t, m, "x")
@@ -524,7 +527,7 @@ func TestDoneRefusesAnItemWithOpenDescendants(t *testing.T) {
 	if log := written(t, path); len(log) != 0 {
 		t.Errorf("x on a parent with open work wrote %v", log)
 	}
-	if !strings.Contains(m.hint, "cannot close "+msg.items[0].Id) {
+	if !strings.Contains(m.hint, "cannot close "+parent.Id) {
 		t.Errorf("hint = %q, want it to refuse the close", m.hint)
 	}
 }

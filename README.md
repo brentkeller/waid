@@ -157,7 +157,7 @@ Three tabs, switched with `1` `2` `3` or `tab` / `shift-tab`:
 
 | Tab | Shows | Acts |
 | --- | --- | --- |
-| Loops | Declared items grouped by project, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `P` move under a parent, `n` note, `p` toggle the pane. |
+| Loops | Declared items as a tree, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `P` move under a parent, `n` note, `p` toggle the pane. |
 | Repos | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
 | Agents | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `pgup`/`pgdn` scroll it, `home`/`end` jump to either end, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
 

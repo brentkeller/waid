@@ -1,24 +1,24 @@
 ╭──────────╮
-│ Loops  5 │ Repos │ Agents │                                                                                                     ⠋ scanning
+│ Loops  6 │ Repos │ Agents │                                                                                                     ⠋ scanning
 ┴──────────┴───────┴────────┴───────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ‹open›  waiting  done  all                                                                                            5 items · 3 projects
+ ‹open›  waiting  done  all                                                                                                         6 items
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▾ C:\dev\dr\devresults\devresults                                                                                                   3 items
-   ▸ 4h2k  waiting  Deploy blocked until the migration is approved                                                           @maria       5d
+ ▾ Localized notifications                                                                                                            2 open
+   ▸ sga9  open     Design template + args persistence for localized persisted strings                                                   19m
      nktt  open     Background workers speak the requester's language                                                        [promoted]   2d
-     sga9  open     Design template + args persistence for localized persisted strings                                                   19m
- ▾ C:\dev\waid                                                                                                                        1 item
+ ▾ (unassigned)                                                                                                                       3 open
      9xz1  open     TUI design spike                                                                                                      1h
- ▾ (no project)                                                                                                                       1 item
      p0rt  open     Read the port design once more                                                                                        2h
-
-
+     4h2k  waiting  Deploy blocked until the migration is approved                                                           @maria       5d
 
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- 4h2k · devresults · waiting ← maria · created 5d ago
+ sga9 · devresults · open · created 19m ago
 
- Deploy blocked until the migration is approved
+ Design template + args persistence for localized persisted strings
+
+ notes
+   19m  needs to survive a round trip through the queue
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
  x done · w waiting · e edit · P parent · n note · a add · / filter · s status · ? keys

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -9,8 +10,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/brentkeller/waid/internal/events"
-	"github.com/brentkeller/waid/internal/project"
 	"github.com/brentkeller/waid/internal/render"
+	"github.com/brentkeller/waid/internal/tree"
 )
 
 // loopsStatus is a segment of the status row: either one status an item can hold, or one of the two
@@ -181,25 +182,57 @@ func (m Model) matchesStatus(item events.Item) bool {
 	}
 }
 
-// loopsVisible are the items the list is showing: the status row and the typed query applied over the
-// loaded log, oldest touched first, which is the order `waid loops` prints them in. Both filter
-// client-side, so neither issues any work (§1.1).
-func (m Model) loopsVisible() []events.Item {
-	query := strings.ToLower(m.filter)
+// loopsForest is the tree the list draws: the loaded log nested, gated by the status row, narrowed
+// by the typed query, and bucketed last so (unassigned) is computed against what survived (§4).
+//
+// The two filters are applied separately because they mean different things: the status row gates
+// each row in its own right, so a closed row under an open parent still goes, while the typed query
+// is a question — a heading that answers it is asked for along with everything under it, and one
+// that does not is kept only as the path down to a descendant that did. Both filter client-side, so
+// neither issues any work (§1.1).
+func (m Model) loopsForest() []tree.Node {
+	roots, _ := tree.Build(events.State{Items: m.loops.items})
+	roots = tree.Prune(roots, m.matchesStatus)
 
-	var kept []events.Item
-	for _, item := range m.loops.items {
-		if !m.matchesStatus(item) {
-			continue
-		}
-		if query != "" && !matchesItem(item, query) {
-			continue
-		}
-		kept = append(kept, item)
+	if query := strings.ToLower(m.filter); query != "" {
+		roots = tree.Filter(roots, func(item events.Item) bool { return matchesItem(item, query) })
 	}
+	return tree.Bucket(roots)
+}
 
-	slices.SortStableFunc(kept, func(a, b events.Item) int { return strings.Compare(a.Updated, b.Updated) })
-	return kept
+// loopsVisible are the items the list is showing, read off the tree rather than filtered a second
+// time so the count in the header and the rows under it can never disagree.
+func (m Model) loopsVisible() []events.Item {
+	return itemsIn(m.loopsForest())
+}
+
+// itemsIn flattens a forest to the logged items in it, in the order the rows are drawn. The
+// synthetic bucket is left out: it is a rendering artifact rather than an item (§4).
+func itemsIn(nodes []tree.Node) []events.Item {
+	var items []events.Item
+	for _, node := range nodes {
+		if !node.Synthetic {
+			items = append(items, node.Item)
+		}
+		items = append(items, itemsIn(node.Children)...)
+	}
+	return items
+}
+
+// leavesIn are the nodes of a forest drawn as item rows rather than as folds, which is the set the
+// row columns are measured across: a fold draws its title and its count and none of the columns.
+func leavesIn(nodes []tree.Node) []events.Item {
+	var leaves []events.Item
+	for _, node := range nodes {
+		if len(node.Children) > 0 {
+			leaves = append(leaves, leavesIn(node.Children)...)
+			continue
+		}
+		if !node.Synthetic {
+			leaves = append(leaves, node.Item)
+		}
+	}
+	return leaves
 }
 
 // matchesItem is the query test: the columns the row can show, plus the id, so an id pasted from the
@@ -219,15 +252,15 @@ func matchesItem(item events.Item, query string) bool {
 	return false
 }
 
-// loopsTree builds the tree from the current state. Groups open by default: Loops is a working list
+// loopsTree builds the tree from the current state. Folds open by default: Loops is a working list
 // rather than history, so what is owed is readable at a glance the way Repos' signals are (§1.2).
 func (m Model) loopsTree(width int) Tree[events.Item] {
 	now := m.now()
-	visible := m.loopsVisible()
-	columns := loopsColumnsFor(visible, now)
+	roots := m.loopsForest()
+	columns := loopsColumnsFor(leavesIn(roots), now)
 
-	tree := Tree[events.Item]{
-		Groups:            loopsGroups(visible),
+	built := Tree[events.Item]{
+		Rows:              loopsRows(roots, "", 0),
 		Cursor:            m.loops.cursor,
 		Expanded:          m.loops.expanded,
 		ExpandedByDefault: true,
@@ -235,29 +268,60 @@ func (m Model) loopsTree(width int) Tree[events.Item] {
 			return loopsRow(item, columns, now, width)
 		},
 	}
-	tree.clamp()
-	return tree
+	built.clamp()
+	return built
 }
 
-// loopsGroups files the items under their projects through the same grouping the list and loops
-// commands print, so the app and the CLI never disagree about which project an item belongs to.
-func loopsGroups(visible []events.Item) []Group[events.Item] {
-	grouped := project.GroupByProject(visible)
-
-	groups := make([]Group[events.Item], 0, len(grouped))
-	for _, group := range grouped {
-		key := noProject
-		if group.Project != nil {
-			key = *group.Project
+// loopsRows flattens the forest into the tree's rows in reading order. Folds are keyed by item id,
+// so one stays open across a reload however the level it sits on has been re-sorted; the bucket
+// holds no id, so it is keyed by the fold it hangs under.
+func loopsRows(nodes []tree.Node, parent string, depth int) []Row[events.Item] {
+	var rows []Row[events.Item]
+	for _, node := range nodes {
+		key := node.Item.Id
+		if node.Synthetic {
+			key = parent + "/" + tree.UnassignedTitle
 		}
-		groups = append(groups, Group[events.Item]{
+
+		rows = append(rows, Row[events.Item]{
+			Node:  node.Item,
+			Depth: depth,
 			Key:   key,
-			Title: key,
-			Meta:  plural(len(group.Items), "item"),
-			Items: group.Items,
+			Title: node.Item.Title,
+			Meta:  foldMeta(node),
+			node:  !node.Synthetic,
 		})
+		rows = append(rows, loopsRows(node.Children, key, depth+1)...)
 	}
-	return groups
+	return rows
+}
+
+// foldMeta is the count a fold carries: how many open loops sit beneath it. A row with nothing under
+// it is drawn as an item rather than as a fold, so it carries none.
+func foldMeta(node tree.Node) string {
+	if len(node.Children) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d open", openUnder(node))
+}
+
+// openUnder is the work a fold holds: the still-owed rows beneath it that are leaves. A parent is a
+// landmark over work rather than work of its own — it cannot be closed while anything under it is
+// open (§5) — so counting the headings as well would count the same loop again at every level it
+// hangs under.
+func openUnder(node tree.Node) int {
+	if len(node.Children) == 0 {
+		if node.Synthetic || node.Item.Status == events.StatusDone {
+			return 0
+		}
+		return 1
+	}
+
+	count := 0
+	for _, child := range node.Children {
+		count += openUnder(child)
+	}
+	return count
 }
 
 // loopsColumns are the widths a row's fixed columns share, measured across every visible item so the
@@ -471,9 +535,8 @@ func (m Model) loopsSegment() int {
 	return slices.Index(loopsStatuses, m.loops.status)
 }
 
-// loopsCounts is what the header says on the right: what is owed, and how many projects it is spread
-// across.
+// loopsCounts is what the header says on the right: how many rows the list is showing, headings
+// counted with the rest since a heading is an item like any other (§1).
 func (m Model) loopsCounts() string {
-	visible := m.loopsVisible()
-	return plural(len(visible), "item") + " · " + plural(len(loopsGroups(visible)), "project")
+	return plural(len(m.loopsVisible()), "item")
 }

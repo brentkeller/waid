@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -11,14 +12,15 @@ import (
 
 	"github.com/brentkeller/waid/internal/detect"
 	"github.com/brentkeller/waid/internal/events"
+	"github.com/brentkeller/waid/internal/tree"
 )
 
 // loopsNow is the instant a Loops view renders its ages against, so a column that counts backwards
 // prints the same thing on every run.
 var loopsNow = time.Date(2026, 8, 17, 16, 0, 0, 0, time.Local)
 
-// loopsFixture is the log §1.1 draws: three projects, an item carrying the promoted tag, one waiting
-// on someone, an item belonging to no project, and one already closed.
+// loopsFixture is the log §4 draws: a heading with two items under it, an item carrying the promoted
+// tag, one waiting on someone, a run of items belonging to no heading, and one already closed.
 func loopsFixture() loopsLoadedMsg {
 	waid := `C:\dev\waid`
 	devresults := `C:\dev\dr\devresults\devresults`
@@ -26,13 +28,18 @@ func loopsFixture() loopsLoadedMsg {
 	return loopsLoadedMsg{
 		items: []events.Item{
 			{
+				Id: "vq2n", Title: "Localized notifications", Status: events.StatusOpen,
+				Origin: &devresults, Created: *stamp(14, 9, 0), Updated: *stamp(14, 9, 0),
+			},
+			{
 				Id: "nktt", Title: "Background workers speak the requester's language",
 				Status: events.StatusOpen, Origin: &devresults, Tags: []string{"promoted"},
+				Parent:  text("vq2n"),
 				Created: *stamp(15, 16, 0), Updated: *stamp(15, 16, 0),
 			},
 			{
 				Id: "sga9", Title: "Design template + args persistence for localized persisted strings",
-				Status: events.StatusOpen, Origin: &devresults,
+				Status: events.StatusOpen, Origin: &devresults, Parent: text("vq2n"),
 				Notes:   []events.Note{{Ts: *stamp(17, 15, 41), Text: "needs to survive a round trip through the queue"}},
 				Created: *stamp(17, 15, 41), Updated: *stamp(17, 15, 41),
 			},
@@ -84,15 +91,132 @@ func rowFor(t *testing.T, view, id string) string {
 	return ""
 }
 
-// Items are filed under the project they belong to, with the ones belonging to none in a group of
-// their own (§1.1).
-func TestLoopsGroupsItemsByProject(t *testing.T) {
+// loopsChain is a log of one branch nested to the depth named, the deepest of them a leaf. The §4
+// fixture is two levels, so the indent assertions are measured against this instead.
+func loopsChain(depth int) loopsLoadedMsg {
+	msg := loopsLoadedMsg{at: loopsNow}
+	for level := range depth {
+		item := events.Item{
+			Id: fmt.Sprintf("n%03d", level), Title: fmt.Sprintf("level %d", level),
+			Status: events.StatusOpen, Created: *stamp(17, 12, 0), Updated: *stamp(17, 12, 0),
+		}
+		if level > 0 {
+			item.Parent = text(fmt.Sprintf("n%03d", level-1))
+		}
+		msg.items = append(msg.items, item)
+	}
+	return msg
+}
+
+// lineFor is the printed line a row's text was drawn on, which is what the fold assertions read
+// rather than the whole view.
+func lineFor(t *testing.T, view, text string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, text) {
+			return line
+		}
+	}
+
+	t.Fatalf("no line carrying %q in:\n%s", text, view)
+	return ""
+}
+
+// leading is the blank margin a row sits behind, measured rather than counted in bytes: the markers
+// the rows carry are wide runes.
+func leading(t *testing.T, view, text string) int {
+	t.Helper()
+
+	line := lineFor(t, view, text)
+	return lipgloss.Width(line) - lipgloss.Width(strings.TrimLeft(line, " "))
+}
+
+// The list nests to whatever depth the log declares rather than to the two levels the tabs beside it
+// draw, a step of indent per generation (§4).
+func TestLoopsRowsNestToFullDepth(t *testing.T) {
+	m := looped(t, 140, loopsChain(4))
+
+	rows := m.loopsTree(140).rows()
+	if len(rows) != 4 {
+		t.Fatalf("a four-level branch drew %d rows, want one per level", len(rows))
+	}
+	for level, row := range rows {
+		if row.Depth != level {
+			t.Errorf("level %d is drawn at depth %d", level, row.Depth)
+		}
+	}
+
+	view := plain(m.View())
+	for level := range 4 {
+		title := fmt.Sprintf("level %d", level)
+		if got, want := leading(t, view, title), headingIndent+indentStep*level; got != want {
+			t.Errorf("%q is indented %d columns, want %d", title, got, want)
+		}
+	}
+}
+
+// A level that mixes headings with items gathers the loose items into one synthetic bucket, and a
+// level that holds only items keeps them where they are (§4).
+func TestLoopsGathersLooseItemsIntoTheUnassignedBucket(t *testing.T) {
 	view := plain(looped(t, 140, loopsFixture()).View())
 
-	for _, want := range []string{`C:\dev\dr\devresults\devresults`, `C:\dev\waid`, noProject, "3 items"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("the loops view does not carry %q:\n%s", want, view)
+	if got := strings.Count(view, tree.UnassignedTitle); got != 1 {
+		t.Fatalf("the view holds %d buckets, want the one the top level earns:\n%s", got, view)
+	}
+	// The bucket sorts last, so everything the heading above it holds is drawn before it.
+	if at, heading := strings.Index(view, tree.UnassignedTitle), strings.Index(view, "sga9"); at < heading {
+		t.Errorf("the bucket is drawn above the heading's own rows:\n%s", view)
+	}
+	// The items under the heading are all leaves, so that level gets no bucket of its own.
+	if got := leading(t, view, tree.UnassignedTitle); got != headingIndent {
+		t.Errorf("the bucket is indented %d columns, want it at the top level", got)
+	}
+}
+
+// A fold says how many open loops sit beneath it, which is what a collapsed branch is worth reading
+// (§4).
+func TestLoopsFoldsCountWhatIsOpenBeneathThem(t *testing.T) {
+	m := looped(t, 140, loopsFixture())
+
+	view := plain(m.View())
+	if line := lineFor(t, view, "Localized notifications"); !strings.Contains(line, "2 open") {
+		t.Errorf("the heading does not count what it holds: %q", line)
+	}
+	if line := lineFor(t, view, tree.UnassignedTitle); !strings.Contains(line, "3 open") {
+		t.Errorf("the bucket does not count what it holds: %q", line)
+	}
+
+	// Three presses of s put the status row on all, which draws the closed item as well. It is not
+	// open, so the count it lands in does not move.
+	all, _ := press(t, m, "s", "s", "s")
+	if line := lineFor(t, plain(all.View()), tree.UnassignedTitle); !strings.Contains(line, "3 open") {
+		t.Errorf("the bucket counts a closed row as open: %q", line)
+	}
+}
+
+// Indent is capped past a few levels, so a deep branch cannot squeeze the title column away on a
+// narrow terminal (§7).
+func TestLoopsIndentIsCappedOnADeepBranch(t *testing.T) {
+	view := plain(looped(t, 80, loopsChain(8)).View())
+
+	capped := leading(t, view, fmt.Sprintf("level %d", maxIndentDepth))
+	for _, level := range []int{maxIndentDepth + 1, maxIndentDepth + 2} {
+		title := fmt.Sprintf("level %d", level)
+		if got := leading(t, view, title); got != capped {
+			t.Errorf("%q is indented %d columns, want the cap of %d", title, got, capped)
 		}
+	}
+
+	// The row at the bottom of the branch still has room for every column it carries.
+	row := rowFor(t, view, "n007")
+	for _, want := range []string{"open", "level 7"} {
+		if !strings.Contains(row, want) {
+			t.Errorf("the deepest row lost %q:\n%s", want, row)
+		}
+	}
+	if strings.Contains(row, "…") {
+		t.Errorf("the deepest row was clipped:\n%s", row)
 	}
 }
 
@@ -137,11 +261,11 @@ func TestLoopsRendersThePromotedTag(t *testing.T) {
 	}
 }
 
-// The header counts what is owed and how many projects it is spread across (§1.1).
-func TestLoopsHeaderCountsItemsAndProjects(t *testing.T) {
+// The header counts the rows the list is showing, headings among them (§1.1).
+func TestLoopsHeaderCountsItems(t *testing.T) {
 	view := plain(looped(t, 140, loopsFixture()).View())
 
-	if want := "5 items · 3 projects"; !strings.Contains(view, want) {
+	if want := "6 items"; !strings.Contains(view, want) {
 		t.Errorf("the loops header does not say %q:\n%s", want, view)
 	}
 }
@@ -154,7 +278,7 @@ func TestLoopsLeavesClosedItemsOut(t *testing.T) {
 	if view := plain(m.View()); strings.Contains(view, "Already dealt with") {
 		t.Errorf("a closed item is still in the list:\n%s", view)
 	}
-	if got, want := m.counts[tabLoops], 5; got != want {
+	if got, want := m.counts[tabLoops], 6; got != want {
 		t.Errorf("the Loops badge is %d, want %d", got, want)
 	}
 }
@@ -168,23 +292,23 @@ func TestLoopsSaysWhenThereIsNothingOwed(t *testing.T) {
 	}
 }
 
-// The cursor walks the items and steps over the project headings, and enter folds the group it is in
-// — the same tree Scan and Review draw (§2).
+// The cursor walks the rows, and enter folds the branch it is in — the same tree Repos and Agents
+// draw (§7).
 func TestLoopsCursorWalksTheTree(t *testing.T) {
 	m := looped(t, 140, loopsFixture())
 
-	moved, _ := press(t, m, "j", "j")
+	moved, _ := press(t, m, "j")
 	item, ok := moved.loopsTree(140).SelectedItem()
 	if !ok {
-		t.Fatalf("the cursor is on a heading after two moves, want the third item")
+		t.Fatalf("the cursor is on no item after a move, want the second row of the branch")
 	}
-	if item.Id != "sga9" {
-		t.Errorf("two moves landed on %q, want sga9", item.Id)
+	if item.Id != "nktt" {
+		t.Errorf("one move landed on %q, want nktt", item.Id)
 	}
 
 	folded, _ := press(t, moved, "enter")
-	if view := plain(folded.View()); strings.Contains(view, "Deploy blocked") {
-		t.Errorf("enter did not collapse the group the cursor was in:\n%s", view)
+	if view := plain(folded.View()); strings.Contains(view, "Design template") {
+		t.Errorf("enter did not collapse the branch the cursor was in:\n%s", view)
 	}
 }
 
@@ -251,10 +375,10 @@ func TestLoopsStatusFilterNarrowsTheList(t *testing.T) {
 		hidden  []string
 		counts  string
 	}{
-		{0, loopsOwed, []string{"TUI design spike", "Deploy blocked"}, []string{"Already dealt with"}, "5 items · 3 projects"},
-		{1, loopsWaiting, []string{"Deploy blocked"}, []string{"TUI design spike", "Already dealt with"}, "1 item · 1 project"},
-		{2, loopsDone, []string{"Already dealt with"}, []string{"TUI design spike", "Deploy blocked"}, "1 item · 1 project"},
-		{3, loopsAll, []string{"TUI design spike", "Deploy blocked", "Already dealt with"}, nil, "6 items · 3 projects"},
+		{0, loopsOwed, []string{"TUI design spike", "Deploy blocked"}, []string{"Already dealt with"}, "6 items"},
+		{1, loopsWaiting, []string{"Deploy blocked"}, []string{"TUI design spike", "Already dealt with"}, "1 item"},
+		{2, loopsDone, []string{"Already dealt with"}, []string{"TUI design spike", "Deploy blocked"}, "1 item"},
+		{3, loopsAll, []string{"TUI design spike", "Deploy blocked", "Already dealt with"}, nil, "7 items"},
 	}
 
 	for _, c := range cases {
@@ -290,7 +414,7 @@ func TestLoopsBadgeIgnoresTheStatusFilter(t *testing.T) {
 
 	for range loopsStatuses {
 		m, _ = press(t, m, "s")
-		if got, want := m.counts[tabLoops], 5; got != want {
+		if got, want := m.counts[tabLoops], 6; got != want {
 			t.Errorf("the Loops badge is %d under %q, want %d", got, m.loops.status, want)
 		}
 	}
@@ -329,7 +453,7 @@ func TestLoopsFilterNarrowsTheList(t *testing.T) {
 	if strings.Contains(view, "TUI design spike") {
 		t.Errorf("the filter kept a row it does not match:\n%s", view)
 	}
-	if want := "1 item · 1 project"; !strings.Contains(view, want) {
+	if want := "1 item"; !strings.Contains(view, want) {
 		t.Errorf("the filtered header does not say %q:\n%s", want, view)
 	}
 }
@@ -359,7 +483,7 @@ func detailPane(t *testing.T, view string) string {
 // The pane is `show`'s data for the row under the cursor: what identifies the item, its title, and
 // the notes it has collected with the age of each (§1.1).
 func TestLoopsDetailPaneRendersTheSelectedItem(t *testing.T) {
-	m, _ := press(t, looped(t, 140, loopsFixture()), "j", "j")
+	m := looped(t, 140, loopsFixture())
 
 	pane := detailPane(t, m.View())
 	for _, want := range []string{
@@ -375,7 +499,8 @@ func TestLoopsDetailPaneRendersTheSelectedItem(t *testing.T) {
 
 // A waiting item names whoever it waits on, joined the way `waid show` joins it.
 func TestLoopsDetailPaneNamesWhoAnItemWaitsOn(t *testing.T) {
-	pane := detailPane(t, looped(t, 140, loopsFixture()).View())
+	m, _ := press(t, looped(t, 140, loopsFixture()), "G")
+	pane := detailPane(t, m.View())
 
 	for _, want := range []string{"4h2k", "waiting ← maria", "created 5d ago"} {
 		if !strings.Contains(pane, want) {
@@ -392,35 +517,37 @@ func TestLoopsDetailPaneFollowsTheCursor(t *testing.T) {
 	if !strings.Contains(pane, "nktt") {
 		t.Errorf("the pane did not follow the cursor onto nktt:\n%s", pane)
 	}
-	if strings.Contains(pane, "4h2k") {
+	if strings.Contains(pane, "sga9") {
 		t.Errorf("the pane is still showing the row the cursor left:\n%s", pane)
 	}
 }
 
 // An item with no notes prints no notes block, the way `waid show` leaves one out.
 func TestLoopsDetailPaneLeavesOutAnEmptyNotesBlock(t *testing.T) {
-	if pane := detailPane(t, looped(t, 140, loopsFixture()).View()); strings.Contains(pane, "notes") {
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j")
+
+	if pane := detailPane(t, m.View()); strings.Contains(pane, "notes") {
 		t.Errorf("the pane drew a notes block for an item with none:\n%s", pane)
 	}
 }
 
-// A collapsed project fold is not an item, so the pane says what to do rather than showing the last
-// item it was pointed at (§4).
+// The (unassigned) bucket is a rendering artifact rather than an item, so the pane says what to do
+// there rather than showing the last item it was pointed at (§4).
 func TestLoopsDetailPaneSaysWhenNoItemIsSelected(t *testing.T) {
-	folded, _ := press(t, looped(t, 140, loopsFixture()), "enter")
+	folded, _ := press(t, looped(t, 140, loopsFixture()), "j", "j", "enter")
 
 	pane := detailPane(t, folded.View())
 	if !strings.Contains(pane, "select an item") {
-		t.Errorf("the pane on a project heading does not say what to do:\n%s", pane)
+		t.Errorf("the pane on the bucket does not say what to do:\n%s", pane)
 	}
 	if strings.Contains(pane, "4h2k") {
-		t.Errorf("the pane on a project heading is still showing an item:\n%s", pane)
+		t.Errorf("the pane on the bucket is still showing an item:\n%s", pane)
 	}
 }
 
 // The pane is open by default — §1.1 draws it — and p folds it away when density matters more.
 func TestLoopsDetailPaneCollapsesWithP(t *testing.T) {
-	m, _ := press(t, looped(t, 140, loopsFixture()), "j", "j")
+	m := looped(t, 140, loopsFixture())
 	if !strings.Contains(plain(m.View()), loopsNote) {
 		t.Fatalf("the detail pane is not open before p was pressed:\n%s", plain(m.View()))
 	}
@@ -442,7 +569,7 @@ func TestLoopsDetailPaneCollapsesWithP(t *testing.T) {
 // The pane hangs off the bottom of the body rather than following the last row of the list, so the
 // list does not shift under the cursor as the item it is pointed at grows notes.
 func TestLoopsDetailPaneSitsOnTheBottomOfTheBody(t *testing.T) {
-	m, _ := press(t, looped(t, 140, loopsFixture()), "j", "j")
+	m := looped(t, 140, loopsFixture())
 
 	lines := strings.Split(plain(m.View()), "\n")
 	if got := lines[len(lines)-4]; !strings.Contains(got, loopsNote) {
@@ -463,7 +590,7 @@ func TestLoopsDetailPaneIsCutToItsShareOfTheBody(t *testing.T) {
 		}
 	}
 
-	m, _ := press(t, looped(t, 140, msg), "j", "j")
+	m := looped(t, 140, msg)
 	pane := detailPane(t, m.View())
 
 	if got, want := len(strings.Split(pane, "\n")), 9; got > want {

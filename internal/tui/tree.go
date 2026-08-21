@@ -21,6 +21,11 @@ const (
 	headingIndent = 1
 	indentStep    = 2
 	rowIndent     = headingIndent + indentStep + 2
+
+	// maxIndentDepth is the deepest generation that still earns an indent of its own. Past it the
+	// nesting is already plain from the rows above, and the title column is worth more than the
+	// depth-for-depth fidelity (§7).
+	maxIndentDepth = 4
 )
 
 // Group is one project and the children folded under it. Key identifies the group across reloads,
@@ -383,7 +388,9 @@ func (t Tree[T]) Lines(width int) []Line {
 	var lines []Line
 	for i, row := range rows {
 		focused := i == cursor
-		if row.node {
+		// A row holding anything below it is drawn as a fold whether or not it is an item: the
+		// marker and the count are what say a branch is there, and Loops' folds are items (§4).
+		if row.node && !row.HasKids {
 			lines = append(lines, Line{Text: t.itemLine(row, width, focused), Focused: focused})
 			continue
 		}
@@ -411,9 +418,11 @@ func (t Tree[T]) View(width int, theme Theme) string {
 	return b.String()
 }
 
-// indent is the blank margin a row sits behind, before the column its own marker takes.
+// indent is the blank margin a row sits behind, before the column its own marker takes. It is
+// capped past a few levels, so a deep branch cannot squeeze the row's own columns to nothing on a
+// narrow terminal.
 func indent(depth int) string {
-	return strings.Repeat(" ", headingIndent+indentStep*depth)
+	return strings.Repeat(" ", headingIndent+indentStep*min(depth, maxIndentDepth))
 }
 
 // heading is a fold line: the marker, the project, and the count pushed to the right edge.

@@ -211,15 +211,16 @@ func TestParentCandidatesExcludeTheItemAndItsDescendants(t *testing.T) {
 	}
 }
 
-// A project heading is not an item, so P is inert there and the footer says which row it was pressed
-// on (§4). A collapsed fold is the one heading the cursor can reach.
-func TestParentIsInertOnAProjectHeading(t *testing.T) {
+// The (unassigned) bucket is a rendering artifact rather than an item, so P is inert there and the
+// footer says which row it was pressed on (§4). A collapsed fold is the one such row the cursor can
+// reach.
+func TestParentIsInertOnTheBucket(t *testing.T) {
 	m, _ := filing(t)
 
-	m, _ = press(t, m, "enter", "P")
+	m, _ = press(t, m, "j", "j", "enter", "P")
 
 	if m.prompt.kind != promptNone {
-		t.Error("P opened a prompt on a project heading, want it inert")
+		t.Error("P opened a prompt on the bucket, want it inert")
 	}
 	if !strings.Contains(m.hint, "this row is a project") {
 		t.Errorf("the hint is %q, want it to name the row P was pressed on", m.hint)

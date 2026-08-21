@@ -12,6 +12,8 @@
 {"ts":"2026-08-16T10:00:00.000Z","ev":"dismiss","key":"review:DevResults/DevResults#6886"}
 {"ts":"2026-08-16T10:01:00.000Z","ev":"dismiss","key":"branch:C:\\dev\\waid@tui"}
 {"ts":"2026-08-16T10:02:00.000Z","ev":"undismiss","key":"branch:C:\\dev\\waid@tui"}
+{"ts":"2026-08-16T12:00:00.000Z","ev":"add","id":"i9j0","title":"Wire the outliner into the app","status":"open","project":null,"parent":"e5f6","session":null,"tags":[],"waitingOn":null}
+{"ts":"2026-08-16T12:30:00.000Z","ev":"update","id":"i9j0","parent":"c3d4"}
 {"ts":"2026-08-16T11:00:00.000Z","ev":"add","id":"a1b2","title":"duplicate-id","status":"open","project":null,"session":null,"tags":[],"waitingOn":null}
 {"ts":"2026-08-16T11:01:00.000Z","ev":"add","title":"add-missing-fields","status":"open","project":null,"session":null,"tags":[],"waitingOn":null}
 {"ts":"2026-08-16T11:02:00.000Z","ev":"note","id":"zzzz","text":"unknown-id"}

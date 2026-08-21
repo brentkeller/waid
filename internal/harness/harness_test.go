@@ -29,11 +29,29 @@ func TestGoldenHomeExercisesEveryEventType(t *testing.T) {
 	}
 
 	state := events.Fold(lines)
-	if len(state.Items) != 4 {
-		t.Errorf("items = %d, want 4", len(state.Items))
+	if len(state.Items) != 5 {
+		t.Errorf("items = %d, want 5", len(state.Items))
 	}
 	if len(state.Dismissed) != 1 || state.Dismissed[0] != "review:DevResults/DevResults#6886" {
 		t.Errorf("dismissed = %v, want the single un-restored key", state.Dismissed)
+	}
+}
+
+// The fixture log nests, so every command the harness runs against it is run against a tree rather
+// than a flat list. The parent arrives on the add and is moved by a later update, which are the two
+// ways one is ever written.
+func TestGoldenHomeNests(t *testing.T) {
+	state := events.Fold(goldenLines(t))
+
+	item, found := state.Find("i9j0")
+	if !found {
+		t.Fatal("the fixture log holds no nested item")
+	}
+	if item.Parent == nil || *item.Parent != "c3d4" {
+		t.Errorf("i9j0 sits under %v, want the parent its later update names", deref(item.Parent))
+	}
+	if kids := state.Children("c3d4"); len(kids) != 1 || kids[0].Id != "i9j0" {
+		t.Errorf("c3d4 holds %d children, want the one the fixture files under it", len(kids))
 	}
 }
 

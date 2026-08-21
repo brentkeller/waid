@@ -606,45 +606,56 @@ func (m Model) reviewTree(width int) Tree[sessions.Session] {
 	columns := reviewColumnsFor(visible)
 
 	tree := Tree[sessions.Session]{
-		Groups:   reviewGroups(visible),
+		Rows:     reviewRows(visible),
 		Cursor:   m.review.cursor,
 		Expanded: m.review.expanded,
 		Render: func(session sessions.Session, width int, _ bool) string {
 			return reviewRow(session, columns, width)
 		},
+		// A project heading is chrome here rather than a row to act on, so the cursor steps over the
+		// ones it can see under (§7).
+		Selectable: func(row Row[sessions.Session]) bool { return row.Depth > 0 },
 	}
 	tree.clamp()
 	return tree
 }
 
-// reviewGroups files the sessions under their projects, busiest first so the window reads as where
-// the time went; ties fall back to name, matching how `waid today` orders the same rollup.
-func reviewGroups(visible []sessions.Session) []Group[sessions.Session] {
-	var groups []Group[sessions.Session]
-	index := map[string]int{}
+// reviewRows files the sessions under their projects and flattens the result into the tree's rows,
+// busiest project first so the window reads as where the time went; ties fall back to name, matching
+// how `waid today` orders the same rollup.
+func reviewRows(visible []sessions.Session) []Row[sessions.Session] {
+	var keys []string
+	filed := map[string][]sessions.Session{}
 
 	for _, session := range visible {
 		key := reviewGroupKey(session)
-		at, known := index[key]
-		if !known {
-			at = len(groups)
-			index[key] = at
-			groups = append(groups, Group[sessions.Session]{Key: key, Title: key})
+		if _, known := filed[key]; !known {
+			keys = append(keys, key)
 		}
-		groups[at].Items = append(groups[at].Items, session)
+		filed[key] = append(filed[key], session)
 	}
 
-	for i := range groups {
-		groups[i].Meta = reviewGroupMeta(groups[i].Items)
-	}
-
-	slices.SortStableFunc(groups, func(a, b Group[sessions.Session]) int {
-		if left, right := promptsIn(a.Items), promptsIn(b.Items); left != right {
+	slices.SortStableFunc(keys, func(a, b string) int {
+		if left, right := promptsIn(filed[a]), promptsIn(filed[b]); left != right {
 			return right - left
 		}
-		return project.CompareNames(a.Items[0].Project, b.Items[0].Project)
+		return project.CompareNames(filed[a][0].Project, filed[b][0].Project)
 	})
-	return groups
+
+	var rows []Row[sessions.Session]
+	for _, key := range keys {
+		under := filed[key]
+		rows = append(rows, Row[sessions.Session]{
+			Depth: 0,
+			Key:   key,
+			Title: key,
+			Meta:  reviewGroupMeta(under),
+		})
+		for _, session := range under {
+			rows = append(rows, Row[sessions.Session]{Node: session, Depth: 1, node: true})
+		}
+	}
+	return rows
 }
 
 func reviewGroupKey(session sessions.Session) string {

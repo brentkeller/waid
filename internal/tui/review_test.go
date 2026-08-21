@@ -1033,3 +1033,38 @@ func follow(t *testing.T, m Model, cmd tea.Cmd) Model {
 	}
 	return m
 }
+
+// The Agents tree is a flat list of rows: a project heading at the top level carrying its counts,
+// and the sessions filed under it one level in. The folds start closed, so only the headings are on
+// screen until one is opened (§7).
+func TestReviewBuildsFlatRows(t *testing.T) {
+	tree := reviewed(t, 140, reviewFixture()).reviewTree(140)
+
+	all := tree.allRows()
+	if got, want := len(all), 2+4; got != want {
+		t.Fatalf("the tree holds %d rows, want %d — two headings and four sessions", got, want)
+	}
+
+	head := all[0]
+	if head.Depth != 0 || head.node || head.Key != `C:\dev\dr\devresults\devresults` {
+		t.Errorf("first row = %+v, want the busiest project's heading", head)
+	}
+	if head.Meta != "1 session · 28 prompts" {
+		t.Errorf("first row's meta = %q, want its session and prompt counts", head.Meta)
+	}
+	for _, row := range all[1:2] {
+		if row.Depth != 1 || !row.node {
+			t.Errorf("row %+v is not a session one level under its project", row)
+		}
+	}
+
+	visible := tree.rows()
+	if got, want := len(visible), 2; got != want {
+		t.Fatalf("%d rows are on screen, want %d — the folds start closed", got, want)
+	}
+	for _, row := range visible {
+		if !row.HasKids || row.Expanded {
+			t.Errorf("row %+v is not a closed fold", row)
+		}
+	}
+}

@@ -18,14 +18,18 @@ func addLine(id string, title string, parent string) string {
 	return line + "}"
 }
 
-// shape renders a forest as indented ids, so a test states the nesting it expects rather than
-// walking the nodes by hand.
+// shape renders a forest as indented ids — or titles, for the synthetic nodes that have no id — so
+// a test states the nesting it expects rather than walking the nodes by hand.
 func shape(nodes []Node) string {
 	lines := []string{}
 	var walk func(nodes []Node, depth int)
 	walk = func(nodes []Node, depth int) {
 		for _, node := range nodes {
-			lines = append(lines, strings.Repeat("  ", depth)+node.Item.Id)
+			label := node.Item.Id
+			if label == "" {
+				label = node.Item.Title
+			}
+			lines = append(lines, strings.Repeat("  ", depth)+label)
 			walk(node.Children, depth+1)
 		}
 	}
@@ -275,6 +279,123 @@ func TestBuildSortsParentTitlesCaseInsensitively(t *testing.T) {
 
 	roots, _ := Build(state)
 	if got, want := shape(roots), "lila\n  kida\nbigb\n  kidb"; got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// openOnly drops the done items from a forest, standing in for the filter the views apply, so the
+// bucket can be tested against a level whose children are all hidden.
+func openOnly(nodes []Node) []Node {
+	kept := []Node{}
+	for _, node := range nodes {
+		if node.Item.Status == events.StatusDone {
+			continue
+		}
+		node.Children = openOnly(node.Children)
+		kept = append(kept, node)
+	}
+	return kept
+}
+
+func TestBucketLeavesALevelOfOnlyLeavesAlone(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("head", "Parent", ""),
+		addLine("kid1", "First", "head"),
+		addLine("kid2", "Second", "head"),
+	})
+
+	roots, _ := Build(state)
+	if got, want := shape(Bucket(roots)), "head\n  kid1\n  kid2"; got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestBucketGathersTheLeavesOfAMixedLevel(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("head", "Parent", ""),
+		addLine("subh", "Subproject", "head"),
+		addLine("gkid", "Under the subproject", "subh"),
+		addLine("loos", "Loose task", "head"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"head", "  subh", "    gkid", "  (unassigned)", "    loos"}, "\n")
+	if got := shape(Bucket(roots)); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// The bucket is pinned after its siblings however their titles sort.
+func TestBucketSortsLast(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("zulu", "Zulu project", ""),
+		addLine("kidz", "Child of Zulu", "zulu"),
+		addLine("loos", "Loose task", ""),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"zulu", "  kidz", "(unassigned)", "  loos"}, "\n")
+	if got := shape(Bucket(roots)); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// The top level is a level like any other: it buckets when it mixes and does not when it does not.
+func TestBucketLeavesATopLevelOfOnlyLeavesAlone(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("aaaa", "First", ""),
+		addLine("bbbb", "Second", ""),
+	})
+
+	roots, _ := Build(state)
+	if got, want := shape(Bucket(roots)), "aaaa\nbbbb"; got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestBucketIsNeverAnItem(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("head", "Parent", ""),
+		addLine("kid1", "Child", "head"),
+		addLine("loos", "Loose task", ""),
+	})
+
+	built, _ := Build(state)
+	roots := Bucket(built)
+	bucket := roots[len(roots)-1]
+	if !bucket.Synthetic {
+		t.Errorf("bucket.Synthetic = false, want true")
+	}
+	if bucket.Item.Id != "" {
+		t.Errorf("bucket id = %q, want empty", bucket.Item.Id)
+	}
+	if bucket.Item.Title != UnassignedTitle {
+		t.Errorf("bucket title = %q, want %q", bucket.Item.Title, UnassignedTitle)
+	}
+	if _, found := state.Find(bucket.Item.Id); found {
+		t.Errorf("the bucket resolves to an item, want no item behind it")
+	}
+	for _, node := range roots[:len(roots)-1] {
+		if node.Synthetic {
+			t.Errorf("%s is marked synthetic, want only the bucket", node.Item.Id)
+		}
+	}
+}
+
+// A parent whose children are all done has no visible children, so it renders as a leaf and joins
+// the bucket rather than standing as an empty heading.
+func TestBucketTreatsAParentWithNoVisibleChildrenAsALeaf(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("live", "Live project", ""),
+		addLine("kidl", "Open child", "live"),
+		addLine("spnt", "Spent project", ""),
+		addLine("kids", "Closed child", "spnt"),
+		`{"ts":"2026-08-14T09:01:00.000Z","ev":"update","id":"kids","status":"done"}`,
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"live", "  kidl", "(unassigned)", "  spnt"}, "\n")
+	if got := shape(Bucket(openOnly(roots))); got != want {
 		t.Errorf("shape =\n%s\nwant\n%s", got, want)
 	}
 }

@@ -10,10 +10,12 @@ import (
 	"github.com/brentkeller/waid/internal/events"
 )
 
-// Node is an item together with the items filed under it.
+// Node is an item together with the items filed under it. A node whose Synthetic flag is set is a
+// rendering artifact rather than a logged item: it holds no id and nothing can act on it.
 type Node struct {
-	Item     events.Item `json:"item"`
-	Children []Node      `json:"children"`
+	Item      events.Item `json:"item"`
+	Children  []Node      `json:"children"`
+	Synthetic bool        `json:"synthetic,omitempty"`
 }
 
 // AnomalyKind is why an item could not sit where its parent id says it should.
@@ -127,4 +129,37 @@ func chainLoops(state events.State, item events.Item) bool {
 		current = parent
 	}
 	return false
+}
+
+// UnassignedTitle is the title the synthetic bucket carries.
+const UnassignedTitle = "(unassigned)"
+
+// Bucket gathers the leaves of every level that also holds parents into one synthetic
+// (unassigned) node, pinned after its siblings. A level whose children are all leaves keeps them
+// where they are, since a bucket holding an entire level says nothing about it.
+//
+// Leaf-ness is read off the nodes given rather than off the log, so a parent filtered down to no
+// children renders as a leaf and joins the bucket alongside the others. Call this after any
+// filtering, so the bucket follows whatever is in force.
+func Bucket(nodes []Node) []Node {
+	parents, leaves := []Node{}, []Node{}
+	for _, current := range nodes {
+		if len(current.Children) == 0 {
+			leaves = append(leaves, current)
+			continue
+		}
+		current.Children = Bucket(current.Children)
+		parents = append(parents, current)
+	}
+	switch {
+	case len(parents) == 0:
+		return nodes
+	case len(leaves) == 0:
+		return parents
+	}
+	return append(parents, Node{
+		Item:      events.Item{Title: UnassignedTitle},
+		Children:  leaves,
+		Synthetic: true,
+	})
 }

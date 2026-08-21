@@ -327,3 +327,42 @@ func goldenScan(t *testing.T, width int) {
 
 	teatest.RequireEqualOutput(t, []byte(plain(scanned(t, width, scanFixture()).View())))
 }
+
+// The Repos tree is a flat list of rows: a project heading at the top level carrying its count, and
+// the signals filed under it one level in (§7).
+func TestScanBuildsFlatRows(t *testing.T) {
+	rows := scanned(t, 140, scanFixture()).scanTree(140).rows()
+
+	if got, want := len(rows), 2+4; got != want {
+		t.Fatalf("the tree drew %d rows, want %d — two headings and four signals", got, want)
+	}
+
+	head := rows[0]
+	if head.Depth != 0 || head.node || head.Key != "DevResults/DevResults" || head.Meta != "2 signals" {
+		t.Errorf("first row = %+v, want the DevResults heading and its count", head)
+	}
+	if !head.HasKids || !head.Expanded {
+		t.Errorf("first row = %+v, want its signals on screen", head)
+	}
+	for _, row := range rows[1:3] {
+		if row.Depth != 1 || !row.node {
+			t.Errorf("row %+v is not a signal one level under its project", row)
+		}
+	}
+}
+
+// a pressed on a collapsed project files the item under it: the cursor is on a fold rather than on a
+// signal, and a project on one line is still a project to file against (§7).
+func TestScanAddsAgainstACollapsedProject(t *testing.T) {
+	m, _ := adding(t, tabScan)
+	m, _ = press(t, m, "j", "j", "enter")
+
+	if !m.scanTree(m.viewWidth()).OnHeading() {
+		t.Fatal("enter did not leave the cursor on the fold it closed")
+	}
+
+	m, _ = press(t, m, "a")
+	if view := plain(m.View()); !strings.Contains(view, "add "+projectLabel(text(`C:\dev\waid`))) {
+		t.Errorf("the prompt does not file the item under the collapsed project:\n%s", view)
+	}
+}

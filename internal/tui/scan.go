@@ -295,39 +295,49 @@ func (m Model) scanTree(width int) Tree[detect.Signal] {
 	columns := scanColumnsFor(visible)
 
 	tree := Tree[detect.Signal]{
-		Groups:            scanGroups(visible),
+		Rows:              scanRows(visible),
 		Cursor:            m.scan.cursor,
 		Expanded:          m.scan.expanded,
 		ExpandedByDefault: true,
 		Render: func(signal detect.Signal, width int, _ bool) string {
 			return scanRow(signal, columns, width)
 		},
+		// A project heading is chrome here rather than a row to act on, so the cursor steps over the
+		// ones it can see under (§7).
+		Selectable: func(row Row[detect.Signal]) bool { return row.Depth > 0 },
 	}
 	tree.clamp()
 	return tree
 }
 
-// scanGroups files the signals under their projects, keeping the rank order detection returned both
-// within a group and between them.
-func scanGroups(signals []detect.Signal) []Group[detect.Signal] {
-	var groups []Group[detect.Signal]
-	index := map[string]int{}
+// scanRows files the signals under their projects and flattens the result into the tree's rows,
+// keeping the rank order detection returned both within a project and between them.
+func scanRows(signals []detect.Signal) []Row[detect.Signal] {
+	var keys []string
+	filed := map[string][]detect.Signal{}
 
 	for _, signal := range signals {
 		key := scanGroupKey(signal)
-		at, known := index[key]
-		if !known {
-			at = len(groups)
-			index[key] = at
-			groups = append(groups, Group[detect.Signal]{Key: key, Title: key})
+		if _, known := filed[key]; !known {
+			keys = append(keys, key)
 		}
-		groups[at].Items = append(groups[at].Items, signal)
+		filed[key] = append(filed[key], signal)
 	}
 
-	for i := range groups {
-		groups[i].Meta = plural(len(groups[i].Items), "signal")
+	var rows []Row[detect.Signal]
+	for _, key := range keys {
+		under := filed[key]
+		rows = append(rows, Row[detect.Signal]{
+			Depth: 0,
+			Key:   key,
+			Title: key,
+			Meta:  plural(len(under), "signal"),
+		})
+		for _, signal := range under {
+			rows = append(rows, Row[detect.Signal]{Node: signal, Depth: 1, node: true})
+		}
 	}
-	return groups
+	return rows
 }
 
 // scanGroupKey is the project a signal is filed under: its local checkout when detection matched

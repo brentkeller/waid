@@ -15,10 +15,12 @@ const (
 	foldClosed = "▸"
 	cursorMark = "▸"
 
-	// headingIndent leaves a column before the fold marker; rowIndent puts a child's text two
-	// columns past its heading's title, with the cursor marker sitting in the gap.
+	// headingIndent leaves a column before a top-level row's marker, and indentStep is what each
+	// level below it moves in by. rowIndent is where a depth-1 child's text starts: one step past
+	// the heading, plus the marker column and the space after it.
 	headingIndent = 1
-	rowIndent     = 5
+	indentStep    = 2
+	rowIndent     = headingIndent + indentStep + 2
 )
 
 // Group is one project and the children folded under it. Key identifies the group across reloads,
@@ -31,35 +33,45 @@ type Group[T any] struct {
 	Items []T
 }
 
-// Row is one visible line of the tree: the node it draws, how deep the line sits, whether anything
-// is folded under it and whether that is on screen. The cursor is an index into these rows, so a
-// tree of any depth is navigated the same way as a two-level one (§7).
+// Row is one line of the tree: the node it draws, how deep the line sits, whether anything is
+// folded under it and whether that is on screen. The cursor is an index into these rows, so a tree
+// of any depth is navigated the same way as a two-level one (§7).
 type Row[T any] struct {
 	Node     T
 	Depth    int
 	HasKids  bool
 	Expanded bool
 
-	// Key is what Expanded is keyed by, supplied by whatever built the row. A row with nothing
-	// folded under it has no fold and carries none.
+	// Key is what Expanded is keyed by, supplied by whatever built the row: a path for Repos and
+	// Agents, an item id for Loops.
 	Key string
 
-	// parent is the index of the row this one is folded under, or -1 at the top level. group is the
-	// Group the row was built from, which a heading draws its title and count out of. node reports
-	// whether Node holds anything: a heading built from a Group has no item behind it.
+	// Title and Meta are what a row with no item behind it draws. Repos and Agents head each fold
+	// with a project, which is not an item and has only a name and a count.
+	Title string
+	Meta  string
+
+	// parent is the index of the row this one is folded under, or -1 at the top level. at is where
+	// the row sits in the whole tree, folds ignored. node reports whether Node holds anything: a
+	// heading built from a Group has no item behind it.
 	parent int
-	group  int
+	at     int
 	node   bool
 }
 
-// Tree is the collapsible list the tabs draw. It takes projects and their children and flattens
-// them into rows the cursor walks.
+// Tree is the collapsible list the tabs draw. It takes the tree as a flat list of rows and shows
+// the ones no closed fold is hiding.
 type Tree[T any] struct {
+	// Rows is the whole tree in reading order, folded or not: the tab supplies Node, Depth, Key and
+	// — for a row that is not an item — Title and Meta, and the tree derives the rest from where
+	// each row sits. A tree supplying no rows is built from Groups instead.
+	Rows []Row[T]
+
 	Groups   []Group[T]
 	Cursor   int
 	Expanded map[string]bool
 
-	// ExpandedByDefault decides a group the Expanded map says nothing about. Repos opens its groups
+	// ExpandedByDefault decides a fold the Expanded map says nothing about. Repos opens its groups
 	// so the signals are readable at a glance; Agents closes them, which is the whole reason it
 	// reads better than the command (§1.3).
 	ExpandedByDefault bool
@@ -69,8 +81,9 @@ type Tree[T any] struct {
 	Render func(item T, width int, focused bool) string
 
 	// Selectable decides which rows the cursor may rest on, above the rule that a row with nothing
-	// visible under it is always reachable. Repos and Agents call a heading whose children are on
-	// screen chrome and step over it; Loops selects everything, since its headings are items (§7).
+	// visible under it is always reachable. Repos and Agents pass Depth > 0, which calls a heading
+	// whose children are on screen chrome; Loops selects everything, since its headings are items
+	// (§7).
 	Selectable func(row Row[T]) bool
 }
 
@@ -82,7 +95,7 @@ type Line struct {
 	Focused bool
 }
 
-// IsExpanded reports whether the named group's fold is open.
+// IsExpanded reports whether the named fold is open.
 func (t Tree[T]) IsExpanded(key string) bool {
 	if open, ok := t.Expanded[key]; ok {
 		return open
@@ -98,28 +111,56 @@ func (t *Tree[T]) SetExpanded(key string, open bool) {
 	t.Expanded[key] = open
 }
 
-// rows flattens the groups into the lines that are on screen: every heading, and the children of
-// the ones that are open.
-func (t Tree[T]) rows() []Row[T] {
-	var out []Row[T]
-	for gi, group := range t.Groups {
-		open := t.IsExpanded(group.Key) && len(group.Items) > 0
+// allRows is the whole tree with the folds ignored: the rows the tab supplied, or its groups
+// flattened into the same shape — a heading at depth 0 and its children at depth 1.
+func (t Tree[T]) allRows() []Row[T] {
+	if t.Rows != nil {
+		return t.Rows
+	}
 
-		head := len(out)
-		out = append(out, Row[T]{
-			Depth:    0,
-			HasKids:  len(group.Items) > 0,
-			Expanded: open,
-			Key:      group.Key,
-			parent:   -1,
-			group:    gi,
-		})
-		if !open {
+	var out []Row[T]
+	for _, group := range t.Groups {
+		out = append(out, Row[T]{Depth: 0, Key: group.Key, Title: group.Title, Meta: group.Meta})
+		for _, item := range group.Items {
+			out = append(out, Row[T]{Node: item, Depth: 1, node: true})
+		}
+	}
+	return out
+}
+
+// rows is what is on screen: every row no closed fold is hiding, carrying the fold state and the
+// parent link derived from where it sits in the flat list.
+func (t Tree[T]) rows() []Row[T] {
+	all := t.allRows()
+
+	var out []Row[T]
+	// folded is the depth a closed fold was found at; everything deeper is off screen until a row
+	// at that depth or above ends the run. -1 is nothing hidden.
+	folded := -1
+	// ancestors[d] is the index in out of the last row drawn at depth d, which is what the next row
+	// one level deeper hangs off.
+	var ancestors []int
+
+	for i, row := range all {
+		if folded >= 0 && row.Depth > folded {
 			continue
 		}
-		for _, item := range group.Items {
-			out = append(out, Row[T]{Node: item, Depth: 1, parent: head, group: gi, node: true})
+		folded = -1
+
+		row.at = i
+		row.HasKids = i+1 < len(all) && all[i+1].Depth > row.Depth
+		row.Expanded = row.HasKids && t.IsExpanded(row.Key)
+		if row.HasKids && !row.Expanded {
+			folded = row.Depth
 		}
+
+		row.parent = -1
+		if row.Depth > 0 && row.Depth <= len(ancestors) {
+			row.parent = ancestors[row.Depth-1]
+		}
+
+		ancestors = append(ancestors[:min(row.Depth, len(ancestors))], len(out))
+		out = append(out, row)
 	}
 	return out
 }
@@ -181,7 +222,7 @@ func (t Tree[T]) selected() (Row[T], bool) {
 }
 
 // clamp pulls the cursor back onto a row it can rest on, which a reload can put it off by handing
-// the tree fewer groups than it had.
+// the tree fewer rows than it had.
 func (t *Tree[T]) clamp() {
 	t.Cursor = max(t.snap(t.rows()), 0)
 }
@@ -292,13 +333,35 @@ func (t Tree[T]) OnHeading() bool {
 	return ok && !row.node
 }
 
-// SelectedGroup is the group the cursor is in, whether it is on the fold or on a child.
+// SelectedGroup is the top-level fold the cursor is under, whether it is on the fold itself or on a
+// row within it. It carries the items folded beneath it whether or not they are on screen: a
+// project collapsed to one line is still a project.
 func (t Tree[T]) SelectedGroup() (Group[T], bool) {
-	row, ok := t.selected()
-	if !ok {
+	rows := t.rows()
+	at := t.snap(rows)
+	for at >= 0 && rows[at].Depth > 0 {
+		at = rows[at].parent
+	}
+	if at < 0 {
 		return Group[T]{}, false
 	}
-	return t.Groups[row.group], true
+
+	head := rows[at]
+	return Group[T]{Key: head.Key, Title: head.Title, Meta: head.Meta, Items: t.itemsUnder(head)}, true
+}
+
+// itemsUnder are the items folded beneath a row, read off the whole tree rather than the visible
+// rows so a closed fold still reports what it holds.
+func (t Tree[T]) itemsUnder(row Row[T]) []T {
+	all := t.allRows()
+
+	var items []T
+	for i := row.at + 1; i < len(all) && all[i].Depth > row.Depth; i++ {
+		if all[i].node {
+			items = append(items, all[i].Node)
+		}
+	}
+	return items
 }
 
 // SelectedItem is the item under the cursor. A fold has none, so the actions that need one are
@@ -321,14 +384,10 @@ func (t Tree[T]) Lines(width int) []Line {
 	for i, row := range rows {
 		focused := i == cursor
 		if row.node {
-			lines = append(lines, Line{Text: t.row(row.Node, width, focused), Focused: focused})
+			lines = append(lines, Line{Text: t.itemLine(row, width, focused), Focused: focused})
 			continue
 		}
-		lines = append(lines, Line{
-			Text:    t.heading(t.Groups[row.group], row.Expanded, width),
-			Heading: true,
-			Focused: focused,
-		})
+		lines = append(lines, Line{Text: t.heading(row, width), Heading: true, Focused: focused})
 	}
 	return lines
 }
@@ -352,25 +411,30 @@ func (t Tree[T]) View(width int, theme Theme) string {
 	return b.String()
 }
 
-// heading is the fold line: the marker, the project, and the count pushed to the right edge.
-func (t Tree[T]) heading(group Group[T], open bool, width int) string {
+// indent is the blank margin a row sits behind, before the column its own marker takes.
+func indent(depth int) string {
+	return strings.Repeat(" ", headingIndent+indentStep*depth)
+}
+
+// heading is a fold line: the marker, the project, and the count pushed to the right edge.
+func (t Tree[T]) heading(row Row[T], width int) string {
 	marker := foldClosed
-	if open {
+	if row.Expanded {
 		marker = foldOpen
 	}
 
-	prefix := strings.Repeat(" ", headingIndent) + marker + " "
+	prefix := indent(row.Depth) + marker + " "
 	if width <= 0 {
-		return prefix + group.Title
+		return prefix + row.Title
 	}
 
 	room := width - lipgloss.Width(prefix)
-	if group.Meta == "" {
-		return prefix + truncate(group.Title, room)
+	if row.Meta == "" {
+		return prefix + truncate(row.Title, room)
 	}
 
-	meta := truncate(group.Meta, room)
-	title := truncate(group.Title, room-lipgloss.Width(meta)-1)
+	meta := truncate(row.Meta, room)
+	title := truncate(row.Title, room-lipgloss.Width(meta)-1)
 	gap := room - lipgloss.Width(title) - lipgloss.Width(meta)
 	if gap < 1 {
 		gap = 1
@@ -378,23 +442,24 @@ func (t Tree[T]) heading(group Group[T], open bool, width int) string {
 	return prefix + title + strings.Repeat(" ", gap) + meta
 }
 
-// row is a child line: the cursor marker, then whatever the tab drew into the width that is left.
-func (t Tree[T]) row(item T, width int, focused bool) string {
-	room := width - rowIndent
-	if width <= 0 {
-		room = 0
-	}
-
-	text := fmt.Sprint(item)
-	if t.Render != nil {
-		text = t.Render(item, room, focused)
-	}
-
+// itemLine is a row with an item behind it: the cursor marker, then whatever the tab drew into the
+// width that is left.
+func (t Tree[T]) itemLine(row Row[T], width int, focused bool) string {
 	marker := " "
 	if focused {
 		marker = cursorMark
 	}
-	prefix := strings.Repeat(" ", rowIndent-2) + marker + " "
+	prefix := indent(row.Depth) + marker + " "
+
+	room := width - lipgloss.Width(prefix)
+	if width <= 0 {
+		room = 0
+	}
+
+	text := fmt.Sprint(row.Node)
+	if t.Render != nil {
+		text = t.Render(row.Node, room, focused)
+	}
 
 	if width <= 0 {
 		return prefix + text

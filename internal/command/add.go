@@ -7,15 +7,18 @@ import (
 	"github.com/brentkeller/waid/internal/cli"
 	"github.com/brentkeller/waid/internal/errs"
 	"github.com/brentkeller/waid/internal/events"
-	"github.com/brentkeller/waid/internal/project"
+	"github.com/brentkeller/waid/internal/tree"
 )
 
-// AddResult is the item as recorded, echoed back so --json callers need no follow-up read.
+// AddResult is the item as recorded, echoed back so --json callers need no follow-up read. Parent
+// and Origin are both here because -p resolves to one or the other, and a caller cannot tell which
+// from the value it passed.
 type AddResult struct {
 	Id        string        `json:"id"`
 	Title     string        `json:"title"`
 	Status    events.Status `json:"status"`
-	Project   *string       `json:"project"`
+	Parent    *string       `json:"parent"`
+	Origin    *string       `json:"origin"`
 	Tags      []string      `json:"tags"`
 	WaitingOn *string       `json:"waitingOn"`
 	Session   *string       `json:"session"`
@@ -30,7 +33,7 @@ func runAdd(ctx *cli.Ctx) (AddResult, error) {
 
 	state := events.Load(ctx.Cfg.EventsPath)
 	requested, _ := ctx.Flags.String("project")
-	path, err := project.Resolve(requested, project.KnownProjects(state.Items, nil), ctx.Cwd)
+	target, err := tree.Resolve(requested, state, ctx.Cwd)
 	if err != nil {
 		return AddResult{}, err
 	}
@@ -58,7 +61,8 @@ func runAdd(ctx *cli.Ctx) (AddResult, error) {
 		Id:        id,
 		Title:     title,
 		Status:    status,
-		Origin:    path,
+		Parent:    target.Parent,
+		Origin:    target.Origin,
 		Session:   session,
 		Tags:      tags,
 		WaitingOn: waitingOn,
@@ -71,7 +75,8 @@ func runAdd(ctx *cli.Ctx) (AddResult, error) {
 		Id:        id,
 		Title:     title,
 		Status:    status,
-		Project:   path,
+		Parent:    target.Parent,
+		Origin:    target.Origin,
 		Tags:      tags,
 		WaitingOn: waitingOn,
 		Session:   session,

@@ -1,11 +1,13 @@
 package command_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/brentkeller/waid/internal/cli"
 	"github.com/brentkeller/waid/internal/ids"
+	"github.com/brentkeller/waid/internal/project"
 )
 
 // addRecord is the --json payload add echoes back.
@@ -13,7 +15,8 @@ type addRecord struct {
 	Id        string   `json:"id"`
 	Title     string   `json:"title"`
 	Status    string   `json:"status"`
-	Project   *string  `json:"project"`
+	Parent    *string  `json:"parent"`
+	Origin    *string  `json:"origin"`
 	Tags      []string `json:"tags"`
 	WaitingOn *string  `json:"waitingOn"`
 	Session   *string  `json:"session"`
@@ -49,8 +52,11 @@ func TestAddReturnsACompleteRecord(t *testing.T) {
 	if record.Status != "open" {
 		t.Errorf("status = %q, want open", record.Status)
 	}
-	if record.Project == nil || *record.Project != `C:\dev\waid` {
-		t.Errorf("project = %v, want C:\\dev\\waid", record.Project)
+	if record.Origin == nil || *record.Origin != `C:\dev\waid` {
+		t.Errorf("origin = %v, want C:\\dev\\waid", record.Origin)
+	}
+	if record.Parent != nil {
+		t.Errorf("parent = %v, want null", *record.Parent)
 	}
 	if len(record.Tags) != 2 || record.Tags[0] != "bug" || record.Tags[1] != "ui" {
 		t.Errorf("tags = %v, want [bug ui]", record.Tags)
@@ -93,8 +99,8 @@ func TestAddJoinsItsPositionalsIntoTheTitle(t *testing.T) {
 	if record.Title != "Decide whether to ship" {
 		t.Errorf("title = %q, want the positionals joined", record.Title)
 	}
-	if record.Project != nil {
-		t.Errorf("project = %q, want null", *record.Project)
+	if record.Origin != nil {
+		t.Errorf("origin = %q, want null", *record.Origin)
 	}
 }
 
@@ -111,31 +117,108 @@ func TestAddWaitingOnYieldsWaitingStatus(t *testing.T) {
 	}
 }
 
-func TestAddResolvesAPartialProjectAgainstAnEarlierAdd(t *testing.T) {
+// -p reads as "parent" now: a fragment naming one item files the new item under it.
+func TestAddFilesUnderAParentNamedByAFragment(t *testing.T) {
 	home := makeHome(t)
-	add(t, home, "First", "-p", `C:\dev\dr\devresults`)
+	parent := addItem(t, home, "Chart rewrite")
 
-	record := add(t, home, "Second", "-p", "devresults")
+	record := add(t, home, "Legend overflows", "-p", "chart")
 
-	if record.Project == nil || *record.Project != `C:\dev\dr\devresults` {
-		t.Errorf("project = %v, want the path the earlier add used", record.Project)
+	if record.Parent == nil || *record.Parent != parent {
+		t.Errorf("parent = %v, want %s", record.Parent, parent)
+	}
+	if record.Origin != nil {
+		t.Errorf("origin = %v, want null", *record.Origin)
+	}
+	if got := item(t, home, record.Id); got.Parent == nil || *got.Parent != parent {
+		t.Errorf("folded parent = %v, want %s", got.Parent, parent)
 	}
 }
 
-func TestAddRejectsAnAmbiguousPartialProject(t *testing.T) {
+// An absolute path is provenance, so it lands as origin with the item left at top level.
+func TestAddWithAnAbsolutePathRecordsAnOriginAndNoParent(t *testing.T) {
 	home := makeHome(t)
-	add(t, home, "First", "-p", `C:\dev\alpha`)
-	add(t, home, "Second", "-p", `C:\dev\beta`)
+	addItem(t, home, "Chart rewrite")
 
-	run := waid(t, home, "add", "Third", "-p", "dev")
+	record := add(t, home, "Legend overflows", "-p", `C:\dev\waid`)
+
+	if record.Origin == nil || *record.Origin != `C:\dev\waid` {
+		t.Errorf("origin = %v, want C:\\dev\\waid", record.Origin)
+	}
+	if record.Parent != nil {
+		t.Errorf("parent = %v, want null", *record.Parent)
+	}
+	if got := item(t, home, record.Id); got.Parent != nil {
+		t.Errorf("folded parent = %v, want null", *got.Parent)
+	}
+}
+
+// `.` is the current directory, which is the form the agent snippet uses.
+func TestAddWithADotRecordsTheWorkingDirectoryAsOrigin(t *testing.T) {
+	home := makeHome(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+
+	record := add(t, home, "Legend overflows", "-p", ".")
+
+	if want := project.NormalizePath(cwd); record.Origin == nil || *record.Origin != want {
+		t.Errorf("origin = %v, want %s", record.Origin, want)
+	}
+	if record.Parent != nil {
+		t.Errorf("parent = %v, want null", *record.Parent)
+	}
+}
+
+// No -p at all leaves both fields unset rather than guessing at either.
+func TestAddWithoutAParentRecordsNeitherField(t *testing.T) {
+	home := makeHome(t)
+
+	record := add(t, home, "Legend overflows")
+
+	if record.Parent != nil {
+		t.Errorf("parent = %v, want null", *record.Parent)
+	}
+	if record.Origin != nil {
+		t.Errorf("origin = %v, want null", *record.Origin)
+	}
+}
+
+func TestAddRejectsAFragmentMatchingNoItem(t *testing.T) {
+	home := makeHome(t)
+	addItem(t, home, "Chart rewrite")
+
+	run := waid(t, home, "add", "Legend overflows", "-p", "invoicing")
 
 	if run.code != cli.ExitUser {
 		t.Fatalf("exit code = %d, want %d", run.code, cli.ExitUser)
 	}
-	for _, candidate := range []string{`C:\dev\alpha`, `C:\dev\beta`} {
+	if !strings.Contains(run.err, "invoicing") {
+		t.Errorf("stderr = %q, want it to name the fragment", run.err)
+	}
+	if got := len(logLines(t, home)); got != 1 {
+		t.Errorf("log lines = %d, want only the parent's add", got)
+	}
+}
+
+func TestAddRejectsAnAmbiguousFragmentAndListsTheMatches(t *testing.T) {
+	home := makeHome(t)
+	first := addItem(t, home, "Chart rewrite")
+	second := addItem(t, home, "Chart legend")
+
+	run := waid(t, home, "add", "Third", "-p", "chart")
+
+	if run.code != cli.ExitUser {
+		t.Fatalf("exit code = %d, want %d", run.code, cli.ExitUser)
+	}
+	for _, candidate := range []string{first, "Chart rewrite", second, "Chart legend"} {
 		if !strings.Contains(run.err, candidate) {
 			t.Errorf("stderr = %q, want it to list %s", run.err, candidate)
 		}
+	}
+	if got := len(logLines(t, home)); got != 2 {
+		t.Errorf("log lines = %d, want only the two parents", got)
 	}
 }
 
@@ -243,5 +326,21 @@ func TestAddAppendsTheExactLineWithoutOptions(t *testing.T) {
 		`"status":"open","origin":null,"session":null,"tags":[],"waitingOn":null}`
 	if got := logLines(t, home); len(got) != 1 || got[0] != want {
 		t.Fatalf("log = %q,\nwant [%q]", got, want)
+	}
+}
+
+// An add filed under a parent carries the key, and only then.
+func TestAddUnderAParentAppendsTheExactLine(t *testing.T) {
+	home := makeHome(t)
+	t.Setenv(cli.EnvNow, "2026-08-17T12:00:00Z")
+	t.Setenv(cli.EnvIds, "abcd,efgh")
+	addItem(t, home, "Chart rewrite")
+
+	add(t, home, "Legend overflows", "-p", "chart")
+
+	want := `{"ts":"2026-08-17T12:00:00.000Z","ev":"add","id":"efgh","title":"Legend overflows",` +
+		`"status":"open","parent":"abcd","origin":null,"session":null,"tags":[],"waitingOn":null}`
+	if got := logLines(t, home); len(got) != 2 || got[1] != want {
+		t.Fatalf("log = %q,\nwant the second line %q", got, want)
 	}
 }

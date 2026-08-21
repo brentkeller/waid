@@ -79,7 +79,7 @@ func renderLoops(data LoopsResult, ctx *cli.Ctx) string {
 			}
 			lines = append(lines, "", "  "+heading)
 			for _, item := range group.Items {
-				lines = append(lines, ItemLine(item, ctx.Now))
+				lines = append(lines, ItemLine(item, ctx.Now, 1))
 			}
 		}
 	}

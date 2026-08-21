@@ -495,3 +495,64 @@ func TestFilterDoesNotDisturbTheForestGiven(t *testing.T) {
 		t.Errorf("shape after filtering =\n%s\nwant\n%s", after, before)
 	}
 }
+
+func TestPruneAsksEveryNodeRatherThanKeepingASubtree(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("proj", "Needle", ""),
+		addLine("kid1", "First", "proj"),
+		addLine("kid2", "Needle too", "proj"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"proj", "  kid2"}, "\n")
+	if got := shape(Prune(roots, titled("needle"))); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestPruneKeepsAnAncestorAsContextForADeepMatch(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("area", "Area", ""),
+		addLine("proj", "Project", "area"),
+		addLine("task", "Needle", "proj"),
+		addLine("drop", "Other", ""),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"area", "  proj", "    task"}, "\n")
+	if got := shape(Prune(roots, titled("needle"))); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A parent a gate strips of children is a leaf from then on, so it re-sorts among the leaves rather
+// than staying with the headings it no longer resembles.
+func TestPruneReordersAParentItLeavesChildless(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("aaaa", "Needle area", ""),
+		addLine("kid1", "Nothing here", "aaaa"),
+		addLine("zzzz", "Needle other", ""),
+		addLine("kid2", "Needle child", "zzzz"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"zzzz", "  kid2", "aaaa"}, "\n")
+	if got := shape(Prune(roots, titled("needle"))); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestPruneDoesNotDisturbTheForestGiven(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("area", "Area", ""),
+		addLine("hit_", "Needle", "area"),
+		addLine("miss", "Sibling", "area"),
+	})
+
+	roots, _ := Build(state)
+	before := shape(roots)
+	Prune(roots, titled("needle"))
+	if after := shape(roots); after != before {
+		t.Errorf("shape after pruning =\n%s\nwant\n%s", after, before)
+	}
+}

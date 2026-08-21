@@ -1,6 +1,7 @@
 package command_test
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -15,10 +16,10 @@ type listRecord struct {
 		Id string `json:"id"`
 	} `json:"items"`
 	Filters struct {
-		Status  *string  `json:"status"`
-		Origin  *string  `json:"origin"`
-		Tag     []string `json:"tag"`
-		All     bool     `json:"all"`
+		Status *string  `json:"status"`
+		Origin *string  `json:"origin"`
+		Tag    []string `json:"tag"`
+		All    bool     `json:"all"`
 	} `json:"filters"`
 }
 
@@ -156,41 +157,6 @@ func TestListCombinesFiltersConjunctively(t *testing.T) {
 	assertIds(t, result.ids(), ids["chart"])
 }
 
-func TestListGroupsByProject(t *testing.T) {
-	home := makeHome(t)
-	ids := seed(t, home)
-	addItem(t, home, "Loose end with no project")
-
-	run := waid(t, home, "list")
-	if run.code != cli.ExitOK {
-		t.Fatalf("list exited %d: %s", run.code, run.err)
-	}
-
-	headings := []string{}
-	for _, line := range strings.Split(run.out, "\n") {
-		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") {
-			headings = append(headings, strings.TrimSpace(line))
-		}
-	}
-	want := []string{`C:\dev\dr\devresults`, `C:\dev\waid`, "(no project)"}
-	if !slices.Equal(headings, want) {
-		t.Errorf("headings = %v, want %v", headings, want)
-	}
-
-	line := lineHolding(run.out, ids["chart"])
-	if line == "" {
-		t.Fatalf("no line for the chart item:\n%s", run.out)
-	}
-	if !strings.HasPrefix(line, "    ") {
-		t.Errorf("item line is not indented under its heading: %q", line)
-	}
-	for _, part := range []string{"open", "Chart legend overflows", "[bug]"} {
-		if !strings.Contains(line, part) {
-			t.Errorf("item line %q does not carry %q", line, part)
-		}
-	}
-}
-
 func TestListRendersAnExplicitEmptyMessage(t *testing.T) {
 	home := makeHome(t)
 
@@ -239,4 +205,155 @@ func TestListOriginTakesAWholePathAndComposes(t *testing.T) {
 
 	waiting := list(t, home, "--origin", "devresults", "--status", "waiting")
 	assertIds(t, waiting.ids(), ids["copy"])
+}
+
+// outline reduces the rendered tree to one "<depth> <label>" per row — an id for a real item, the
+// title for the synthetic bucket — so a test states the nesting it expects rather than matching
+// against columns whose widths are not what is under test.
+func outline(t *testing.T, home string, args ...string) []string {
+	t.Helper()
+
+	run := waid(t, home, append([]string{"list"}, args...)...)
+	if run.code != cli.ExitOK {
+		t.Fatalf("list exited %d: %s", run.code, run.err)
+	}
+
+	rows := []string{}
+	for _, line := range strings.Split(run.out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		depth := (len(line)-len(strings.TrimLeft(line, " ")))/2 - 1
+		rows = append(rows, fmt.Sprintf("%d %s", depth, strings.Fields(trimmed)[0]))
+	}
+	return rows
+}
+
+func assertOutline(t *testing.T, got []string, want ...string) {
+	t.Helper()
+
+	if !slices.Equal(got, want) {
+		t.Errorf("outline =\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+	}
+}
+
+func TestListNestsItemsUnderTheirParents(t *testing.T) {
+	home := makeHome(t)
+	area := addItem(t, home, "DevResults")
+	proj := addItem(t, home, "Search rewrite", "-p", "DevResults")
+	task := addItem(t, home, "Reindex script", "-p", "Search rewrite")
+
+	assertOutline(t, outline(t, home), "0 "+area, "1 "+proj, "2 "+task)
+}
+
+// The bucket is a rendering artifact of a level that mixes headings with loose rows. A level of
+// nothing but leaves keeps them where they are, at every depth including the top.
+func TestListBucketsLeavesOnlyWhereALevelMixes(t *testing.T) {
+	home := makeHome(t)
+	area := addItem(t, home, "DevResults")
+	proj := addItem(t, home, "Search rewrite", "-p", "DevResults")
+	task := addItem(t, home, "Reindex script", "-p", "Search rewrite")
+	loose := addItem(t, home, "Renew SSL cert", "-p", "DevResults")
+	flights := addItem(t, home, "Book flights")
+
+	assertOutline(t, outline(t, home),
+		"0 "+area,
+		"1 "+proj,
+		"2 "+task,
+		"1 (unassigned)",
+		"2 "+loose,
+		"0 (unassigned)",
+		"1 "+flights,
+	)
+}
+
+func TestListOrdersParentsByTitleThenLeavesByRecency(t *testing.T) {
+	home := makeHome(t)
+	at := func(minute string) { t.Setenv(cli.EnvNow, "2026-08-14T09:"+minute+":00Z") }
+
+	at("01")
+	zebra := addItem(t, home, "Zebra area")
+	at("02")
+	alpha := addItem(t, home, "Alpha area")
+	at("03")
+	zebraKid := addItem(t, home, "Zebra child", "-p", "Zebra area")
+	at("04")
+	alphaKid := addItem(t, home, "Alpha child", "-p", "Alpha area")
+	at("05")
+	older := addItem(t, home, "Older loose end")
+	at("06")
+	newer := addItem(t, home, "Newer loose end")
+
+	assertOutline(t, outline(t, home),
+		"0 "+alpha,
+		"1 "+alphaKid,
+		"0 "+zebra,
+		"1 "+zebraKid,
+		"0 (unassigned)",
+		"1 "+newer,
+		"1 "+older,
+	)
+}
+
+func TestListKeepsTheAncestorsOfAFilteredMatch(t *testing.T) {
+	home := makeHome(t)
+	area := addItem(t, home, "DevResults")
+	proj := addItem(t, home, "Search rewrite", "-p", "DevResults")
+	task := addItem(t, home, "Reindex script", "-p", "Search rewrite", "--tag", "bug")
+	addItem(t, home, "Unrelated loose end")
+
+	assertOutline(t, outline(t, home, "--tag", "bug"), "0 "+area, "1 "+proj, "2 "+task)
+}
+
+// The status gate is asked of every row in its own right, so a closed row does not ride into the
+// listing on an open parent — and a parent it strips bare renders as a leaf, into the bucket.
+func TestListDropsDoneRowsBeneathAnOpenParent(t *testing.T) {
+	home := makeHome(t)
+	at := func(minute string) { t.Setenv(cli.EnvNow, "2026-08-14T09:"+minute+":00Z") }
+
+	at("01")
+	area := addItem(t, home, "DevResults")
+	at("02")
+	proj := addItem(t, home, "Search rewrite", "-p", "DevResults")
+	at("03")
+	shipped := addItem(t, home, "Reindex script", "-p", "Search rewrite")
+	at("04")
+	loose := addItem(t, home, "Renew SSL cert", "-p", "DevResults")
+	at("05")
+	imports := addItem(t, home, "Bulk imports", "-p", "DevResults")
+	at("06")
+	backoff := addItem(t, home, "Add retry backoff", "-p", "Bulk imports")
+	at("07")
+	waid(t, home, "done", shipped)
+
+	assertOutline(t, outline(t, home),
+		"0 "+area,
+		"1 "+imports,
+		"2 "+backoff,
+		"1 (unassigned)",
+		"2 "+loose,
+		"2 "+proj,
+	)
+}
+
+// Item rows keep the columns they had before the tree: the tree changed where a row sits, not what
+// it says.
+func TestListRowsCarryTheirColumns(t *testing.T) {
+	home := makeHome(t)
+	ids := seed(t, home)
+
+	run := waid(t, home, "list")
+	if run.code != cli.ExitOK {
+		t.Fatalf("list exited %d: %s", run.code, run.err)
+	}
+	line := lineHolding(run.out, ids["chart"])
+	if line == "" {
+		t.Fatalf("no line for the chart item:\n%s", run.out)
+	}
+	for _, part := range []string{"open", "Chart legend overflows", "[bug]"} {
+		if !strings.Contains(line, part) {
+			t.Errorf("item line %q does not carry %q", line, part)
+		}
+	}
 }

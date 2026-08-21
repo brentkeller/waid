@@ -184,5 +184,30 @@ func Filter(nodes []Node, keep func(events.Item) bool) []Node {
 		current.Children = children
 		kept = append(kept, current)
 	}
+	sortSiblings(kept)
+	return kept
+}
+
+// Prune narrows a forest to the nodes matching keep, together with the ancestors that lead to them.
+// It differs from Filter in that keep is asked of every node: a match does not bring its subtree
+// along, so what survives is exactly the nodes that matched plus the paths down to them.
+//
+// That is the difference between a query and a gate. Filtering on a heading asks for what is under
+// it, so the subtree comes too; gating on status asks the same question of every row in its own
+// right, and a done row under an open parent is still done. A parent a gate leaves with no visible
+// children renders as a leaf, which is the leaf-ness Bucket reads.
+//
+// The forest given is left untouched.
+func Prune(nodes []Node, keep func(events.Item) bool) []Node {
+	kept := []Node{}
+	for _, current := range nodes {
+		children := Prune(current.Children, keep)
+		if !keep(current.Item) && len(children) == 0 {
+			continue
+		}
+		current.Children = children
+		kept = append(kept, current)
+	}
+	sortSiblings(kept)
 	return kept
 }

@@ -411,6 +411,27 @@ func TestLoopsFoldsWithHAndL(t *testing.T) {
 	}
 }
 
+// The arrow keys fold the same way h and l do, so a hand that never left the arrows walks the tree
+// the same as one on the home row.
+func TestLoopsFoldsWithArrows(t *testing.T) {
+	const child = "Design template"
+
+	m := looped(t, 140, loopsFixture())
+
+	collapsed, _ := press(t, m, "left")
+	if view := plain(collapsed.View()); strings.Contains(view, child) {
+		t.Errorf("left did not collapse the heading the cursor was on:\n%s", view)
+	}
+	if got := selectedTitle(t, collapsed); got != "Localized notifications" {
+		t.Errorf("left the cursor on %q, want the fold it closed", got)
+	}
+
+	expanded, _ := press(t, collapsed, "right")
+	if view := plain(expanded.View()); !strings.Contains(view, child) {
+		t.Errorf("right did not expand the fold under the cursor:\n%s", view)
+	}
+}
+
 // r re-reads the log, which is the only thing that brings in an item another session declared.
 func TestLoopsRefreshRereadsTheLog(t *testing.T) {
 	m := looped(t, 140, loopsFixture())

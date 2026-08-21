@@ -119,7 +119,7 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"w"}, "w", "waiting"},
 		{[]string{"e"}, "e", "edit title"},
 		{[]string{"n"}, "n", "note"},
-		{[]string{"h", "l"}, "h / l", "collapse / expand the fold under the cursor"},
+		{[]string{"h", "l", "left", "right"}, "h l ← →", "collapse / expand the fold under the cursor"},
 		{[]string{"m"}, "m", "move under another item — enter drops, esc cancels"},
 		{[]string{"s"}, "s", "cycle the status filter — open, waiting, done, all"},
 		{[]string{"p"}, "p", "toggle the detail pane"},

@@ -123,9 +123,9 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		tree.Last()
 	case "enter":
 		tree.Toggle()
-	case "h":
+	case "h", "left":
 		tree.Collapse()
-	case "l":
+	case "l", "right":
 		tree.Expand()
 	case "p":
 		m.loops.collapsed = !m.loops.collapsed

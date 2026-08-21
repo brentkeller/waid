@@ -173,7 +173,7 @@ func firstTs(existing, stamped string) string {
 	return stamped
 }
 
-// ProblemReason is why a log line could not be applied. Reported by `waid doctor`, never fatal.
+// ProblemReason is why part of the log could not be applied. Reported by `waid doctor`, never fatal.
 type ProblemReason string
 
 const (
@@ -186,9 +186,14 @@ const (
 	ReasonBadStatus       ProblemReason = "bad-status"
 	ReasonMissingKey      ProblemReason = "missing-key"
 	ReasonUnknownEv       ProblemReason = "unknown-ev"
+	// ReasonUnknownParent and ReasonParentCycle are found by internal/tree rather than the fold,
+	// which is per-line and cannot see the whole graph. Both carry the item id and no line number.
+	ReasonUnknownParent ProblemReason = "unknown-parent"
+	ReasonParentCycle   ProblemReason = "parent-cycle"
 )
 
-// Problem is a log line the fold could not fully apply, located by its 1-based line number.
+// Problem is something waid could not fully apply. A problem the fold found is located by its
+// 1-based line number; one found across the whole log instead carries line 0 and names an item.
 type Problem struct {
 	Line   int           `json:"line"`
 	Reason ProblemReason `json:"reason"`

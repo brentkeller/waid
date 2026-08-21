@@ -17,6 +17,7 @@ import (
 	"github.com/brentkeller/waid/internal/render"
 	"github.com/brentkeller/waid/internal/repos"
 	"github.com/brentkeller/waid/internal/sessions"
+	"github.com/brentkeller/waid/internal/tree"
 )
 
 // doctorLabelWidth is the width of the label column every doctor line starts with.
@@ -91,6 +92,7 @@ func runDoctor(ctx *cli.Ctx) (DoctorResult, error) {
 	cfg := ctx.Cfg
 	inspected := inspectConfig(cfg.ConfigPath)
 	state := events.Load(cfg.EventsPath)
+	problems := slices.Concat(state.Problems, hierarchyProblems(state))
 	detected := config.DetectGhUser()
 
 	user := detected
@@ -105,7 +107,7 @@ func runDoctor(ctx *cli.Ctx) (DoctorResult, error) {
 			Path:     cfg.EventsPath,
 			Lines:    len(events.ReadLines(cfg.EventsPath)),
 			Items:    len(state.Items),
-			Problems: state.Problems,
+			Problems: problems,
 		},
 		Cache: DoctorCache{
 			Sessions: inspectSessionsCache(cfg.SessionsCachePath, ctx.Now),
@@ -113,8 +115,25 @@ func runDoctor(ctx *cli.Ctx) (DoctorResult, error) {
 		},
 		Gh:    DoctorGh{Available: detected != nil, User: user},
 		Repos: inspectRepos(ctx),
-		Ok:    inspected.Valid && len(inspected.UnknownKeys) == 0 && len(state.Problems) == 0,
+		Ok:    inspected.Valid && len(inspected.UnknownKeys) == 0 && len(problems) == 0,
 	}, nil
+}
+
+// hierarchyProblems reports the items internal/tree had to lift to the top level. The fold is
+// per-line and never sees the whole graph, so an unresolvable parent id and a looping ancestor
+// chain can only be found once every item is in hand.
+func hierarchyProblems(state events.State) []events.Problem {
+	_, anomalies := tree.Build(state)
+
+	problems := []events.Problem{}
+	for _, anomaly := range anomalies {
+		reason := events.ReasonUnknownParent
+		if anomaly.Kind == tree.ParentCycle {
+			reason = events.ReasonParentCycle
+		}
+		problems = append(problems, events.Problem{Reason: reason, Id: &anomaly.Id})
+	}
+	return problems
 }
 
 // inspectRepos counts what detection would see. The sessions are read from the cache rather than
@@ -306,7 +325,13 @@ func problemLine(problem events.Problem) string {
 	if len(detail) > 0 {
 		suffix = "  " + strings.Join(detail, "  ")
 	}
-	return render.Pad(fmt.Sprintf("line %d", problem.Line), doctorLabelWidth) + string(problem.Reason) + suffix
+
+	// A problem found across the whole log rather than on one line carries no line number.
+	location := ""
+	if problem.Line > 0 {
+		location = fmt.Sprintf("line %d", problem.Line)
+	}
+	return render.Pad(location, doctorLabelWidth) + string(problem.Reason) + suffix
 }
 
 func derefOr(value *string, fallback string) string {

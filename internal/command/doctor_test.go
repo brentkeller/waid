@@ -3,6 +3,7 @@ package command_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -326,4 +327,105 @@ func TestHumanDoctorOnACleanHomeSaysItIsOk(t *testing.T) {
 	if !regexp.MustCompile(`\bok\b`).MatchString(run.out) {
 		t.Errorf("no verdict in:\n%s", run.out)
 	}
+}
+
+// treeLog holds one orphan and one two-node cycle, neither of which the per-line fold can see.
+func seedTreeLog(t *testing.T, home string) {
+	t.Helper()
+
+	seedRawLog(t, home,
+		`{"ts":"2026-08-18T09:00:00.000Z","ev":"add","id":"aaaa","title":"Anchor"}`,
+		`{"ts":"2026-08-18T09:01:00.000Z","ev":"add","id":"bbbb","title":"Below","parent":"aaaa"}`,
+		`{"ts":"2026-08-18T09:02:00.000Z","ev":"add","id":"lost","title":"Orphan","parent":"gone"}`,
+		`{"ts":"2026-08-18T09:03:00.000Z","ev":"update","id":"aaaa","parent":"bbbb"}`,
+	)
+}
+
+func TestOrphansAndCyclesAreReportedAsProblems(t *testing.T) {
+	home := doctorHome(t)
+	seedTreeLog(t, home)
+
+	data := doctor(t, home)
+
+	orphans := []string{}
+	cycles := []string{}
+	for _, problem := range data.Log.Problems {
+		switch problem.Reason {
+		case events.ReasonUnknownParent:
+			orphans = append(orphans, derefId(problem))
+		case events.ReasonParentCycle:
+			cycles = append(cycles, derefId(problem))
+		}
+	}
+
+	if want := []string{"lost"}; !reflect.DeepEqual(orphans, want) {
+		t.Errorf("unknown-parent problems = %v, want %v", orphans, want)
+	}
+	if want := []string{"aaaa", "bbbb"}; !reflect.DeepEqual(cycles, want) {
+		t.Errorf("parent-cycle problems = %v, want %v", cycles, want)
+	}
+	if data.Ok {
+		t.Errorf("ok = true, want false")
+	}
+}
+
+func TestACleanHierarchyNamesNoOrphansOrCycles(t *testing.T) {
+	home := doctorHome(t)
+	seedRawLog(t, home,
+		`{"ts":"2026-08-18T09:00:00.000Z","ev":"add","id":"aaaa","title":"Anchor"}`,
+		`{"ts":"2026-08-18T09:01:00.000Z","ev":"add","id":"bbbb","title":"Below","parent":"aaaa"}`,
+	)
+
+	data := doctor(t, home)
+
+	if len(data.Log.Problems) != 0 {
+		t.Errorf("problems = %+v, want none", data.Log.Problems)
+	}
+	if !data.Ok {
+		t.Errorf("ok = false, want true")
+	}
+}
+
+func TestHumanDoctorNamesOrphansAndCycles(t *testing.T) {
+	home := doctorHome(t)
+	seedTreeLog(t, home)
+
+	run := waid(t, home, "doctor")
+	if run.code != cli.ExitOK {
+		t.Fatalf("doctor exited %d: %s", run.code, run.err)
+	}
+
+	for _, pattern := range []string{
+		`PROBLEMS`,
+		`unknown-parent {2,}id=lost`,
+		`parent-cycle {2,}id=aaaa`,
+		`parent-cycle {2,}id=bbbb`,
+	} {
+		if !regexp.MustCompile(pattern).MatchString(run.out) {
+			t.Errorf("no /%s/ in:\n%s", pattern, run.out)
+		}
+	}
+	if regexp.MustCompile(`line 0\b`).MatchString(run.out) {
+		t.Errorf("a problem the fold never saw was given a line number:\n%s", run.out)
+	}
+}
+
+func TestHumanDoctorOnACleanHierarchySaysItIsOk(t *testing.T) {
+	home := doctorHome(t)
+	seedRawLog(t, home,
+		`{"ts":"2026-08-18T09:00:00.000Z","ev":"add","id":"aaaa","title":"Anchor"}`,
+		`{"ts":"2026-08-18T09:01:00.000Z","ev":"add","id":"bbbb","title":"Below","parent":"aaaa"}`,
+	)
+
+	run := waid(t, home, "doctor")
+	if strings.Contains(run.out, "PROBLEMS") {
+		t.Errorf("a clean hierarchy listed problems:\n%s", run.out)
+	}
+}
+
+func derefId(problem events.Problem) string {
+	if problem.Id == nil {
+		return ""
+	}
+	return *problem.Id
 }

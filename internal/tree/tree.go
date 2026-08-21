@@ -211,3 +211,18 @@ func Prune(nodes []Node, keep func(events.Item) bool) []Node {
 	sortSiblings(kept)
 	return kept
 }
+
+// Subtree narrows a forest to the one node carrying id, together with everything beneath it. The
+// ancestors above it and the branches beside it are dropped: naming a heading asks what it holds,
+// not where it sits. A forest holding no such node comes back empty.
+func Subtree(nodes []Node, id string) []Node {
+	for _, current := range nodes {
+		if current.Item.Id == id {
+			return []Node{current}
+		}
+		if found := Subtree(current.Children, id); len(found) > 0 {
+			return found
+		}
+	}
+	return []Node{}
+}

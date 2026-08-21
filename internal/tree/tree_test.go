@@ -556,3 +556,41 @@ func TestPruneDoesNotDisturbTheForestGiven(t *testing.T) {
 		t.Errorf("shape after pruning =\n%s\nwant\n%s", after, before)
 	}
 }
+
+func TestSubtreeYieldsTheNodeAndEverythingUnderIt(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("area", "Area", ""),
+		addLine("proj", "Project", "area"),
+		addLine("task", "Task", "proj"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"proj", "  task"}, "\n")
+	if got := shape(Subtree(roots, "proj")); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Naming a heading asks for what it holds, so the branches beside it and the ancestors above it go.
+func TestSubtreeDropsAncestorsAndSiblings(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("area", "Area", ""),
+		addLine("proj", "Project", "area"),
+		addLine("othr", "Other project", "area"),
+		addLine("else", "Elsewhere", ""),
+	})
+
+	roots, _ := Build(state)
+	if got := shape(Subtree(roots, "proj")); got != "proj" {
+		t.Errorf("shape =\n%s\nwant\nproj", got)
+	}
+}
+
+func TestSubtreeOfAnAbsentIdIsEmpty(t *testing.T) {
+	state := events.Fold([]string{addLine("area", "Area", "")})
+
+	roots, _ := Build(state)
+	if found := Subtree(roots, "nope"); len(found) != 0 {
+		t.Errorf("subtree = %s, want none", shape(found))
+	}
+}

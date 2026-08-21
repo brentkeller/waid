@@ -19,10 +19,10 @@ type dismissRecord struct {
 
 // promoteRecord is the --json payload promote prints.
 type promoteRecord struct {
-	Id      string  `json:"id"`
-	Key     string  `json:"key"`
-	Title   string  `json:"title"`
-	Project *string `json:"project"`
+	Id     string  `json:"id"`
+	Key    string  `json:"key"`
+	Title  string  `json:"title"`
+	Origin *string `json:"origin"`
 }
 
 // logEvents parses every appended line, which is what a write command is ultimately judged on.
@@ -170,8 +170,8 @@ func TestPromoteWritesAnAddThenADismissAndMovesTheSignalIntoLoops(t *testing.T) 
 	if record.Key != key {
 		t.Errorf("key = %q, want %q", record.Key, key)
 	}
-	if record.Project == nil || *record.Project != repo {
-		t.Errorf("project = %v, want %q", record.Project, repo)
+	if record.Origin == nil || *record.Origin != repo {
+		t.Errorf("origin = %v, want %q", record.Origin, repo)
 	}
 	if record.Title != "3 unpushed commits on topic in alpha" {
 		t.Errorf("title = %q", record.Title)
@@ -184,6 +184,9 @@ func TestPromoteWritesAnAddThenADismissAndMovesTheSignalIntoLoops(t *testing.T) 
 	}
 	if log[0]["ev"] != "add" || log[0]["id"] != record.Id || log[0]["origin"] != repo {
 		t.Errorf("the add event is %v", log[0])
+	}
+	if _, filed := log[0]["parent"]; filed {
+		t.Errorf("the add carries a parent %v, want the item at top level", log[0]["parent"])
 	}
 	if tags, ok := log[0]["tags"].([]any); !ok || len(tags) != 1 || tags[0] != "promoted" {
 		t.Errorf("tags = %v, want [promoted]", log[0]["tags"])
@@ -209,8 +212,12 @@ func TestPromoteWritesAnAddThenADismissAndMovesTheSignalIntoLoops(t *testing.T) 
 		}
 	}
 	assertKeys(t, origins, []string{repo})
-	if got := item(t, home, record.Id).Tags; len(got) != 1 || got[0] != "promoted" {
+	promoted := item(t, home, record.Id)
+	if got := promoted.Tags; len(got) != 1 || got[0] != "promoted" {
 		t.Errorf("the promoted item carries tags %v, want [promoted]", got)
+	}
+	if promoted.Parent != nil {
+		t.Errorf("the promoted item is filed under %q, want top level", *promoted.Parent)
 	}
 }
 
@@ -230,9 +237,9 @@ func TestPromoteSeedsAPrSignalFromItsTitle(t *testing.T) {
 	if record.Title != "Fix the chart legend" {
 		t.Errorf("title = %q", record.Title)
 	}
-	// No local clone was discovered, so the item carries no project.
-	if record.Project != nil {
-		t.Errorf("project = %q, want none", *record.Project)
+	// No local clone was discovered, so the item carries no origin.
+	if record.Origin != nil {
+		t.Errorf("origin = %q, want none", *record.Origin)
 	}
 }
 

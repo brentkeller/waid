@@ -13,15 +13,15 @@ import (
 // PromoteResult is the item the signal became, echoed back so --json callers need no follow-up read.
 // Fields are declared in the order Node emits them, which is the order --json renders.
 type PromoteResult struct {
-	Id      string  `json:"id"`
-	Key     string  `json:"key"`
-	Title   string  `json:"title"`
-	Project *string `json:"project"`
+	Id     string  `json:"id"`
+	Key    string  `json:"key"`
+	Title  string  `json:"title"`
+	Origin *string `json:"origin"`
 }
 
 // runPromote turns a detected signal into a declared item, then dismisses the key so the loop is not
 // reported twice. The signal must still be detectable — an already-dismissed or vanished key is
-// rejected rather than guessed at, since the item's title and project can only come from the live
+// rejected rather than guessed at, since the item's title and origin can only come from the live
 // signal.
 func runPromote(ctx *cli.Ctx) (PromoteResult, error) {
 	key, err := requiredKey(ctx, "promote")

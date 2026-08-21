@@ -17,16 +17,18 @@ const PromotedTag = "promoted"
 
 // Promotion is the item a signal became. Its fields are the ones `promote --json` echoes back.
 type Promotion struct {
-	Id      string
-	Key     string
-	Title   string
-	Project *string
+	Id     string
+	Key    string
+	Title  string
+	Origin *string
 }
 
-// Promote writes the two events a promotion is made of: an add carrying the signal's project and the
-// promoted tag, then a dismiss of the signal's key so the loop is not reported twice. title is passed
-// separately so a caller that let the user edit it can use the edited text; state only supplies the
-// ids already taken.
+// Promote writes the two events a promotion is made of: an add carrying the signal's repo as the
+// item's origin and the promoted tag, then a dismiss of the signal's key so the loop is not reported
+// twice. The item lands at top level: the repo it came from is provenance, not a place in the tree,
+// so filing it is a separate sweep and promotion stays one keystroke. title is passed separately so a
+// caller that let the user edit it can use the edited text; state only supplies the ids already
+// taken.
 func Promote(path string, state events.State, generate ids.Generator, signal detect.Signal, title string, now time.Time) (Promotion, error) {
 	id, err := state.NewId(generate)
 	if err != nil {
@@ -38,6 +40,7 @@ func Promote(path string, state events.State, generate ids.Generator, signal det
 		Id:        id,
 		Title:     title,
 		Status:    events.StatusOpen,
+		Parent:    nil,
 		Origin:    signal.Project,
 		Session:   nil,
 		Tags:      []string{PromotedTag},
@@ -49,7 +52,7 @@ func Promote(path string, state events.State, generate ids.Generator, signal det
 		return Promotion{}, err
 	}
 
-	return Promotion{Id: id, Key: signal.Key, Title: title, Project: signal.Project}, nil
+	return Promotion{Id: id, Key: signal.Key, Title: title, Origin: signal.Project}, nil
 }
 
 // Dismiss hides a detected signal by its key. The key is not validated against detection: a signal

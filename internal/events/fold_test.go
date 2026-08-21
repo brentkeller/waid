@@ -278,7 +278,10 @@ func TestFoldNeverPanicsOnHostileInput(t *testing.T) {
 func TestFoldOfAnEmptyLogReturnsEmptySlices(t *testing.T) {
 	state := Fold(nil)
 
-	if !reflect.DeepEqual(state, State{Items: []Item{}, Dismissed: []string{}, Problems: []Problem{}}) {
+	empty := State{Items: []Item{}, Dismissed: []string{}, Problems: []Problem{}}
+	if !reflect.DeepEqual(state.Items, empty.Items) ||
+		!reflect.DeepEqual(state.Dismissed, empty.Dismissed) ||
+		!reflect.DeepEqual(state.Problems, empty.Problems) {
 		t.Fatalf("state = %+v, want empty non-nil slices", state)
 	}
 }

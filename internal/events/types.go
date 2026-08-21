@@ -202,4 +202,7 @@ type State struct {
 	// Dismissed holds the detected-signal keys hidden by dismiss.
 	Dismissed []string  `json:"dismissed"`
 	Problems  []Problem `json:"problems"`
+	// index is derived from Items and unexported, so the encoded shape stays Items, Dismissed and
+	// Problems. See Find, Children and Ancestors.
+	index *stateIndex
 }

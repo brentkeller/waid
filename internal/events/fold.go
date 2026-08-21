@@ -114,7 +114,12 @@ func Fold(rawLines []string) State {
 	for _, id := range order {
 		folded = append(folded, *items[id])
 	}
-	return State{Items: folded, Dismissed: dismissed, Problems: problems}
+	return State{
+		Items:     folded,
+		Dismissed: dismissed,
+		Problems:  problems,
+		index:     buildIndex(folded),
+	}
 }
 
 // applyToItem applies one event to an existing item, reporting whether anything was applied. A bad

@@ -68,13 +68,3 @@ func (s State) NewId(generate ids.Generator) (string, error) {
 	}
 	return generate(func(candidate string) bool { return taken[candidate] })
 }
-
-// Find returns the item carrying id, and whether the log holds one.
-func (s State) Find(id string) (Item, bool) {
-	for _, item := range s.Items {
-		if item.Id == id {
-			return item, true
-		}
-	}
-	return Item{}, false
-}

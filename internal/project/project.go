@@ -1,5 +1,4 @@
-// Package project resolves the -p value against the project paths waid has already seen, and
-// groups items by project for display.
+// Package project resolves the -p value against the project paths waid has already seen.
 package project
 
 import (
@@ -20,12 +19,6 @@ var absolute = regexp.MustCompile(`^(?:[\\/]|[A-Za-z]:[\\/])`)
 
 // trailingSeparators matches the separators at the end of a path.
 var trailingSeparators = regexp.MustCompile(`[\\/]+$`)
-
-// Group is the items belonging to one project, or to no project when Project is nil.
-type Group struct {
-	Project *string       `json:"project"`
-	Items   []events.Item `json:"items"`
-}
 
 // CompareNames orders two project paths the way Node's localeCompare does for the paths waid
 // stores: case is ignored first, so `C:\Dev` and `C:\dev` sit together rather than a drive letter's
@@ -107,34 +100,6 @@ func Resolve(input string, known []string, cwd string) (*string, error) {
 	default:
 		return nil, errs.Ambiguous("ambiguous project: "+value, matches)
 	}
-}
-
-// GroupByProject groups items by project in first-seen order, with the project-less group last.
-// Item order inside each group is the order given.
-func GroupByProject(items []events.Item) []Group {
-	order := []string{}
-	byProject := map[string][]events.Item{}
-	orphans := []events.Item{}
-
-	for _, item := range items {
-		if item.Origin == nil {
-			orphans = append(orphans, item)
-			continue
-		}
-		if _, seen := byProject[*item.Origin]; !seen {
-			order = append(order, *item.Origin)
-		}
-		byProject[*item.Origin] = append(byProject[*item.Origin], item)
-	}
-
-	groups := make([]Group, 0, len(order)+1)
-	for _, project := range order {
-		groups = append(groups, Group{Project: ptr(project), Items: byProject[project]})
-	}
-	if len(orphans) > 0 {
-		groups = append(groups, Group{Project: nil, Items: orphans})
-	}
-	return groups
 }
 
 func ptr(value string) *string { return &value }

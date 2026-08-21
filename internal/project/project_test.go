@@ -203,53 +203,6 @@ func TestResolveRejectsAnyPartialWhenNothingIsKnown(t *testing.T) {
 	}
 }
 
-func TestGroupByProjectKeepsFirstSeenOrderWithOrphansLast(t *testing.T) {
-	items := []events.Item{
-		item("0001", ptr(`C:\dev\waid`)),
-		item("0002", nil),
-		item("0003", ptr(`C:\dev\dr`)),
-		item("0004", ptr(`C:\dev\waid`)),
-		item("0005", nil),
-	}
-
-	groups := GroupByProject(items)
-	if len(groups) != 3 {
-		t.Fatalf("groups = %d, want 3", len(groups))
-	}
-	if groups[0].Project == nil || *groups[0].Project != `C:\dev\waid` {
-		t.Fatalf("groups[0].Project = %v, want C:\\dev\\waid", groups[0].Project)
-	}
-	if ids := itemIds(groups[0]); !reflect.DeepEqual(ids, []string{"0001", "0004"}) {
-		t.Fatalf("groups[0] items = %q, want 0001 0004", ids)
-	}
-	if groups[1].Project == nil || *groups[1].Project != `C:\dev\dr` {
-		t.Fatalf("groups[1].Project = %v, want C:\\dev\\dr", groups[1].Project)
-	}
-	if groups[2].Project != nil {
-		t.Fatalf("groups[2].Project = %q, want nil", *groups[2].Project)
-	}
-	if ids := itemIds(groups[2]); !reflect.DeepEqual(ids, []string{"0002", "0005"}) {
-		t.Fatalf("orphan items = %q, want 0002 0005", ids)
-	}
-}
-
-func TestGroupByProjectOmitsTheOrphanGroupWhenEveryItemHasAProject(t *testing.T) {
-	items := []events.Item{item("0001", ptr(`C:\dev\waid`))}
-
-	groups := GroupByProject(items)
-	if len(groups) != 1 {
-		t.Fatalf("groups = %d, want 1", len(groups))
-	}
-}
-
-func itemIds(group Group) []string {
-	ids := make([]string, 0, len(group.Items))
-	for _, item := range group.Items {
-		ids = append(ids, item.Id)
-	}
-	return ids
-}
-
 func TestCompareNamesIgnoresCaseBeforeFallingBackToBytes(t *testing.T) {
 	cases := []struct {
 		left, right *string

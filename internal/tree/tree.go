@@ -163,3 +163,26 @@ func Bucket(nodes []Node) []Node {
 		Synthetic: true,
 	})
 }
+
+// Filter narrows a forest to the nodes matching keep, together with the ancestors that lead to
+// them. A match keeps its whole subtree, since filtering on a heading's name asks for what is under
+// it; a node that does not match is kept only as the path to a descendant that did, and so brings
+// none of its other children with it. A branch holding no match at all is dropped.
+//
+// The forest given is left untouched, so several filters can be rendered off one Build.
+func Filter(nodes []Node, keep func(events.Item) bool) []Node {
+	kept := []Node{}
+	for _, current := range nodes {
+		if keep(current.Item) {
+			kept = append(kept, current)
+			continue
+		}
+		children := Filter(current.Children, keep)
+		if len(children) == 0 {
+			continue
+		}
+		current.Children = children
+		kept = append(kept, current)
+	}
+	return kept
+}

@@ -399,3 +399,99 @@ func TestBucketTreatsAParentWithNoVisibleChildrenAsALeaf(t *testing.T) {
 		t.Errorf("shape =\n%s\nwant\n%s", got, want)
 	}
 }
+
+// titled matches items whose title contains fragment, standing in for the query a view filters on.
+func titled(fragment string) func(events.Item) bool {
+	return func(item events.Item) bool {
+		return strings.Contains(strings.ToLower(item.Title), strings.ToLower(fragment))
+	}
+}
+
+func TestFilterKeepsTheAncestorChainOfADeepMatch(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("area", "Area", ""),
+		addLine("proj", "Project", "area"),
+		addLine("task", "Needle", "proj"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"area", "  proj", "    task"}, "\n")
+	if got := shape(Filter(roots, titled("needle"))); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestFilterDropsABranchHoldingNoMatch(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("keep", "Keeper", ""),
+		addLine("kkid", "Needle", "keep"),
+		addLine("drop", "Other", ""),
+		addLine("dkid", "Nothing here", "drop"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"keep", "  kkid"}, "\n")
+	if got := shape(Filter(roots, titled("needle"))); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestFilterKeepsTheWholeSubtreeOfAMatchingParent(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("proj", "Needle", ""),
+		addLine("kid1", "First", "proj"),
+		addLine("kid2", "Second", "proj"),
+		addLine("gkid", "Deeper", "kid1"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"proj", "  kid1", "    gkid", "  kid2"}, "\n")
+	if got := shape(Filter(roots, titled("needle"))); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// An ancestor kept only as context brings nothing with it but the path to the match.
+func TestFilterKeepsAContextAncestorWithoutItsOtherChildren(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("area", "Area", ""),
+		addLine("hit_", "Needle", "area"),
+		addLine("miss", "Sibling", "area"),
+		addLine("mkid", "Sibling child", "miss"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"area", "  hit_"}, "\n")
+	if got := shape(Filter(roots, titled("needle"))); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestFilterMatchingNothingYieldsAnEmptyForest(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("area", "Area", ""),
+		addLine("task", "Task", "area"),
+	})
+
+	roots, _ := Build(state)
+	if got := Filter(roots, titled("needle")); len(got) != 0 {
+		t.Errorf("shape =\n%s\nwant nothing", shape(got))
+	}
+}
+
+// Filtering leaves the forest it was given untouched, so a view can render several filters off one
+// build.
+func TestFilterDoesNotDisturbTheForestGiven(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("area", "Area", ""),
+		addLine("hit_", "Needle", "area"),
+		addLine("miss", "Sibling", "area"),
+	})
+
+	roots, _ := Build(state)
+	before := shape(roots)
+	Filter(roots, titled("needle"))
+	if after := shape(roots); after != before {
+		t.Errorf("shape after filtering =\n%s\nwant\n%s", after, before)
+	}
+}

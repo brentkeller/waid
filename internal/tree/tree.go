@@ -3,7 +3,12 @@
 // verbatim, so whether that id resolves — and whether the chain it starts loops — is answered here.
 package tree
 
-import "github.com/brentkeller/waid/internal/events"
+import (
+	"sort"
+	"strings"
+
+	"github.com/brentkeller/waid/internal/events"
+)
 
 // Node is an item together with the items filed under it.
 type Node struct {
@@ -29,7 +34,7 @@ type Anomaly struct {
 }
 
 // Build assembles the forest from folded items, returning the roots and the anomalies it resolved
-// on the way. Roots and siblings come back in log order.
+// on the way. Every level comes back in the order sortSiblings gives it.
 //
 // An item whose parent id is absent from the log, and an item whose ancestor chain loops, are both
 // lifted to the top level and reported. Lifting the whole loop rather than picking an arbitrary
@@ -61,6 +66,7 @@ func Build(state events.State) ([]Node, []Anomaly) {
 		}
 		roots = append(roots, node(state, item, lifted))
 	}
+	sortSiblings(roots)
 	return roots, anomalies
 }
 
@@ -74,7 +80,34 @@ func node(state events.State, item events.Item, lifted map[string]bool) Node {
 		}
 		built.Children = append(built.Children, node(state, child, lifted))
 	}
+	sortSiblings(built.Children)
 	return built
+}
+
+// sortSiblings orders one level in place: parents first by title, then leaves most-recently-updated
+// first. Headings are landmarks, so a parent sorts by the one field a rename changes rather than
+// drifting every time a row beneath it is touched. Ties keep log order.
+func sortSiblings(nodes []Node) {
+	sort.SliceStable(nodes, func(left, right int) bool {
+		a, b := nodes[left], nodes[right]
+		isParent := len(a.Children) > 0
+		if isParent != (len(b.Children) > 0) {
+			return isParent
+		}
+		if isParent {
+			return compareTitles(a.Item.Title, b.Item.Title) < 0
+		}
+		return a.Item.Updated > b.Item.Updated
+	})
+}
+
+// compareTitles orders titles case-insensitively, falling back to byte order so titles differing
+// only in case still order stably against each other.
+func compareTitles(left, right string) int {
+	if folded := strings.Compare(strings.ToLower(left), strings.ToLower(right)); folded != 0 {
+		return folded
+	}
+	return strings.Compare(left, right)
 }
 
 // chainLoops reports whether walking up from item revisits an id instead of reaching the top level

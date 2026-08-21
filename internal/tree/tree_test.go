@@ -176,3 +176,105 @@ func TestBuildOnAnEmptyLogYieldsNothing(t *testing.T) {
 		t.Errorf("Build(empty) = %+v, %+v, want neither", roots, anomalies)
 	}
 }
+
+// addAt writes an add line at a given timestamp, so a test can state the order the log holds
+// separately from the order the tree should render.
+func addAt(ts string, id string, title string, parent string) string {
+	line := fmt.Sprintf(`{"ts":%q,"ev":"add","id":%q,"title":%q`, ts, id, title)
+	if parent != "" {
+		line += fmt.Sprintf(`,"parent":%q`, parent)
+	}
+	return line + "}"
+}
+
+func TestBuildSortsParentsBeforeLeaves(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("leaf", "Zulu leaf", ""),
+		addLine("head", "Alpha parent", ""),
+		addLine("kid1", "Child", "head"),
+	})
+
+	roots, _ := Build(state)
+	if got, want := shape(roots), "head\n  kid1\nleaf"; got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A parent sorts by title however recently it was touched, so headings stay where the eye left them.
+func TestBuildSortsParentsByTitle(t *testing.T) {
+	state := events.Fold([]string{
+		addAt("2026-08-14T09:00:00.000Z", "zulu", "Zulu", ""),
+		addAt("2026-08-14T09:01:00.000Z", "kidz", "Child of Zulu", "zulu"),
+		addAt("2026-08-14T09:02:00.000Z", "alfa", "alpha", ""),
+		addAt("2026-08-14T09:03:00.000Z", "kida", "Child of alpha", "alfa"),
+		addAt("2026-08-14T09:04:00.000Z", "midl", "Middle", ""),
+		addAt("2026-08-14T09:05:00.000Z", "kidm", "Child of Middle", "midl"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"alfa", "  kida", "midl", "  kidm", "zulu", "  kidz"}, "\n")
+	if got := shape(roots); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestBuildSortsLeavesByUpdatedDescending(t *testing.T) {
+	state := events.Fold([]string{
+		addAt("2026-08-14T09:00:00.000Z", "oldd", "Oldest", ""),
+		addAt("2026-08-14T09:01:00.000Z", "midd", "Middle", ""),
+		addAt("2026-08-14T09:02:00.000Z", "neww", "Newest", ""),
+		`{"ts":"2026-08-14T09:03:00.000Z","ev":"note","id":"oldd","text":"touched"}`,
+	})
+
+	roots, _ := Build(state)
+	if got, want := shape(roots), "oldd\nneww\nmidd"; got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Retitling a parent moves it; touching a leaf reorders the leaves and leaves the headings alone.
+func TestBuildReordersOnRetitleButNotOnATouchedLeaf(t *testing.T) {
+	lines := []string{
+		addAt("2026-08-14T09:00:00.000Z", "alfa", "Alpha", ""),
+		addAt("2026-08-14T09:01:00.000Z", "kida", "Child of Alpha", "alfa"),
+		addAt("2026-08-14T09:02:00.000Z", "zulu", "Zulu", ""),
+		addAt("2026-08-14T09:03:00.000Z", "kidz", "Child of Zulu", "zulu"),
+		addAt("2026-08-14T09:04:00.000Z", "lf01", "First leaf", ""),
+		addAt("2026-08-14T09:05:00.000Z", "lf02", "Second leaf", ""),
+	}
+
+	roots, _ := Build(events.Fold(lines))
+	want := strings.Join([]string{"alfa", "  kida", "zulu", "  kidz", "lf02", "lf01"}, "\n")
+	if got := shape(roots); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+
+	touched := append(lines, `{"ts":"2026-08-14T09:06:00.000Z","ev":"note","id":"lf01","text":"touched"}`)
+	roots, _ = Build(events.Fold(touched))
+	want = strings.Join([]string{"alfa", "  kida", "zulu", "  kidz", "lf01", "lf02"}, "\n")
+	if got := shape(roots); got != want {
+		t.Errorf("after touching a leaf, shape =\n%s\nwant\n%s", got, want)
+	}
+
+	retitled := append(touched, `{"ts":"2026-08-14T09:07:00.000Z","ev":"update","id":"zulu","title":"Aardvark"}`)
+	roots, _ = Build(events.Fold(retitled))
+	want = strings.Join([]string{"zulu", "  kidz", "alfa", "  kida", "lf01", "lf02"}, "\n")
+	if got := shape(roots); got != want {
+		t.Errorf("after retitling a parent, shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Titles that differ only in case sort together rather than splitting on byte order.
+func TestBuildSortsParentTitlesCaseInsensitively(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("bigb", "Beta", ""),
+		addLine("kidb", "Child", "bigb"),
+		addLine("lila", "alpha", ""),
+		addLine("kida", "Child", "lila"),
+	})
+
+	roots, _ := Build(state)
+	if got, want := shape(roots), "lila\n  kida\nbigb\n  kidb"; got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}

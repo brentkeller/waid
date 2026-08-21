@@ -412,6 +412,25 @@ func (t Tree[T]) itemsUnder(row Row[T]) []T {
 	return items
 }
 
+// SelectedParent is the item the row under the cursor hangs beneath: the nearest row above it that
+// holds one, so a fold drawn from something that is not an item — Repos' project headings, Loops'
+// `(unassigned)` bucket — is looked through rather than reported. A row at the top level has none.
+func (t Tree[T]) SelectedParent() (T, bool) {
+	var zero T
+	rows := t.rows()
+	at := t.snap(rows)
+	if at < 0 {
+		return zero, false
+	}
+
+	for at = rows[at].parent; at >= 0; at = rows[at].parent {
+		if rows[at].node {
+			return rows[at].Node, true
+		}
+	}
+	return zero, false
+}
+
 // SelectedItem is the item under the cursor. A fold has none, so the actions that need one are
 // inert there.
 func (t Tree[T]) SelectedItem() (T, bool) {

@@ -333,23 +333,39 @@ func adding(t *testing.T, on tab) (Model, string) {
 	return m, path
 }
 
-// a declares an item from any tab, filed under the project the row the cursor is on belongs to (§4).
-// Review's cursor is on a fold, since its projects are collapsed by default — a project on one line
-// is still a project to file against.
+// addedLine is the add these tests type, carrying whichever target the write resolved: a parent id
+// on Loops, omitted when the item lands at the top level, and an origin path elsewhere.
+func addedLine(parent, origin string) string {
+	if parent != "" {
+		parent = `"parent":"` + parent + `",`
+	}
+	if origin == "" {
+		origin = "null"
+	}
+	return `{"ts":"` + loopsStamped() + `","ev":"add","id":"7k3m","title":"Ship the add key","status":"open",` +
+		parent + `"origin":` + origin + `,"session":null,"tags":[],"waitingOn":null}`
+}
+
+// a declares an item from any tab, beside the row the cursor is on: under that row's parent on
+// Loops, and under the project the row belongs to on Repos and Agents, which is what those two have
+// always done (§7.2). Agents' cursor is on a fold, since its projects are collapsed by default — a
+// project on one line is still a project to file against.
 func TestAddDeclaresAnItemFromAnyTab(t *testing.T) {
 	cases := []struct {
-		tab     tab
-		to      []string
-		project string
-		logged  string
+		name   string
+		tab    tab
+		to     []string
+		lands  string
+		logged string
 	}{
-		{tabLoops, nil, `C:\dev\dr\devresults\devresults`, `"C:\\dev\\dr\\devresults\\devresults"`},
-		{tabScan, []string{"j", "j"}, `C:\dev\waid`, `"C:\\dev\\waid"`},
-		{tabReview, nil, `C:\dev\dr\devresults\devresults`, `"C:\\dev\\dr\\devresults\\devresults"`},
+		{"Loops", tabLoops, nil, topLevel, addedLine("", "")},
+		{"Repos", tabScan, []string{"j", "j"}, "waid", addedLine("", `"C:\\dev\\waid"`)},
+		{"Repos without a checkout", tabScan, nil, noProject, addedLine("", "")},
+		{"Agents", tabReview, nil, "devresults", addedLine("", `"C:\\dev\\dr\\devresults\\devresults"`)},
 	}
 
 	for _, c := range cases {
-		t.Run(tabTitles[c.tab], func(t *testing.T) {
+		t.Run(c.name, func(t *testing.T) {
 			m, path := adding(t, c.tab)
 			m, _ = press(t, m, c.to...)
 
@@ -357,8 +373,8 @@ func TestAddDeclaresAnItemFromAnyTab(t *testing.T) {
 			if m.prompt.kind != promptAdd {
 				t.Fatalf("a opened no prompt for the title")
 			}
-			if view := plain(m.View()); !strings.Contains(view, "add "+projectLabel(&c.project)) {
-				t.Errorf("the prompt does not name the project the item lands in:\n%s", view)
+			if view := plain(m.View()); !strings.Contains(view, "add "+c.lands) {
+				t.Errorf("the prompt does not name where the item lands:\n%s", view)
 			}
 
 			m, cmd := press(t, m, "Ship the add key", "enter")
@@ -366,14 +382,76 @@ func TestAddDeclaresAnItemFromAnyTab(t *testing.T) {
 				t.Error("the answer issued a command, want the write made on the keypress")
 			}
 
-			assertLog(t, path, []string{
-				`{"ts":"` + loopsStamped() + `","ev":"add","id":"7k3m","title":"Ship the add key","status":"open",` +
-					`"origin":` + c.logged + `,"session":null,"tags":[],"waitingOn":null}`,
-			})
+			assertLog(t, path, []string{c.logged})
 			if view := plain(m.View()); !strings.Contains(view, "added 7k3m  Ship the add key") {
 				t.Errorf("the footer carries no receipt for the add:\n%s", view)
 			}
 		})
+	}
+}
+
+// On Loops the two add keys differ by a tier: `a` puts the item beside the row under the cursor and
+// `A` puts it underneath, which is how a tier is created (§7.2). Both name the parent in the prompt.
+func TestAddKeysFileBesideAndUnderTheRow(t *testing.T) {
+	cases := []struct {
+		name    string
+		to      []string
+		pressed string
+		lands   string
+		parent  string
+	}{
+		{"a at the top level", nil, "a", topLevel, ""},
+		{"a under a parent", []string{"j"}, "a", "Localized notifications", "vq2n"},
+		{"A on a parent", nil, "A", "Localized notifications", "vq2n"},
+		{"A on a leaf", []string{"j"}, "A", "Design template", "sga9"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m, path := adding(t, tabLoops)
+			m, _ = press(t, m, c.to...)
+
+			m, _ = press(t, m, c.pressed)
+			if view := plain(m.View()); !strings.Contains(view, "add "+c.lands) {
+				t.Errorf("the prompt does not name where the item lands:\n%s", view)
+			}
+
+			m, _ = press(t, m, "Ship the add key", "enter")
+			assertLog(t, path, []string{addedLine(c.parent, "")})
+		})
+	}
+}
+
+// A leaf is a parent the moment something is added under it: the tier is created by the add rather
+// than declared first and filled afterwards (§7.2).
+func TestAddChildTurnsALeafIntoAParent(t *testing.T) {
+	m, _ := adding(t, tabLoops)
+
+	m, _ = press(t, m, "j", "A", "Ship the add key", "enter")
+
+	view := plain(m.View())
+	if !listed(view, "7k3m") {
+		t.Errorf("the declared item is not in the list:\n%s", view)
+	}
+	row := rowFor(t, view, "Design template")
+	if !strings.Contains(row, foldOpen) || !strings.Contains(row, "1 open") {
+		t.Errorf("the row the item landed under is %q, want a fold holding one open loop", row)
+	}
+}
+
+// The `(unassigned)` bucket gathers a fold's leaves and is not an item, so it is not a parent
+// either: both keys pressed on it land under the fold it hangs beneath (§4).
+func TestAddOnTheUnassignedBucketFilesUnderWhatGathersIt(t *testing.T) {
+	for _, pressed := range []string{"a", "A"} {
+		m, path := adding(t, tabLoops)
+
+		m, _ = press(t, m, "j", "j", "j", pressed)
+		if view := plain(m.View()); !strings.Contains(view, "add "+topLevel) {
+			t.Errorf("%s on the bucket does not land at the top level:\n%s", pressed, view)
+		}
+
+		m, _ = press(t, m, "Ship the add key", "enter")
+		assertLog(t, path, []string{addedLine("", "")})
 	}
 }
 
@@ -397,9 +475,9 @@ func TestAddPutsTheItemInTheListItLandsIn(t *testing.T) {
 	}
 }
 
-// An add against a row belonging to no project declares an item belonging to none, which is what
-// `waid add` outside a checkout writes.
-func TestAddWithoutAProjectDeclaresOneWithoutAProject(t *testing.T) {
+// An add with nothing under the cursor at all declares an item under nothing, which is what `waid
+// add` outside a checkout and with no `-p` writes.
+func TestAddWithNothingUnderTheCursorLandsAtTheTopLevel(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
 	m := offline(chrome(t, 140), detect.Result{})
 	m.opts.Cfg.EventsPath, m.opts.Ids = path, ids.Sequence("7k3m")
@@ -407,32 +485,33 @@ func TestAddWithoutAProjectDeclaresOneWithoutAProject(t *testing.T) {
 
 	m, _ = press(t, m, "a", "Ship the add key", "enter")
 
-	assertLog(t, path, []string{
-		`{"ts":"` + loopsStamped() + `","ev":"add","id":"7k3m","title":"Ship the add key","status":"open",` +
-			`"origin":null,"session":null,"tags":[],"waitingOn":null}`,
-	})
+	assertLog(t, path, []string{addedLine("", "")})
 }
 
 // The log holds no event that takes an item out of it, so undoing an add closes the item it declared
-// and leaves the reversal visible in the log (§3).
+// and leaves the reversal visible in the log (§3). Both add keys push the same inverse.
 func TestUndoOfAnAddClosesTheItem(t *testing.T) {
-	m, path := adding(t, tabLoops)
+	cases := map[string]string{"a": "", "A": "vq2n"}
 
-	m, _ = press(t, m, "a", "Ship the add key", "enter", "u")
+	for pressed, parent := range cases {
+		t.Run(pressed, func(t *testing.T) {
+			m, path := adding(t, tabLoops)
 
-	ts := loopsStamped()
-	assertLog(t, path, []string{
-		`{"ts":"` + ts + `","ev":"add","id":"7k3m","title":"Ship the add key","status":"open",` +
-			`"origin":"C:\\dev\\dr\\devresults\\devresults","session":null,"tags":[],"waitingOn":null}`,
-		`{"ts":"` + ts + `","ev":"close","id":"7k3m"}`,
-	})
+			m, _ = press(t, m, pressed, "Ship the add key", "enter", "u")
 
-	view := plain(m.View())
-	if listed(view, "7k3m") {
-		t.Errorf("the item the undo closed is still in the list:\n%s", view)
-	}
-	if !strings.Contains(view, "closed 7k3m  Ship the add key") {
-		t.Errorf("the footer carries no receipt for the undo:\n%s", view)
+			assertLog(t, path, []string{
+				addedLine(parent, ""),
+				`{"ts":"` + loopsStamped() + `","ev":"close","id":"7k3m"}`,
+			})
+
+			view := plain(m.View())
+			if listed(view, "7k3m") {
+				t.Errorf("the item the undo closed is still in the list:\n%s", view)
+			}
+			if !strings.Contains(view, "closed 7k3m  Ship the add key") {
+				t.Errorf("the footer carries no receipt for the undo:\n%s", view)
+			}
+		})
 	}
 }
 

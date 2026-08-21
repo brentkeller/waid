@@ -141,19 +141,35 @@ func (m Model) addNote(id, text string) (Model, tea.Cmd) {
 	return m.record(receipt{verb: "noted", subject: id, detail: text}), nil
 }
 
+// addTarget is where a declared item lands, and the two halves of the app answer that differently:
+// Loops files into the item tree and yields a parent id, while Repos and Agents are keyed by path
+// and yield an origin. Never both — the rule `-p` follows on the command line (§6).
+//
+// label is where the footer says the item is going: the parent's title or the project's directory,
+// rather than the id or the whole path.
+type addTarget struct {
+	parent *string
+	origin *string
+	label  string
+}
+
 // addPrompt opens the input a declared item is titled in. `a` is global rather than a Loops key (§4):
 // an item is declared as often while reading a signal or a session as while reading the list it lands
-// in, and the project it is filed under is what the row the cursor is on already says.
-func (m Model) addPrompt() (Model, tea.Cmd) {
-	path := m.cursorProject()
-	m.prompt = prompt{kind: promptAdd, label: "add", subject: projectLabel(path), project: path}
+// in, and where it belongs is what the row the cursor is on already says.
+//
+// child is `A` rather than `a`: the item lands under the row instead of beside it, which is how a
+// tier is created (§7.2). Repos and Agents file by path, where a row holds no tier to add under, so
+// the two keys are one press there.
+func (m Model) addPrompt(child bool) (Model, tea.Cmd) {
+	target := m.addTarget(child)
+	m.prompt = prompt{kind: promptAdd, label: "add", subject: target.label, target: target}
 	return m, nil
 }
 
 // addItem declares the item the prompt was answered with, writing the same event `waid add` writes
 // for it. The id is drawn against the whole log rather than the loaded list, since an id another
 // session declared is taken whether or not this one has read it.
-func (m Model) addItem(path *string, title string) (Model, tea.Cmd) {
+func (m Model) addItem(target addTarget, title string) (Model, tea.Cmd) {
 	id, err := events.Load(m.opts.Cfg.EventsPath).NewId(m.opts.Ids)
 	if err != nil {
 		m.hint = writeFailed("add", err)
@@ -164,7 +180,7 @@ func (m Model) addItem(path *string, title string) (Model, tea.Cmd) {
 	// writes for an item declared with none.
 	event := events.AddEvent{
 		Ev: "add", Id: id, Title: title, Status: events.StatusOpen,
-		Origin: path, Session: nil, Tags: []string{}, WaitingOn: nil,
+		Parent: target.parent, Origin: target.origin, Session: nil, Tags: []string{}, WaitingOn: nil,
 	}
 	ts, err := events.Append(m.opts.Cfg.EventsPath, event, m.now())
 	if err != nil {
@@ -173,7 +189,7 @@ func (m Model) addItem(path *string, title string) (Model, tea.Cmd) {
 	}
 
 	item := events.Item{
-		Id: id, Title: title, Status: events.StatusOpen, Origin: path,
+		Id: id, Title: title, Status: events.StatusOpen, Parent: target.parent, Origin: target.origin,
 		Tags: []string{}, Notes: []events.Note{}, Created: ts, Updated: ts,
 	}
 
@@ -181,20 +197,45 @@ func (m Model) addItem(path *string, title string) (Model, tea.Cmd) {
 	return m.record(receipt{verb: "added", subject: id, detail: title}), nil
 }
 
-// cursorProject is the project a declared item is filed under: the one the row under the cursor
-// belongs to, whichever tab that row is on. A row belonging to none — a signal against a repository
-// with no checkout, a session whose transcript recorded no cwd — files the item under none as well.
-func (m Model) cursorProject() *string {
+// addTarget is where the row under the cursor sends a declared item. On Loops that is a place in the
+// item tree: the row's own id under `A`, and the id of whatever it hangs beneath otherwise, since a
+// sibling is a child of the same parent. The `(unassigned)` bucket is not an item and so is not a
+// parent either — an add against it lands under the fold whose leaves it gathers.
+//
+// On Repos and Agents the row is a project, and a project is a path: the item records it as its
+// origin and lands at the top level. A row belonging to none — a signal against a repository with no
+// checkout, a session whose transcript recorded no cwd — records none either.
+func (m Model) addTarget(child bool) addTarget {
 	width := m.viewWidth()
 	switch m.tab {
 	case tabLoops:
-		return rowProject(m.loopsTree(width), func(item events.Item) *string { return item.Origin })
+		tree := m.loopsTree(width)
+		if child {
+			if item, ok := tree.SelectedItem(); ok {
+				return parentTarget(item)
+			}
+		}
+		if item, ok := tree.SelectedParent(); ok {
+			return parentTarget(item)
+		}
+		return addTarget{label: topLevel}
 	case tabScan:
-		return rowProject(m.scanTree(width), func(signal detect.Signal) *string { return signal.Project })
+		return originTarget(rowProject(m.scanTree(width), func(signal detect.Signal) *string { return signal.Project }))
 	case tabReview:
-		return rowProject(m.reviewTree(width), func(s sessions.Session) *string { return s.Project })
+		return originTarget(rowProject(m.reviewTree(width), func(s sessions.Session) *string { return s.Project }))
 	}
-	return nil
+	return addTarget{label: topLevel}
+}
+
+// parentTarget files the item under an item, which is what Loops means by a place.
+func parentTarget(item events.Item) addTarget {
+	return addTarget{parent: &item.Id, label: item.Title}
+}
+
+// originTarget records a path as provenance and leaves the item at the top level, which is where a
+// promotion lands too (§6).
+func originTarget(path *string) addTarget {
+	return addTarget{origin: path, label: projectLabel(path)}
 }
 
 // rowProject reads the project off the row under the cursor, falling back to the group the cursor is

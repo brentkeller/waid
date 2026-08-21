@@ -94,7 +94,8 @@ var globalBindings = []binding{
 	{[]string{"g", "G"}, "g / G", "first / last row"},
 	{[]string{"enter"}, "enter", "expand or collapse the fold under the cursor"},
 	{[]string{"/", "esc"}, "/", "filter; esc clears"},
-	{[]string{"a"}, "a", "add an item, from any tab"},
+	{[]string{"a"}, "a", "add an item beside the row under the cursor"},
+	{[]string{"A"}, "A", "add one under it, which is how a tier is made"},
 	{[]string{"r"}, "r", "refresh the current tab"},
 	{[]string{"u"}, "u", "undo the last write"},
 	{[]string{"?"}, "?", "key table"},
@@ -312,7 +313,9 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		m.filtering = true
 	case "a":
-		return m.addPrompt()
+		return m.addPrompt(false)
+	case "A":
+		return m.addPrompt(true)
 	case "u":
 		return m.undo()
 	case "esc":

@@ -34,9 +34,9 @@ type prompt struct {
 	// prior is what the answer replaces, kept for the inverse the write pushes onto the undo stack.
 	prior string
 
-	// project is where an added item is filed, resolved from the row the prompt was opened on. The
-	// subject names it for the footer; this is the path the write carries, since the two differ.
-	project *string
+	// target is where an added item lands, resolved from the row the prompt was opened on. The
+	// subject names it for the footer; this is what the write carries, since the two differ.
+	target addTarget
 
 	// choice is the match a parent search is on, which enter takes. It is reset by every keystroke
 	// that changes the search, since the list under it is a different list.
@@ -94,7 +94,7 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 	case promptNote:
 		return m.addNote(answered.subject, value)
 	case promptAdd:
-		return m.addItem(answered.project, value)
+		return m.addItem(answered.target, value)
 	case promptDate:
 		return m.pickDate(value), nil
 	}

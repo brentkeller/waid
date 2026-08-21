@@ -163,7 +163,8 @@ Three tabs, switched with `1` `2` `3` or `tab` / `shift-tab`:
 
 Keys that work everywhere: `j` `k` to move, `g` / `G` for first and last, `enter` to fold, `/` to
 filter (`esc` clears), `s` to cycle the tab's segmented row — Loops' statuses, Repos' kinds,
-Agents' today/yesterday/week/last week plus whatever day `d` picked — `a` to add an item, `r` to
+Agents' today/yesterday/week/last week plus whatever day `d` picked — `a` to add an item beside the
+row under the cursor and `A` to add one under it, which is how a tier of the tree is made, `r` to
 refresh — on Agents that re-reads every transcript on disk, so a session run since the app opened
 shows up — `u` to undo, `?` for the key table, `q` to quit. A key that belongs to another tab says so
 in the footer rather than doing nothing quietly.

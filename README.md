@@ -157,9 +157,16 @@ Three tabs, switched with `1` `2` `3` or `tab` / `shift-tab`:
 
 | Tab | Shows | Acts |
 | --- | --- | --- |
-| Loops | Declared items as a tree, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `P` move under a parent, `n` note, `h` / `l` fold and unfold, `p` toggle the pane. |
+| Loops | Declared items as a tree, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `m` move, `n` note, `h` / `l` fold and unfold, `p` toggle the pane. |
 | Repos | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
 | Agents | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `pgup`/`pgdn` scroll it, `home`/`end` jump to either end, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
+
+`m` moves an item by navigation rather than by typing a title. It lifts the item and everything
+under it out of the tree, leaving the tree as it will be after the move: `j` `k` walk it, `h` / `l`
+fold and unfold, `enter` drops the item on the row under the cursor and `esc` abandons the move. The
+picker opens on the item's current parent, with a `── top level ──` row above the roots for an item
+that belongs under nothing. Since the item's own subtree has left the tree, there is no destination
+on screen the move could be refused for.
 
 Keys that work everywhere: `j` `k` to move, `g` / `G` for first and last, `enter` to fold, `/` to
 filter (`esc` clears), `s` to cycle the tab's segmented row — Loops' statuses, Repos' kinds,

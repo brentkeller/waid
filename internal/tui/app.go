@@ -67,7 +67,7 @@ var tabTitles = [numTabs]string{"Loops", "Repos", "Agents"}
 // tabFooters are the key hints each tab keeps in the footer — the keys worth having in front of you
 // while working the tab, as opposed to the full table `?` opens.
 var tabFooters = [numTabs]string{
-	tabLoops:  "x done · w waiting · e edit · P parent · n note · a add · / filter · s status · ? keys",
+	tabLoops:  "x done · w waiting · e edit · m move · n note · a add · / filter · s status · ? keys",
 	tabScan:   "p promote · d dismiss · o open in browser · r refresh · / filter · ? keys",
 	tabReview: "space preview · R resume · o open repo · y copy id · s range · d date · ? keys",
 }
@@ -109,7 +109,6 @@ var promptBindings = []binding{
 	{[]string{"enter"}, "enter", "commit the answer"},
 	{[]string{"esc"}, "esc", "abandon it"},
 	{[]string{"ctrl+u"}, "ctrl-u", "empty the input, leaving the prompt open"},
-	{[]string{"tab", "shift+tab"}, "tab / shift-tab", "move through a parent search's matches"},
 }
 
 // tabBindings are the keys that mean something on one tab only. A key listed here and pressed
@@ -121,7 +120,7 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"e"}, "e", "edit title"},
 		{[]string{"n"}, "n", "note"},
 		{[]string{"h", "l"}, "h / l", "collapse / expand the fold under the cursor"},
-		{[]string{"P"}, "P", "move under a parent"},
+		{[]string{"m"}, "m", "move under another item — enter drops, esc cancels"},
 		{[]string{"s"}, "s", "cycle the status filter — open, waiting, done, all"},
 		{[]string{"p"}, "p", "toggle the detail pane"},
 	},
@@ -290,6 +289,11 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type != tea.KeyCtrlC {
 		if m.prompt.kind != promptNone {
 			return m.promptKey(msg)
+		}
+		// The move picker holds the keyboard the way a prompt does: it asks one question, and every
+		// key that is not an answer to it is inert until the question is settled (§7.1).
+		if m.loops.moving.active() {
+			return m.moveKey(msg)
 		}
 		if m.filtering {
 			return m.filterKey(msg), nil
@@ -539,13 +543,13 @@ func (m Model) keyTable() string {
 // footer is two lines: the status line and the tab's key hints. It keeps its height whether or not
 // it has anything to say, so the list above it does not shift as messages come and go.
 func (m Model) footer() string {
-	// A project search puts its matches where the hints go, since the hints are for keys and the
-	// search is asking which of several projects the answer means. It is the one prompt that takes
-	// more than the status line, and the body is measured off this, so the list simply gives way.
-	if m.prompt.kind == promptParent {
-		return m.status() + "\n" + m.parentChoices()
+	// The move picker owns the keyboard while it is open, so it owns the hints too: the tab's keys
+	// are all inert until the item has been dropped or the move abandoned (§7.1).
+	hints := tabFooters[m.tab]
+	if m.loops.moving.active() {
+		hints = moveKeys
 	}
-	return m.status() + "\n" + m.theme.Footer.Render(" "+fitHints(tabFooters[m.tab], m.viewWidth()-1))
+	return m.status() + "\n" + m.theme.Footer.Render(" "+fitHints(hints, m.viewWidth()-1))
 }
 
 // fitHints drops hints from a line too long for the terminal, so a narrow window loses the tail of

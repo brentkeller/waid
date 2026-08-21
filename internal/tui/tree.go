@@ -62,6 +62,10 @@ type Row[T any] struct {
 	parent int
 	at     int
 	node   bool
+
+	// plain suppresses the fold marker on a row that heads nothing. The move picker's top-level row
+	// is a destination rather than a branch, and a closed marker beside it would read as one.
+	plain bool
 }
 
 // Tree is the collapsible list the tabs draw. It takes the tree as a flat list of rows and shows
@@ -431,6 +435,13 @@ func (t Tree[T]) SelectedParent() (T, bool) {
 	return zero, false
 }
 
+// SelectedRow is the whole row under the cursor, for a caller that needs more of it than the item
+// behind it: the move picker tells its synthetic rows apart by their keys, and one of them is a
+// destination while the other is not (§7.1).
+func (t Tree[T]) SelectedRow() (Row[T], bool) {
+	return t.selected()
+}
+
 // SelectedItem is the item under the cursor. A fold has none, so the actions that need one are
 // inert there.
 func (t Tree[T]) SelectedItem() (T, bool) {
@@ -490,7 +501,10 @@ func indent(depth int) string {
 // heading is a fold line: the marker, the project, and the count pushed to the right edge.
 func (t Tree[T]) heading(row Row[T], width int) string {
 	marker := foldClosed
-	if row.Expanded {
+	switch {
+	case row.plain:
+		marker = " "
+	case row.Expanded:
 		marker = foldOpen
 	}
 

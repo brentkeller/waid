@@ -1,0 +1,230 @@
+package tui
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/brentkeller/waid/internal/events"
+)
+
+// Moving an item is navigation rather than typing: the tree is already on screen, and making someone
+// type a title they can see is worse than letting them point at it. `m` lifts the item — and its
+// descendants — out of the tree, and what is left is the tree as it will be after the move, browsed
+// with the ordinary keys. `enter` drops, `esc` cancels (§7.1).
+//
+// Lifting the subtree is what makes this safe rather than merely convenient: the app never has to
+// reject a move, because the invalid destinations are not on screen to choose. An item cannot be
+// dropped inside itself once its own descendants have left the tree with it. The cycle check in §6
+// remains for the command line, where a fragment can still name a descendant.
+
+// moveTopKey identifies the synthetic row that means no parent, and moveTopTitle is what it draws.
+// The roots are items, so without the row there is nothing on screen meaning the top level — and a
+// dedicated key would be one more thing to know for a destination the eye can already find.
+const (
+	moveTopKey   = "\x00top-level"
+	moveTopTitle = "── top level ──"
+)
+
+// moveKeys are the picker's hints, in place of the tab's own while it holds the keyboard.
+const moveKeys = "j k move · h l fold · enter drops · esc cancels"
+
+// moveModel is the picker's state: what is being moved, and the cursor and folds over what is left.
+// subject is empty when the mode is closed, which is the zero value.
+type moveModel struct {
+	subject  string
+	cursor   int
+	expanded map[string]bool
+}
+
+// active reports whether the picker is open, which is when it holds the keyboard.
+func (mm moveModel) active() bool { return mm.subject != "" }
+
+// startMove opens the picker on the item under the cursor. A row that holds no item is inert, as it
+// is for every other write, and the footer says which row the key was pressed on (§4).
+func (m Model) startMove(t Tree[events.Item]) (Model, tea.Cmd, bool) {
+	m, item, ok := m.loopTarget(t, "m moves an item under another")
+	if !ok {
+		return m, nil, true
+	}
+
+	m.loops.moving = moveModel{subject: item.Id, expanded: m.moveFolds(item.Parent)}
+	m.loops.moving.cursor = m.moveCursor(item.Parent)
+	return m, nil, true
+}
+
+// moveFolds are the folds the picker opens on: the path down to the item's current parent, and
+// nothing else. Any tree worth building then fits one screen as roots-plus-one-branch, which is what
+// keeps navigation cheap enough that no search is needed. The parent itself stays closed — it is
+// where the cursor lands, and what it already holds is not the move's business.
+func (m Model) moveFolds(parent *string) map[string]bool {
+	open := map[string]bool{}
+	if parent == nil {
+		return open
+	}
+	for _, ancestor := range (events.State{Items: m.loops.items}).Ancestors(*parent) {
+		open[ancestor.Id] = true
+	}
+	return open
+}
+
+// moveCursor is the row the picker opens on: the item's current parent, so an immediate enter is a
+// no-op rather than a surprise, and a nudge to a sibling project is one keystroke. An item at the
+// top level opens on the row that means one, which is the first.
+func (m Model) moveCursor(parent *string) int {
+	if parent == nil {
+		return 0
+	}
+
+	for i, row := range m.moveTree(m.viewWidth()).rows() {
+		if row.Key == *parent {
+			return i
+		}
+	}
+	return 0
+}
+
+// moveCandidates are the items left once the subject and everything under it have been lifted out.
+func (m Model) moveCandidates() []events.Item {
+	lifted := append(m.descendants(m.loops.moving.subject), m.loops.moving.subject)
+
+	kept := make([]events.Item, 0, len(m.loops.items))
+	for _, item := range m.loops.items {
+		if !slices.Contains(lifted, item.Id) {
+			kept = append(kept, item)
+		}
+	}
+	return kept
+}
+
+// moveTree is the destinations on offer: the tree with the lifted subtree gone, and the synthetic
+// top-level row pinned above it. Folds are closed by default, which is the one way it differs from
+// the list it stands in for.
+func (m Model) moveTree(width int) Tree[events.Item] {
+	now := m.now()
+	roots := m.forestOf(m.moveCandidates())
+	columns := loopsColumnsFor(leavesIn(roots), now)
+
+	top := Row[events.Item]{Depth: 0, Key: moveTopKey, Title: moveTopTitle, plain: true}
+
+	built := Tree[events.Item]{
+		Rows:     append([]Row[events.Item]{top}, loopsRows(roots, "", 0)...),
+		Cursor:   m.loops.moving.cursor,
+		Expanded: m.loops.moving.expanded,
+		// Every row the cursor can reach is one the eye can land on, headings included: a closed fold
+		// has to be selectable to be opened at all, and enter is what decides whether the row it
+		// reached can take the item.
+		Selectable: func(Row[events.Item]) bool { return true },
+		Render: func(item events.Item, width int, _ bool) string {
+			return loopsRow(item, columns, now, width)
+		},
+	}
+	built.clamp()
+	return built
+}
+
+// moveKey handles the keys while the picker holds the keyboard. Every other key is inert: the mode
+// asks one question, and a stray `a` in the middle of it would be a write nobody asked for. ctrl-c
+// still quits, as it does from a prompt.
+func (m Model) moveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	t := m.moveTree(m.viewWidth())
+	m.hint = ""
+
+	switch msg.String() {
+	case "esc":
+		m.loops.moving = moveModel{}
+		return m, nil
+	case "enter":
+		return m.commitMove(t)
+	case "j", "down":
+		t.Down()
+	case "k", "up":
+		t.Up()
+	case "g":
+		t.First()
+	case "G":
+		t.Last()
+	case "h", "left":
+		t.Collapse()
+	case "l", "right":
+		t.Expand()
+	default:
+		return m, nil
+	}
+
+	m.loops.moving.cursor, m.loops.moving.expanded = t.Cursor, t.Expanded
+	return m, nil
+}
+
+// commitMove drops the item on the row the cursor is on. The top-level row writes a null parent, and
+// every row holding an item writes that item's id — leaves included, since dropping onto a leaf makes
+// it a parent and there is no reason to forbid it.
+//
+// The `(unassigned)` bucket is not an item and so is not a destination, as everywhere else: dropping
+// into it is dropping onto the fold it hangs under, which is already a row of its own. The picker
+// stays open, since the press was a miss rather than an answer.
+func (m Model) commitMove(t Tree[events.Item]) (Model, tea.Cmd) {
+	row, ok := t.SelectedRow()
+	if !ok {
+		m.hint = noItems
+		return m, nil
+	}
+
+	var parent *string
+	switch {
+	case row.Key == moveTopKey:
+	case row.node:
+		parent = &row.Node.Id
+	default:
+		m.hint = row.Title + " is not a destination — l opens it, or drop on the row above it"
+		return m, nil
+	}
+
+	subject := m.loops.moving.subject
+	m.loops.moving = moveModel{}
+	return m.refile(subject, parent)
+}
+
+// moveBody is the picker in place of the list: the header naming what is being moved, the rule under
+// it, and the destinations. The detail pane is left out — the question the mode asks is where a row
+// sits, not what it says.
+func (m Model) moveBody(width int) string {
+	head := []string{m.moveHeader(width), m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
+	return strings.Join(append(head, strings.Split(m.moveTree(width).View(width, m.theme), "\n")...), "\n")
+}
+
+// moveHeader names the item being moved, how much comes with it, and the two keys that end the mode.
+// The title gives way first, since the id and the keys are the parts a narrow terminal cannot infer.
+func (m Model) moveHeader(width int) string {
+	item, loaded := m.loadedItem(m.loops.moving.subject)
+	if !loaded {
+		return ""
+	}
+
+	carried := ""
+	if n := len(m.descendants(item.Id)); n > 0 {
+		carried = "  + " + kin(n)
+	}
+
+	head, lead := " moving", "  "+item.Id+"  "
+	fixed := lipgloss.Width(head+lead+carried) + lipgloss.Width(moveEnders) + 2
+	rest := lead + truncate(item.Title, max(width-fixed, 0)) + carried
+
+	row := m.theme.Heading.Render(head) + m.theme.Row.Render(rest)
+	return m.headerLine(row, lipgloss.Width(head+rest), moveEnders, width)
+}
+
+// moveEnders are the two keys the header hangs against its right edge: the mode has one way out in
+// each direction, and both belong beside what is being moved.
+const moveEnders = "esc cancels · enter drops"
+
+// kin counts the descendants a lifted subtree carries. plural cannot inflect this one.
+func kin(count int) string {
+	if count == 1 {
+		return "1 child"
+	}
+	return fmt.Sprintf("%d children", count)
+}

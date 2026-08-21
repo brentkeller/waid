@@ -18,7 +18,6 @@ const (
 	promptNote
 	promptAdd
 	promptDate
-	promptParent
 )
 
 // prompt is the inline input the footer takes text in. It holds the keyboard the way the filter does,
@@ -38,10 +37,6 @@ type prompt struct {
 	// subject names it for the footer; this is what the write carries, since the two differ.
 	target addTarget
 
-	// choice is the match a parent search is on, which enter takes. It is reset by every keystroke
-	// that changes the search, since the list under it is a different list.
-	choice int
-
 	value string
 }
 
@@ -54,18 +49,14 @@ func (m Model) promptKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.prompt = prompt{}
 	case tea.KeyEnter:
 		return m.commitPrompt()
-	case tea.KeyTab, tea.KeyDown:
-		return m.moveChoice(1), nil
-	case tea.KeyShiftTab, tea.KeyUp:
-		return m.moveChoice(-1), nil
 	case tea.KeyCtrlU:
-		m.prompt.value, m.prompt.choice = "", 0
+		m.prompt.value = ""
 	case tea.KeyBackspace:
 		if runes := []rune(m.prompt.value); len(runes) > 0 {
-			m.prompt.value, m.prompt.choice = string(runes[:len(runes)-1]), 0
+			m.prompt.value = string(runes[:len(runes)-1])
 		}
 	case tea.KeyRunes, tea.KeySpace:
-		m.prompt.value, m.prompt.choice = m.prompt.value+msg.String(), 0
+		m.prompt.value += msg.String()
 	}
 	return m, nil
 }
@@ -77,11 +68,6 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 	m.prompt = prompt{}
 
 	value := strings.TrimSpace(answered.value)
-	// A parent search is the one prompt an empty answer is a write for: it moves the item to the top
-	// level, which nothing else says.
-	if answered.kind == promptParent {
-		return m.refile(answered.subject, value, answered.choice)
-	}
 	if value == "" {
 		return m, nil
 	}

@@ -72,6 +72,10 @@ type loopsModel struct {
 	cursor   int
 	expanded map[string]bool
 
+	// moving is the destination picker, open over the list while an item is being moved (§7.1). Its
+	// zero value is the mode closed, which is every frame but those.
+	moving moveModel
+
 	// load is the log seam. It runs off the update loop and comes back as a loopsLoadedMsg.
 	load func() tea.Msg
 }
@@ -141,8 +145,8 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		return m.editSelected(tree)
 	case "n":
 		return m.noteSelected(tree)
-	case "P":
-		return m.parentPrompt(tree)
+	case "m":
+		return m.startMove(tree)
 	default:
 		return m, nil, false
 	}
@@ -195,7 +199,14 @@ func (m Model) matchesStatus(item events.Item) bool {
 // that does not is kept only as the path down to a descendant that did. Both filter client-side, so
 // neither issues any work (§1.1).
 func (m Model) loopsForest() []tree.Node {
-	roots, _ := tree.Build(events.State{Items: m.loops.items})
+	return m.forestOf(m.loops.items)
+}
+
+// forestOf is that shaping over whatever set of items it is handed, so the move picker draws the
+// tree the list draws — the same gates, the same ordering, the same bucketing — over what is left
+// once the subtree being moved has been lifted out of it (§7.1).
+func (m Model) forestOf(items []events.Item) []tree.Node {
+	roots, _ := tree.Build(events.State{Items: items})
 	roots = tree.Prune(roots, m.matchesStatus)
 
 	if query := strings.ToLower(m.filter); query != "" {
@@ -400,6 +411,10 @@ func loopsRow(item events.Item, columns loopsColumns, now time.Time, width int) 
 // the detail pane under it while it is open (§1.1). The height is the rows the body was given, and is
 // zero until the terminal has said how tall it is.
 func (m Model) loopsBody(width, height int) string {
+	if m.loops.moving.active() {
+		return m.moveBody(width)
+	}
+
 	head := []string{m.loopsHeader(width), m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
 	list := m.loopsList(width)
 	if m.loops.collapsed {

@@ -21,6 +21,10 @@ var booleanFlags = map[string]bool{
 // aliases are short forms, expanded to their long name before anything else looks at them.
 var aliases = map[string]string{"p": "project", "t": "tag", "h": "help"}
 
+// retired flags were renamed rather than dropped. The old spelling is refused so an invocation
+// written against it fails loudly instead of parsing into a flag nothing reads.
+var retired = map[string]string{"project": "-p for a parent, or --origin for a path"}
+
 // repeatable flags collect every occurrence into a list instead of overwriting.
 var repeatable = map[string]bool{"tag": true}
 
@@ -92,6 +96,9 @@ func ParseArgv(argv []string) (ParsedArgv, error) {
 			body = token[2:]
 		}
 		name, inline, hasInline := strings.Cut(body, "=")
+		if use, gone := retired[name]; gone {
+			return ParsedArgv{}, errs.Userf("flag --%s is no longer accepted: use %s", name, use)
+		}
 		name = expand(name)
 
 		if booleanFlags[name] {

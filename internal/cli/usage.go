@@ -10,7 +10,7 @@ Usage: waid <command> [options]
   waid week [--last]                  Rollup by project for this week (or last)
   waid loops [-p <project>]           Declared open/waiting items, then detected signals
   waid scan [-p <project>]            Detected signals only
-  waid list [--status s] [--project p] [--tag t] [--all]
+  waid list [--status s] [--origin <frag>] [--tag t] [--all]
   waid add "<title>" [-p <project>] [--waiting-on <who>] [--tag <t>] [--session <id>]
   waid done <id>                      waid reopen <id>
   waid move <id> [-p <parent>|--top]  Refile an item under a parent, or to the top level

@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/brentkeller/waid/internal/errs"
@@ -62,13 +63,13 @@ func TestParseArgvEveryBooleanFlagParsesWithoutValue(t *testing.T) {
 }
 
 func TestParseArgvInlineValueBinds(t *testing.T) {
-	parsed, err := ParseArgv([]string{"list", "--project=C:\\dev\\waid", "--status=waiting"})
+	parsed, err := ParseArgv([]string{"list", "--origin=C:\\dev\\waid", "--status=waiting"})
 	if err != nil {
 		t.Fatalf("ParseArgv returned %v", err)
 	}
 
-	if got, _ := parsed.Flags.String("project"); got != "C:\\dev\\waid" {
-		t.Fatalf("project = %q, want %q", got, "C:\\dev\\waid")
+	if got, _ := parsed.Flags.String("origin"); got != "C:\\dev\\waid" {
+		t.Fatalf("origin = %q, want %q", got, "C:\\dev\\waid")
 	}
 	if got, _ := parsed.Flags.String("status"); got != "waiting" {
 		t.Fatalf("status = %q, want %q", got, "waiting")
@@ -223,13 +224,44 @@ func TestFlagAccessorsReportAbsence(t *testing.T) {
 }
 
 func TestFlagStringDistinguishesEmptyFromAbsent(t *testing.T) {
-	parsed, err := ParseArgv([]string{"list", "--project="})
+	parsed, err := ParseArgv([]string{"list", "--origin="})
 	if err != nil {
 		t.Fatalf("ParseArgv returned %v", err)
 	}
 
-	value, ok := parsed.Flags.String("project")
+	value, ok := parsed.Flags.String("origin")
 	if !ok || value != "" {
-		t.Fatalf("String(project) = %q, %v, want an empty value that is present", value, ok)
+		t.Fatalf("String(origin) = %q, %v, want an empty value that is present", value, ok)
+	}
+}
+
+// --project was replaced by --origin. The old spelling is refused rather than parsed and ignored,
+// so a stale invocation fails loudly instead of filtering nothing.
+func TestParseArgvRefusesTheRetiredProjectFlag(t *testing.T) {
+	for _, argv := range [][]string{
+		{"list", "--project", "waid"},
+		{"list", "--project=waid"},
+	} {
+		_, err := ParseArgv(argv)
+
+		var user *errs.UserError
+		if !errors.As(err, &user) {
+			t.Fatalf("ParseArgv(%q) returned %v, want a UserError", argv, err)
+		}
+		if !strings.Contains(user.Message, "--origin") {
+			t.Errorf("message = %q, want it to name --origin", user.Message)
+		}
+	}
+}
+
+// -p keeps working: it is the parent flag now, and shares an internal name with the retired one.
+func TestParseArgvKeepsTheShortParentFlag(t *testing.T) {
+	parsed, err := ParseArgv([]string{"add", "title", "-p", "waid"})
+	if err != nil {
+		t.Fatalf("ParseArgv returned %v", err)
+	}
+
+	if got, _ := parsed.Flags.String("project"); got != "waid" {
+		t.Fatalf("project = %q, want %q", got, "waid")
 	}
 }

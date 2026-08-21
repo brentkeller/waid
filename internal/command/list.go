@@ -16,10 +16,10 @@ import (
 // ListFilters are the filters that produced a list, echoed back so --json callers can see what was
 // applied.
 type ListFilters struct {
-	Status  *events.Status `json:"status"`
-	Project *string        `json:"project"`
-	Tag     []string       `json:"tag"`
-	All     bool           `json:"all"`
+	Status *events.Status `json:"status"`
+	Origin *string        `json:"origin"`
+	Tag    []string       `json:"tag"`
+	All    bool           `json:"all"`
 }
 
 // ListResult is the filtered items alongside the filters that selected them.
@@ -43,7 +43,7 @@ func runList(ctx *cli.Ctx) (ListResult, error) {
 	if err != nil {
 		return ListResult{}, err
 	}
-	requested, _ := ctx.Flags.String("project")
+	requested, _ := ctx.Flags.String("origin")
 	path, err := project.Resolve(requested, project.KnownProjects(state.Items, nil), ctx.Cwd)
 	if err != nil {
 		return ListResult{}, err
@@ -53,7 +53,7 @@ func runList(ctx *cli.Ctx) (ListResult, error) {
 	if tags == nil {
 		tags = []string{}
 	}
-	filters := ListFilters{Status: status, Project: path, Tag: tags, All: ctx.Flags.Bool("all")}
+	filters := ListFilters{Status: status, Origin: path, Tag: tags, All: ctx.Flags.Bool("all")}
 
 	items := []events.Item{}
 	for _, item := range state.Items {
@@ -78,7 +78,7 @@ func matches(item events.Item, filters ListFilters) bool {
 	} else if !filters.All && item.Status == events.StatusDone {
 		return false
 	}
-	if filters.Project != nil && (item.Origin == nil || *item.Origin != *filters.Project) {
+	if filters.Origin != nil && (item.Origin == nil || *item.Origin != *filters.Origin) {
 		return false
 	}
 	for _, tag := range filters.Tag {

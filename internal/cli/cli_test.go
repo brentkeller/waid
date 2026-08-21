@@ -165,12 +165,12 @@ func TestRunReportsAFlagMissingItsValue(t *testing.T) {
 	c := &capture{}
 	home := testHome(t)
 
-	code := Run(argv(home, "list", "--project"), c.io(), Registry{})
+	code := Run(argv(home, "list", "--origin"), c.io(), Registry{})
 
 	if code != ExitUser {
 		t.Fatalf("exit code = %d, want %d", code, ExitUser)
 	}
-	if got, want := c.err.String(), "flag --project requires a value\n"; got != want {
+	if got, want := c.err.String(), "flag --origin requires a value\n"; got != want {
 		t.Fatalf("stderr = %q, want %q", got, want)
 	}
 }

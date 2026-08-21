@@ -16,7 +16,7 @@ type listRecord struct {
 	} `json:"items"`
 	Filters struct {
 		Status  *string  `json:"status"`
-		Project *string  `json:"project"`
+		Origin  *string  `json:"origin"`
 		Tag     []string `json:"tag"`
 		All     bool     `json:"all"`
 	} `json:"filters"`
@@ -137,14 +137,14 @@ func TestListWithoutTagsReportsAnEmptyTagFilter(t *testing.T) {
 	}
 }
 
-func TestListResolvesAPartialProject(t *testing.T) {
+func TestListResolvesAPartialOrigin(t *testing.T) {
 	home := makeHome(t)
 	ids := seed(t, home)
 
-	result := list(t, home, "-p", "waid")
+	result := list(t, home, "--origin", "waid")
 	assertIds(t, result.ids(), ids["repo"])
-	if result.Filters.Project == nil || *result.Filters.Project != `C:\dev\waid` {
-		t.Errorf("filters.project = %v, want C:\\dev\\waid", result.Filters.Project)
+	if result.Filters.Origin == nil || *result.Filters.Origin != `C:\dev\waid` {
+		t.Errorf("filters.origin = %v, want C:\\dev\\waid", result.Filters.Origin)
 	}
 }
 
@@ -152,7 +152,7 @@ func TestListCombinesFiltersConjunctively(t *testing.T) {
 	home := makeHome(t)
 	ids := seed(t, home)
 
-	result := list(t, home, "-p", "devresults", "--tag", "bug")
+	result := list(t, home, "--origin", "devresults", "--tag", "bug")
 	assertIds(t, result.ids(), ids["chart"])
 }
 
@@ -211,4 +211,32 @@ func lineHolding(text, needle string) string {
 		}
 	}
 	return ""
+}
+
+// --project was the path filter before origins existed. It is refused rather than ignored, so an
+// invocation written against the old flag does not quietly list everything.
+func TestListRefusesTheRetiredProjectFlag(t *testing.T) {
+	home := makeHome(t)
+	seed(t, home)
+
+	run := waid(t, home, "list", "--project", "waid")
+	if run.code != cli.ExitUser {
+		t.Fatalf("code = %d, want %d", run.code, cli.ExitUser)
+	}
+	if !strings.Contains(run.err, "--origin") {
+		t.Errorf("stderr = %q, want it to name --origin", run.err)
+	}
+}
+
+// The origin filter is a path filter, so it composes with --status and --tag exactly as the project
+// filter did, and reads a full path as readily as a fragment.
+func TestListOriginTakesAWholePathAndComposes(t *testing.T) {
+	home := makeHome(t)
+	ids := seed(t, home)
+
+	whole := list(t, home, "--origin", `C:\dev\dr\devresults`)
+	assertIds(t, whole.ids(), ids["chart"], ids["copy"])
+
+	waiting := list(t, home, "--origin", "devresults", "--status", "waiting")
+	assertIds(t, waiting.ids(), ids["copy"])
 }

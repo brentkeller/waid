@@ -43,11 +43,12 @@ func TestCursorClampsAtBothEnds(t *testing.T) {
 	tree := fixture()
 
 	tree.First()
+	top := tree.Cursor
 	for range 5 {
 		tree.Up()
 	}
-	if tree.Cursor != 0 {
-		t.Errorf("Cursor = %d after k at the top, want 0", tree.Cursor)
+	if tree.Cursor != top {
+		t.Errorf("Cursor = %d after k at the top, want %d", tree.Cursor, top)
 	}
 	if item, _ := tree.SelectedItem(); item != "a1" {
 		t.Errorf("first row = %q, want %q", item, "a1")
@@ -171,7 +172,7 @@ func TestGroupsCollapseByDefaultWhenTheTreeSaysSo(t *testing.T) {
 func TestCountsStayOnTheFoldEitherWay(t *testing.T) {
 	tree := fixture()
 
-	open := tree.Rows(80)[0]
+	open := tree.Lines(80)[0]
 	if !open.Heading || !strings.Contains(open.Text, "2 signals") {
 		t.Errorf("expanded fold = %q, want the count on it", open.Text)
 	}
@@ -180,7 +181,7 @@ func TestCountsStayOnTheFoldEitherWay(t *testing.T) {
 	}
 
 	tree.Expanded = map[string]bool{"waid": false}
-	closed := tree.Rows(80)[0]
+	closed := tree.Lines(80)[0]
 	if !closed.Heading || !strings.Contains(closed.Text, "2 signals") {
 		t.Errorf("collapsed fold = %q, want the count on it", closed.Text)
 	}
@@ -195,7 +196,7 @@ func TestRowsCoverTheVisibleTreeOnly(t *testing.T) {
 	tree := fixture()
 	tree.Expanded = map[string]bool{"dr": false}
 
-	rows := tree.Rows(80)
+	rows := tree.Lines(80)
 	if got, want := len(rows), 3+1+2; got != want {
 		t.Fatalf("Rows() returned %d rows, want %d", got, want)
 	}
@@ -214,7 +215,7 @@ func TestRowsMarkOnlyTheRowUnderTheCursor(t *testing.T) {
 	tree.Down() // b1, the first child of the second group
 
 	var focused []string
-	for _, row := range tree.Rows(80) {
+	for _, row := range tree.Lines(80) {
 		if row.Focused {
 			focused = append(focused, row.Text)
 		}
@@ -237,7 +238,7 @@ func TestRenderReceivesTheWidthLeftAfterTheIndent(t *testing.T) {
 		got = width
 		return item
 	}
-	tree.Rows(80)
+	tree.Lines(80)
 
 	if want := 80 - rowIndent; got != want {
 		t.Errorf("Render got width %d, want %d", got, want)
@@ -252,8 +253,8 @@ func TestCursorClampsWhenTheGroupsShrink(t *testing.T) {
 	tree.Groups = tree.Groups[:1]
 
 	tree.Down()
-	if tree.Cursor >= tree.Len() {
-		t.Fatalf("Cursor = %d with %d rows", tree.Cursor, tree.Len())
+	if rows := tree.rows(); tree.Cursor >= len(rows) {
+		t.Fatalf("Cursor = %d with %d rows on screen", tree.Cursor, len(rows))
 	}
 	if item, ok := tree.SelectedItem(); !ok || item != "a2" {
 		t.Errorf("selection after the shrink = %q (%v), want a2", item, ok)
@@ -276,7 +277,7 @@ func TestEmptyTreeIsInert(t *testing.T) {
 	if _, ok := tree.SelectedGroup(); ok {
 		t.Error("an empty tree reports a group under the cursor")
 	}
-	if rows := tree.Rows(80); len(rows) != 0 {
+	if rows := tree.Lines(80); len(rows) != 0 {
 		t.Errorf("an empty tree drew %d rows", len(rows))
 	}
 }
@@ -329,5 +330,113 @@ func TestFocusSkipsTheChildrenOfAClosedGroup(t *testing.T) {
 
 	if tree.Focus(func(item string) bool { return item == "b2" }) {
 		t.Error("Focus landed on a row the cursor cannot reach")
+	}
+}
+
+// The rows are the tree flattened: one entry per visible line, each carrying how deep it sits,
+// whether it has children and whether they are on screen. Everything the cursor does is an index
+// into this list (§7).
+func TestRowsCarryDepthAndFoldState(t *testing.T) {
+	tree := fixture()
+	tree.Expanded = map[string]bool{"dr": false}
+
+	rows := tree.rows()
+	if got, want := len(rows), 3+2+1; got != want {
+		t.Fatalf("rows() returned %d rows, want %d — three headings, two children, one child", got, want)
+	}
+
+	head := rows[0]
+	if head.Depth != 0 || !head.HasKids || !head.Expanded || head.Key != "waid" {
+		t.Errorf("first row = %+v, want an expanded depth-0 heading keyed waid", head)
+	}
+	if rows[1].Node != "a1" || rows[1].Depth != 1 || rows[1].HasKids {
+		t.Errorf("second row = %+v, want the depth-1 child a1", rows[1])
+	}
+
+	closed := rows[3]
+	if closed.Depth != 0 || !closed.HasKids || closed.Expanded {
+		t.Errorf("collapsed heading = %+v, want a depth-0 heading with children off screen", closed)
+	}
+}
+
+// The cursor addresses visible rows, so it counts the headings it steps over. What it lands on is
+// what matters; the index is only how the tree gets there.
+func TestCursorIndexesVisibleRows(t *testing.T) {
+	tree := fixture()
+
+	tree.First()
+	if tree.Cursor != 1 {
+		t.Errorf("g left the cursor at %d, want 1 — row 0 is the heading it steps over", tree.Cursor)
+	}
+	if item, _ := tree.SelectedItem(); item != "a1" {
+		t.Errorf("g selected %q, want a1", item)
+	}
+}
+
+// Selectable is what decides whether a heading is chrome. Loops passes always-true, because its
+// headings are items that get noted, tagged and closed (§7).
+func TestSelectableOpensHeadingsToTheCursor(t *testing.T) {
+	tree := fixture()
+	tree.Selectable = func(Row[string]) bool { return true }
+
+	if got, want := tree.Len(), 3+6; got != want {
+		t.Errorf("Len() = %d, want %d — every heading and every child", got, want)
+	}
+
+	tree.First()
+	if !tree.OnHeading() {
+		t.Fatal("g did not land on the first heading")
+	}
+
+	group, ok := tree.SelectedGroup()
+	if !ok || group.Key != "waid" {
+		t.Errorf("cursor is on %+v, want the first group", group)
+	}
+	if _, ok := tree.SelectedItem(); ok {
+		t.Error("a heading reports an item under the cursor")
+	}
+}
+
+// Repos and Agents pass Depth > 0, which is the step-over rule they have today: the walk reaches
+// every child and no expanded heading, and a collapsed fold stays reachable so it can be opened.
+func TestSelectableDepthMatchesTodaysRule(t *testing.T) {
+	tree := fixture()
+	tree.Selectable = func(row Row[string]) bool { return row.Depth > 0 }
+
+	want := []string{"a1", "a2", "b1", "b2", "b3", "c1"}
+	if got := walk(t, tree); strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("walking down visited %v, want %v", got, want)
+	}
+
+	tree.ExpandedByDefault = false
+	tree.First()
+	if !tree.OnHeading() || tree.Len() != len(tree.Groups) {
+		t.Fatalf("a collapsed tree offers %d rows, want one reachable fold per project", tree.Len())
+	}
+
+	tree.Toggle()
+	if item, _ := tree.SelectedItem(); item != "a1" {
+		t.Errorf("after expanding, the cursor is on %q, want a1", item)
+	}
+}
+
+// A tab whose headings are selectable keeps the cursor on the heading through a fold, rather than
+// diving to the first child the way a tab that steps over headings has to.
+func TestToggleStaysOnASelectableHeading(t *testing.T) {
+	tree := fixture()
+	tree.Selectable = func(Row[string]) bool { return true }
+
+	tree.First()
+	tree.Toggle()
+	if !tree.OnHeading() {
+		t.Fatal("collapsing moved the cursor off the heading")
+	}
+
+	tree.Toggle()
+	if !tree.OnHeading() {
+		t.Fatal("expanding moved the cursor off the heading")
+	}
+	if group, _ := tree.SelectedGroup(); group.Key != "waid" {
+		t.Errorf("the cursor left the group it toggled, landing on %+v", group)
 	}
 }

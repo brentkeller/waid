@@ -315,6 +315,49 @@ func (t *Tree[T]) Toggle() {
 	t.clamp()
 }
 
+// Expand opens the fold under the cursor, leaving the cursor on it. A row with nothing folded under
+// it, and one whose fold is already open, are left alone: `l` reads down into a branch rather than
+// walking into it, so the cursor never moves under a key that only reveals rows.
+func (t *Tree[T]) Expand() {
+	rows := t.rows()
+	at := t.snap(rows)
+	if at < 0 {
+		return
+	}
+
+	t.Cursor = at
+	if !rows[at].HasKids || rows[at].Expanded {
+		return
+	}
+	t.SetExpanded(rows[at].Key, true)
+}
+
+// Collapse closes the fold the cursor is in — its own if it is open, and otherwise the one it hangs
+// under — and lands the cursor on the fold it closed. Repeated presses of `h` therefore walk out of
+// a branch a level at a time, and one at the top level with nothing open is inert.
+func (t *Tree[T]) Collapse() {
+	rows := t.rows()
+	at := t.snap(rows)
+	if at < 0 {
+		return
+	}
+
+	fold := at
+	if !rows[fold].Expanded {
+		fold = rows[fold].parent
+	}
+	if fold < 0 {
+		t.Cursor = at
+		return
+	}
+
+	t.SetExpanded(rows[fold].Key, false)
+	// Only the fold's own descendants leave, so the rows above it — and the fold itself — sit at the
+	// indexes they did before the collapse.
+	t.Cursor = fold
+	t.clamp()
+}
+
 // Focus puts the cursor on the first row the predicate accepts, reporting whether it found one. A
 // write re-anchors with it: the row it acted on carries a fresh timestamp and sorts elsewhere, and a
 // cursor left on an index would be pointing at whatever moved into the place.

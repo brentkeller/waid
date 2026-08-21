@@ -90,7 +90,7 @@ var globalBindings = []binding{
 	// that switches tabs on two tabs and jumps a filter on the third is a mode to keep track of, and the
 	// segmented rows Repos and Agents draw have no digits either — `s` cycles all three.
 	{[]string{"1", "2", "3", "tab", "shift+tab"}, "1 2 3 / tab", "switch tab, from any tab"},
-	{[]string{"j", "k", "up", "down"}, "j k ↑ ↓", "move the cursor, skipping headings"},
+	{[]string{"j", "k", "up", "down"}, "j k ↑ ↓", "move the cursor, stepping over a project heading"},
 	{[]string{"g", "G"}, "g / G", "first / last row"},
 	{[]string{"enter"}, "enter", "expand or collapse the fold under the cursor"},
 	{[]string{"/", "esc"}, "/", "filter; esc clears"},
@@ -119,6 +119,7 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"w"}, "w", "waiting"},
 		{[]string{"e"}, "e", "edit title"},
 		{[]string{"n"}, "n", "note"},
+		{[]string{"h", "l"}, "h / l", "collapse / expand the fold under the cursor"},
 		{[]string{"P"}, "P", "move under a parent"},
 		{[]string{"s"}, "s", "cycle the status filter — open, waiting, done, all"},
 		{[]string{"p"}, "p", "toggle the detail pane"},

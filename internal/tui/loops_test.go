@@ -147,7 +147,11 @@ func TestLoopsRowsNestToFullDepth(t *testing.T) {
 		}
 	}
 
-	view := plain(m.View())
+	// G puts the cursor on the deepest row, so every row measured carries a marker: a fold's own, or
+	// the cursor's on the leaf at the bottom.
+	focused, _ := press(t, m, "G")
+
+	view := plain(focused.View())
 	for level := range 4 {
 		title := fmt.Sprintf("level %d", level)
 		if got, want := leading(t, view, title), headingIndent+indentStep*level; got != want {
@@ -302,13 +306,95 @@ func TestLoopsCursorWalksTheTree(t *testing.T) {
 	if !ok {
 		t.Fatalf("the cursor is on no item after a move, want the second row of the branch")
 	}
-	if item.Id != "nktt" {
-		t.Errorf("one move landed on %q, want nktt", item.Id)
+	if item.Id != "sga9" {
+		t.Errorf("one move landed on %q, want sga9", item.Id)
 	}
 
 	folded, _ := press(t, moved, "enter")
 	if view := plain(folded.View()); strings.Contains(view, "Design template") {
 		t.Errorf("enter did not collapse the branch the cursor was in:\n%s", view)
+	}
+}
+
+// selectedTitle is the title of the row under the cursor, which is what the heading assertions read:
+// a fold and the synthetic bucket carry one where they carry no item.
+func selectedTitle(t *testing.T, m Model) string {
+	t.Helper()
+
+	row, ok := m.loopsTree(m.viewWidth()).selected()
+	if !ok {
+		t.Fatal("the cursor is on no row at all")
+	}
+	return row.Title
+}
+
+// Loops' headings are items, so the cursor rests on them rather than stepping over them the way it
+// does on the two tabs whose headings are projects (§7).
+func TestLoopsCursorRestsOnHeadings(t *testing.T) {
+	m := looped(t, 140, loopsFixture())
+
+	item, ok := m.loopsTree(140).SelectedItem()
+	if !ok || item.Id != "vq2n" {
+		t.Fatalf("the tab opens on %+v, want the heading vq2n", item)
+	}
+
+	// Every row below it is reachable in turn, the expanded bucket among them.
+	want := []string{
+		"Design template + args persistence for localized persisted strings",
+		"Background workers speak the requester's language",
+		tree.UnassignedTitle,
+		"TUI design spike",
+	}
+	for _, title := range want {
+		m, _ = press(t, m, "j")
+		if got := selectedTitle(t, m); got != title {
+			t.Fatalf("a move down landed on %q, want %q", got, title)
+		}
+	}
+}
+
+// h closes the fold the cursor is in and l opens it, so a branch is walked out of and back into
+// without the cursor leaving it. enter still toggles (§7).
+func TestLoopsFoldsWithHAndL(t *testing.T) {
+	const child = "Design template"
+
+	m := looped(t, 140, loopsFixture())
+
+	// The cursor opens on a heading, so h closes that heading itself.
+	collapsed, _ := press(t, m, "h")
+	if view := plain(collapsed.View()); strings.Contains(view, child) {
+		t.Errorf("h did not collapse the heading the cursor was on:\n%s", view)
+	}
+	if got := selectedTitle(t, collapsed); got != "Localized notifications" {
+		t.Errorf("h left the cursor on %q, want the fold it closed", got)
+	}
+
+	expanded, _ := press(t, collapsed, "l")
+	if view := plain(expanded.View()); !strings.Contains(view, child) {
+		t.Errorf("l did not expand the fold under the cursor:\n%s", view)
+	}
+
+	// From a row inside the fold, h closes the fold it hangs under and lands on it.
+	inside, _ := press(t, m, "j", "h")
+	if view := plain(inside.View()); strings.Contains(view, child) {
+		t.Errorf("h from inside the fold did not close it:\n%s", view)
+	}
+	if got := selectedTitle(t, inside); got != "Localized notifications" {
+		t.Errorf("h from inside the fold left the cursor on %q, want the fold it closed", got)
+	}
+
+	// l on a fold already open leaves both the tree and the cursor where they are.
+	still, _ := press(t, m, "l")
+	if got := selectedTitle(t, still); got != "Localized notifications" {
+		t.Errorf("l on an open fold moved the cursor to %q", got)
+	}
+	if view := plain(still.View()); !strings.Contains(view, child) {
+		t.Errorf("l on an open fold closed it:\n%s", view)
+	}
+
+	toggled, _ := press(t, m, "enter")
+	if view := plain(toggled.View()); strings.Contains(view, child) {
+		t.Errorf("enter no longer toggles the fold under the cursor:\n%s", view)
 	}
 }
 
@@ -483,7 +569,7 @@ func detailPane(t *testing.T, view string) string {
 // The pane is `show`'s data for the row under the cursor: what identifies the item, its title, and
 // the notes it has collected with the age of each (§1.1).
 func TestLoopsDetailPaneRendersTheSelectedItem(t *testing.T) {
-	m := looped(t, 140, loopsFixture())
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j")
 
 	pane := detailPane(t, m.View())
 	for _, want := range []string{
@@ -511,7 +597,7 @@ func TestLoopsDetailPaneNamesWhoAnItemWaitsOn(t *testing.T) {
 
 // The pane follows the cursor rather than being opened on one row, so moving the list moves it.
 func TestLoopsDetailPaneFollowsTheCursor(t *testing.T) {
-	m, _ := press(t, looped(t, 140, loopsFixture()), "j")
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j", "j")
 
 	pane := detailPane(t, m.View())
 	if !strings.Contains(pane, "nktt") {
@@ -524,17 +610,28 @@ func TestLoopsDetailPaneFollowsTheCursor(t *testing.T) {
 
 // An item with no notes prints no notes block, the way `waid show` leaves one out.
 func TestLoopsDetailPaneLeavesOutAnEmptyNotesBlock(t *testing.T) {
-	m, _ := press(t, looped(t, 140, loopsFixture()), "j")
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j", "j")
 
 	if pane := detailPane(t, m.View()); strings.Contains(pane, "notes") {
 		t.Errorf("the pane drew a notes block for an item with none:\n%s", pane)
 	}
 }
 
+// A heading is an item, so the pane draws its own detail rather than treating the row as chrome (§7).
+func TestLoopsDetailPaneRendersAHeading(t *testing.T) {
+	pane := detailPane(t, looped(t, 140, loopsFixture()).View())
+
+	for _, want := range []string{"vq2n", "devresults", "open", "Localized notifications"} {
+		if !strings.Contains(pane, want) {
+			t.Errorf("the detail pane on a heading does not carry %q:\n%s", want, pane)
+		}
+	}
+}
+
 // The (unassigned) bucket is a rendering artifact rather than an item, so the pane says what to do
 // there rather than showing the last item it was pointed at (§4).
 func TestLoopsDetailPaneSaysWhenNoItemIsSelected(t *testing.T) {
-	folded, _ := press(t, looped(t, 140, loopsFixture()), "j", "j", "enter")
+	folded, _ := press(t, looped(t, 140, loopsFixture()), "j", "j", "j")
 
 	pane := detailPane(t, folded.View())
 	if !strings.Contains(pane, "select an item") {
@@ -547,7 +644,7 @@ func TestLoopsDetailPaneSaysWhenNoItemIsSelected(t *testing.T) {
 
 // The pane is open by default — §1.1 draws it — and p folds it away when density matters more.
 func TestLoopsDetailPaneCollapsesWithP(t *testing.T) {
-	m := looped(t, 140, loopsFixture())
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j")
 	if !strings.Contains(plain(m.View()), loopsNote) {
 		t.Fatalf("the detail pane is not open before p was pressed:\n%s", plain(m.View()))
 	}
@@ -569,7 +666,7 @@ func TestLoopsDetailPaneCollapsesWithP(t *testing.T) {
 // The pane hangs off the bottom of the body rather than following the last row of the list, so the
 // list does not shift under the cursor as the item it is pointed at grows notes.
 func TestLoopsDetailPaneSitsOnTheBottomOfTheBody(t *testing.T) {
-	m := looped(t, 140, loopsFixture())
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j")
 
 	lines := strings.Split(plain(m.View()), "\n")
 	if got := lines[len(lines)-4]; !strings.Contains(got, loopsNote) {
@@ -590,7 +687,7 @@ func TestLoopsDetailPaneIsCutToItsShareOfTheBody(t *testing.T) {
 		}
 	}
 
-	m := looped(t, 140, msg)
+	m, _ := press(t, looped(t, 140, msg), "j")
 	pane := detailPane(t, m.View())
 
 	if got, want := len(strings.Split(pane, "\n")), 9; got > want {

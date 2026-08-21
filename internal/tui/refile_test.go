@@ -25,6 +25,10 @@ func filing(t *testing.T) (Model, string) {
 			m.loops.items[i].Parent = text("nktt")
 		}
 	}
+
+	// The tab opens on the heading of the branch, so the cursor is walked down to the item that now
+	// sits two levels under it — the one every assertion here is about.
+	m, _ = press(t, m, "j", "j")
 	return m, path
 }
 
@@ -59,7 +63,8 @@ func TestParentOpensOnTheParentTheItemSitsUnder(t *testing.T) {
 func TestParentOpensEmptyForAnItemAtTheTopLevel(t *testing.T) {
 	m, _ := filing(t)
 
-	m, _ = press(t, m, "j", "j", "j", "j", "P")
+	// G is the last row of the list, which the fixture leaves at the top level.
+	m, _ = press(t, m, "G", "P")
 
 	if m.prompt.subject != "p0rt" {
 		t.Fatalf("the prompt addresses %q, want the item at the top level", m.prompt.subject)
@@ -212,12 +217,12 @@ func TestParentCandidatesExcludeTheItemAndItsDescendants(t *testing.T) {
 }
 
 // The (unassigned) bucket is a rendering artifact rather than an item, so P is inert there and the
-// footer says which row it was pressed on (§4). A collapsed fold is the one such row the cursor can
-// reach.
+// footer says which row it was pressed on (§4).
 func TestParentIsInertOnTheBucket(t *testing.T) {
 	m, _ := filing(t)
 
-	m, _ = press(t, m, "j", "j", "enter", "P")
+	// The row below the branch's one child is the bucket its siblings were gathered into.
+	m, _ = press(t, m, "j", "P")
 
 	if m.prompt.kind != promptNone {
 		t.Error("P opened a prompt on the bucket, want it inert")

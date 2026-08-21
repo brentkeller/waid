@@ -4,7 +4,7 @@
  ‹open›  waiting  done  all                                                                                                         6 items
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▾ Localized notifications                                                                                                            2 open
-   ▸ sga9  open     Design template + args persistence for localized persisted strings                                                   19m
+     sga9  open     Design template + args persistence for localized persisted strings                                                   19m
      nktt  open     Background workers speak the requester's language                                                        [promoted]   2d
  ▾ (unassigned)                                                                                                                       3 open
      9xz1  open     TUI design spike                                                                                                      1h
@@ -12,13 +12,13 @@
      4h2k  waiting  Deploy blocked until the migration is approved                                                           @maria       5d
 
 
+
+
+
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- sga9 · devresults · open · created 19m ago
+ vq2n · devresults · open · created 3d ago
 
- Design template + args persistence for localized persisted strings
-
- notes
-   19m  needs to survive a round trip through the queue
+ Localized notifications
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
  x done · w waiting · e edit · P parent · n note · a add · / filter · s status · ? keys

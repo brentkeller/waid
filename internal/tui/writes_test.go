@@ -120,7 +120,8 @@ func TestDoneIsInertOnAnAlreadyClosedItem(t *testing.T) {
 func TestWaitingAsksWhoAndWritesTheUpdate(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "w")
+	// j steps off the heading the tab opens on and onto the first row folded under it.
+	m, _ = press(t, m, "j", "w")
 	if m.prompt.kind != promptWaiting {
 		t.Fatalf("w opened no prompt for who the item waits on")
 	}
@@ -150,7 +151,7 @@ func TestWaitingAsksWhoAndWritesTheUpdate(t *testing.T) {
 func TestUndoOfAWaitingReopensTheItem(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "w", "maria", "enter", "u")
+	m, _ = press(t, m, "j", "w", "maria", "enter", "u")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
@@ -171,7 +172,7 @@ func TestUndoOfAWaitingReopensTheItem(t *testing.T) {
 func TestEditRewritesTheTitle(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "e")
+	m, _ = press(t, m, "j", "e")
 	if view := plain(m.View()); !strings.Contains(view, "edit sga9") {
 		t.Errorf("e opened no prompt for the title:\n%s", view)
 	}
@@ -228,7 +229,7 @@ func TestNoteAppendsToTheItemUnderTheCursor(t *testing.T) {
 func TestANoteLeavesNothingToUndo(t *testing.T) {
 	m, _ := working(t)
 
-	m, _ = press(t, m, "x")
+	m, _ = press(t, m, "j", "x")
 	if !strings.Contains(plain(m.View()), "u undo") {
 		t.Fatalf("the close does not offer an undo:\n%s", plain(m.View()))
 	}
@@ -244,8 +245,9 @@ func TestANoteLeavesNothingToUndo(t *testing.T) {
 func TestLoopsWritesAreInertOnTheBucket(t *testing.T) {
 	m, path := working(t)
 
-	// enter folds the bucket, which puts the cursor on the row standing in for its children.
-	folded, _ := press(t, m, "j", "j", "enter")
+	// The bucket is the row under the heading's two children, and the cursor rests on it like any
+	// other row.
+	folded, _ := press(t, m, "j", "j", "j")
 
 	for _, pressed := range []string{"x", "w", "e", "n"} {
 		next, _ := press(t, folded, pressed)
@@ -515,9 +517,6 @@ func TestDoneRefusesAnItemWithOpenDescendants(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
 	m.opts.Cfg.EventsPath = path
 
-	// enter folds the branch the cursor opens in, which is the one way onto its heading while an
-	// expanded fold is chrome.
-	m, _ = press(t, m, "enter")
 	if item, ok := m.loopsTree(m.viewWidth()).SelectedItem(); !ok || item.Id != parent.Id {
 		t.Fatalf("the cursor is on %v, want the parent %s", item, parent.Id)
 	}
@@ -529,5 +528,40 @@ func TestDoneRefusesAnItemWithOpenDescendants(t *testing.T) {
 	}
 	if !strings.Contains(m.hint, "cannot close "+parent.Id) {
 		t.Errorf("hint = %q, want it to refuse the close", m.hint)
+	}
+	if !strings.Contains(m.hint, "2 items are still open beneath it") {
+		t.Errorf("hint = %q, want it to say what is holding the heading open", m.hint)
+	}
+}
+
+// A heading is an item, so the writes that act on the row under the cursor act on it as they do on
+// any other row. Only the close guard tells the two apart (§7).
+func TestLoopsWritesAddressAHeading(t *testing.T) {
+	m, path := working(t)
+
+	if item, ok := m.loopsTree(m.viewWidth()).SelectedItem(); !ok || item.Id != "vq2n" {
+		t.Fatalf("the tab opens on %v, want the heading vq2n", item)
+	}
+
+	for _, c := range []struct {
+		pressed string
+		kind    promptKind
+	}{{"w", promptWaiting}, {"e", promptRename}, {"n", promptNote}} {
+		next, _ := press(t, m, c.pressed)
+		if next.prompt.kind != c.kind {
+			t.Errorf("%s on a heading opened prompt %d, want %d", c.pressed, next.prompt.kind, c.kind)
+		}
+		if next.prompt.subject != "vq2n" {
+			t.Errorf("%s on a heading addressed %q, want the heading", c.pressed, next.prompt.subject)
+		}
+	}
+
+	// The answer lands against the heading itself rather than against anything folded under it.
+	noted, _ := press(t, m, "n", "the strings are extracted", "enter")
+
+	ts := loopsStamped()
+	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"note","id":"vq2n","text":"the strings are extracted"}`})
+	if pane := detailPane(t, noted.View()); !strings.Contains(pane, "the strings are extracted") {
+		t.Errorf("the detail pane does not carry the note written against the heading:\n%s", pane)
 	}
 }

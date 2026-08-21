@@ -119,6 +119,10 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		tree.Last()
 	case "enter":
 		tree.Toggle()
+	case "h":
+		tree.Collapse()
+	case "l":
+		tree.Expand()
 	case "p":
 		m.loops.collapsed = !m.loops.collapsed
 		return m, nil, true
@@ -264,6 +268,9 @@ func (m Model) loopsTree(width int) Tree[events.Item] {
 		Cursor:            m.loops.cursor,
 		Expanded:          m.loops.expanded,
 		ExpandedByDefault: true,
+		// Loops selects every row, headings included: its headings are items, and everything the keys
+		// ask of a row — close it, note against it, retitle it — is something an item answers (§7).
+		Selectable: func(Row[events.Item]) bool { return true },
 		Render: func(item events.Item, width int, _ bool) string {
 			return loopsRow(item, columns, now, width)
 		},

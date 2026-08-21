@@ -440,3 +440,81 @@ func TestToggleStaysOnASelectableHeading(t *testing.T) {
 		t.Errorf("the cursor left the group it toggled, landing on %+v", group)
 	}
 }
+
+// deep is a three-level tree built from rows rather than groups, which is the shape Loops draws and
+// the one the fold keys are worth asserting against.
+func deep() Tree[string] {
+	return Tree[string]{
+		Rows: []Row[string]{
+			{Node: "root", Depth: 0, Key: "root", node: true},
+			{Node: "mid", Depth: 1, Key: "mid", node: true},
+			{Node: "leaf", Depth: 2, Key: "leaf", node: true},
+			{Node: "other", Depth: 0, Key: "other", node: true},
+		},
+		ExpandedByDefault: true,
+		Selectable:        func(Row[string]) bool { return true },
+		Render:            func(item string, width int, focused bool) string { return item },
+	}
+}
+
+// Collapse closes the fold the cursor is in and lands on it, so repeated presses walk out of a
+// branch a level at a time and one at the top level with nothing open is inert (§7).
+func TestCollapseWalksOutOfABranch(t *testing.T) {
+	tree := deep()
+
+	tree.Cursor = 2
+	if item, _ := tree.SelectedItem(); item != "leaf" {
+		t.Fatalf("the cursor is on %q, want the bottom of the branch", item)
+	}
+
+	for _, want := range []string{"mid", "root"} {
+		tree.Collapse()
+		if item, _ := tree.SelectedItem(); item != want {
+			t.Fatalf("collapsing landed on %q, want %q", item, want)
+		}
+		if tree.IsExpanded(want) {
+			t.Errorf("the fold at %q is still open", want)
+		}
+	}
+
+	tree.Collapse()
+	if item, _ := tree.SelectedItem(); item != "root" {
+		t.Errorf("collapsing at the top level moved the cursor to %q", item)
+	}
+}
+
+// Expand opens the fold under the cursor and no more: one press reveals one level, and the cursor
+// stays on the row that was pressed (§7).
+func TestExpandOpensOneLevel(t *testing.T) {
+	tree := deep()
+	tree.ExpandedByDefault = false
+
+	tree.First()
+	tree.Expand()
+	if item, _ := tree.SelectedItem(); item != "root" {
+		t.Errorf("expanding moved the cursor to %q, want the fold it opened", item)
+	}
+	if !tree.IsExpanded("root") {
+		t.Fatal("expanding did not open the fold under the cursor")
+	}
+	if tree.IsExpanded("mid") {
+		t.Error("expanding opened the branch below the fold as well")
+	}
+
+	// A fold already open is left alone rather than walked into.
+	tree.Expand()
+	if item, _ := tree.SelectedItem(); item != "root" {
+		t.Errorf("expanding an open fold moved the cursor to %q", item)
+	}
+
+	// A leaf has nothing to open, so the press leaves both the cursor and the folds where they are.
+	// The branch below root is still closed, so the row after it is the tree's other root.
+	tree.Cursor = 2
+	tree.Expand()
+	if item, _ := tree.SelectedItem(); item != "other" {
+		t.Errorf("expanding a leaf moved the cursor to %q", item)
+	}
+	if tree.IsExpanded("mid") {
+		t.Error("expanding a leaf opened a fold elsewhere")
+	}
+}

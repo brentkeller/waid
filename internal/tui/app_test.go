@@ -305,7 +305,7 @@ func TestFooterHintsAreWholeWhenTheyFit(t *testing.T) {
 	m := chrome(t, 140)
 
 	hints := strings.Split(plain(m.footer()), "\n")[1]
-	for _, want := range []string{"x done", "P project", "s status", "? keys"} {
+	for _, want := range []string{"x done", "P parent", "s status", "? keys"} {
 		if !strings.Contains(hints, want) {
 			t.Errorf("the hints are %q, want %q kept at 140 columns", hints, want)
 		}

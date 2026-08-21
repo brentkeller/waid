@@ -18,7 +18,7 @@ const (
 	promptNote
 	promptAdd
 	promptDate
-	promptProject
+	promptParent
 )
 
 // prompt is the inline input the footer takes text in. It holds the keyboard the way the filter does,
@@ -38,7 +38,7 @@ type prompt struct {
 	// subject names it for the footer; this is the path the write carries, since the two differ.
 	project *string
 
-	// choice is the match a project search is on, which enter takes. It is reset by every keystroke
+	// choice is the match a parent search is on, which enter takes. It is reset by every keystroke
 	// that changes the search, since the list under it is a different list.
 	choice int
 
@@ -77,9 +77,9 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 	m.prompt = prompt{}
 
 	value := strings.TrimSpace(answered.value)
-	// A project search is the one prompt an empty answer is a write for: it files the item under no
-	// project, which nothing else says.
-	if answered.kind == promptProject {
+	// A parent search is the one prompt an empty answer is a write for: it moves the item to the top
+	// level, which nothing else says.
+	if answered.kind == promptParent {
 		return m.refile(answered.subject, value, answered.choice)
 	}
 	if value == "" {

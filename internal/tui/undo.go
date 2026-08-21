@@ -124,13 +124,14 @@ func undoRetitle(id, title string) undoEntry {
 	}
 }
 
-// undoRefile puts back the project the item was filed under before it was moved. item is the item as
-// it stood before the write, so an item that belonged to no project is written back to none — which
-// is what the event carries a null project for.
-func undoRefile(item events.Item) undoEntry {
+// undoRefile puts back the parent the item sat under before it was moved. item is the item as it
+// stood before the write, so an item that sat at the top level is written back there — which is what
+// the event carries a null parent for. label is that parent as the receipt names it, resolved by the
+// caller while the prior tree is still the loaded one.
+func undoRefile(item events.Item, label string) undoEntry {
 	return undoEntry{
-		events:  []events.WaidEvent{events.ProjectEvent{Ev: "update", Id: item.Id, Project: item.Origin}},
-		receipt: receipt{verb: verbFiled, subject: item.Id, detail: projectLabel(item.Origin)},
+		events:  []events.WaidEvent{events.ParentEvent{Ev: "update", Id: item.Id, Parent: item.Parent}},
+		receipt: receipt{verb: verbFiled, subject: item.Id, detail: label},
 		item:    &item,
 	}
 }

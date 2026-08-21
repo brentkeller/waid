@@ -1,184 +1,185 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
-
-	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/brentkeller/waid/internal/detect"
-	"github.com/brentkeller/waid/internal/sessions"
 )
 
-// The two projects the fixture files items under, and a third that exists only as a checkout on
-// disk, which is what proves the prompt matches against more than the log has seen.
+// The titles the parent search matches against, named here because the assertions read as prose:
+// the item the cursor opens on sits under the first, and the rest are what a fragment can move it to.
 const (
-	devresultsPath = `C:\dev\dr\devresults\devresults`
-	waidPath       = `C:\dev\waid`
-	quietRepoPath  = `C:\dev\quiet-repo`
+	workersTitle = "Background workers speak the requester's language"
+	spikeTitle   = "TUI design spike"
+	portTitle    = "Read the port design once more"
 )
 
-// filing is a Loops tab whose detection pass has landed, so the prompt matches against the repos on
-// disk as well as the projects the log names.
+// filing is a Loops tab whose log already holds a parent, since a move is read against where the
+// item sits and an item at the top level cannot show that.
 func filing(t *testing.T) (Model, string) {
 	t.Helper()
 
 	m, path := working(t)
-	m.scan.load = func() tea.Msg {
-		return scanLoadedMsg{result: detect.Result{Repos: []string{quietRepoPath, waidPath}}, at: loopsNow}
+	for i := range m.loops.items {
+		if m.loops.items[i].Id == "4h2k" {
+			m.loops.items[i].Parent = text("nktt")
+		}
 	}
-
-	loaded, _ := m.Update(m.scan.load())
-	return loaded.(Model), path
+	return m, path
 }
 
-// P opens on the project the item is already filed under, so a move is read against where it sits
-// rather than typed blind.
-func TestProjectOpensOnTheProjectTheItemIsFiledUnder(t *testing.T) {
+// parentOf is the parent the loaded copy of an item holds, which is what says a move landed in the
+// list and not only in the log.
+func parentOf(t *testing.T, m Model, id string) *string {
+	t.Helper()
+
+	item, found := m.loadedItem(id)
+	if !found {
+		t.Fatalf("no loaded item for %q", id)
+	}
+	return item.Parent
+}
+
+// P opens on the parent the item already sits under, so a move is read against where it is rather
+// than typed blind.
+func TestParentOpensOnTheParentTheItemSitsUnder(t *testing.T) {
 	m, _ := filing(t)
 
 	m, _ = press(t, m, "P")
 
-	if got := m.prompt.value; got != devresultsPath {
-		t.Errorf("the prompt opened on %q, want the item's project %q", got, devresultsPath)
+	if got := m.prompt.value; got != workersTitle {
+		t.Errorf("the prompt opened on %q, want the item's parent %q", got, workersTitle)
 	}
-	if view := plain(m.View()); !strings.Contains(view, "project 4h2k "+devresultsPath) {
-		t.Errorf("the prompt does not name the item and its project:\n%s", view)
+	if view := plain(m.View()); !strings.Contains(view, "parent 4h2k "+workersTitle) {
+		t.Errorf("the prompt does not name the item and its parent:\n%s", view)
 	}
 }
 
-// An item belonging to no project opens on nothing to clear, so the first keystroke searches.
-func TestProjectOpensEmptyForAnItemFiledUnderNothing(t *testing.T) {
+// An item at the top level opens on nothing to clear, so the first keystroke searches.
+func TestParentOpensEmptyForAnItemAtTheTopLevel(t *testing.T) {
 	m, _ := filing(t)
 
 	m, _ = press(t, m, "j", "j", "j", "j", "P")
 
 	if m.prompt.subject != "p0rt" {
-		t.Fatalf("the prompt addresses %q, want the item filed under nothing", m.prompt.subject)
+		t.Fatalf("the prompt addresses %q, want the item at the top level", m.prompt.subject)
 	}
 	if m.prompt.value != "" {
 		t.Errorf("the prompt opened on %q, want it empty", m.prompt.value)
 	}
 }
 
-// A fragment matches any project the log or the disk knows, case-insensitively, and the footer lists
-// what it matched so enter is never a guess.
-func TestProjectMatchesAFragmentAgainstProjectsAndRepos(t *testing.T) {
+// A fragment matches any item the log holds, case-insensitively, and the footer lists what it
+// matched so enter is never a guess.
+func TestParentMatchesAFragmentAgainstItemTitles(t *testing.T) {
 	m, _ := filing(t)
 
-	m, _ = press(t, m, "P", "ctrl+u", "QUIET")
+	m, _ = press(t, m, "P", "ctrl+u", "PORT DESIGN")
 
-	// The list above the footer draws every project as a heading, so the offer is read off the footer's
-	// own lines rather than the whole view.
-	offered := plain(m.projectChoices())
-	if !strings.Contains(offered, "› "+quietRepoPath) {
-		t.Errorf("the footer does not offer the repo the fragment matched:\n%s", offered)
+	// The list above the footer draws every item, so the offer is read off the footer's own lines
+	// rather than the whole view.
+	offered := plain(m.parentChoices())
+	if !strings.Contains(offered, "› "+portTitle) {
+		t.Errorf("the footer does not offer the item the fragment matched:\n%s", offered)
 	}
-	if strings.Contains(offered, devresultsPath) {
-		t.Errorf("the footer offers a project the fragment does not match:\n%s", offered)
+	if strings.Contains(offered, spikeTitle) {
+		t.Errorf("the footer offers an item the fragment does not match:\n%s", offered)
 	}
 }
 
-// tab moves through the matches when a fragment names more than one, wrapping at the end.
-func TestProjectTabMovesThroughTheMatches(t *testing.T) {
+// tab moves through the matches when a fragment names more than one, wrapping at the end. They are
+// offered by title, so the order does not shift as the items underneath are touched.
+func TestParentTabMovesThroughTheMatches(t *testing.T) {
 	m, _ := filing(t)
 
-	m, _ = press(t, m, "P", "ctrl+u", "dev")
-	if got := m.projectMatches(m.prompt.value); len(got) != 3 {
-		t.Fatalf("dev matched %v, want all three candidates", got)
+	m, _ = press(t, m, "P", "ctrl+u", "design")
+	if got := m.parentMatches(m.prompt.subject, m.prompt.value); len(got) != 3 {
+		t.Fatalf("design matched %v, want the three items whose titles carry it", got)
 	}
 
 	m, _ = press(t, m, "tab")
-	if view := plain(m.View()); !strings.Contains(view, "› "+quietRepoPath) {
-		t.Errorf("tab did not move to the second match:\n%s", view)
+	if offered := plain(m.parentChoices()); !strings.Contains(offered, "› "+portTitle) {
+		t.Errorf("tab did not move to the second match:\n%s", offered)
 	}
 
 	m, _ = press(t, m, "tab", "tab")
-	if view := plain(m.View()); !strings.Contains(view, "› "+devresultsPath) {
-		t.Errorf("tab did not wrap back to the first match:\n%s", view)
+	if offered := plain(m.parentChoices()); !strings.Contains(offered, "› Design template") {
+		t.Errorf("tab did not wrap back to the first match:\n%s", offered)
 	}
 }
 
-// Enter files the item under the match it is on: the log takes the move and the row leaves the group
-// it was in, in the frame the key was pressed in.
-func TestProjectFilesTheItemUnderTheChosenMatch(t *testing.T) {
+// Enter moves the item under the match it is on: the log takes the move and the loaded item carries
+// its new parent in the frame the key was pressed in.
+func TestParentMovesTheItemUnderTheChosenMatch(t *testing.T) {
 	m, path := filing(t)
 
-	m, _ = press(t, m, "P", "ctrl+u", "waid", "enter")
+	m, _ = press(t, m, "P", "ctrl+u", "tui design", "enter")
 
 	ts := loopsStamped()
-	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"update","id":"4h2k","project":"C:\\dev\\waid"}`})
+	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"update","id":"4h2k","parent":"9xz1"}`})
 
-	// The receipt names the project the way every other line of prose does — by its directory rather
-	// than its path.
-	view := plain(m.View())
-	if !strings.Contains(view, "filed 4h2k  waid") {
+	// The receipt names the parent the way every other line of prose does — by its title.
+	if view := plain(m.View()); !strings.Contains(view, "filed 4h2k  "+spikeTitle) {
 		t.Errorf("the footer carries no receipt for the move:\n%s", view)
 	}
-	if got := groupOf(t, view, "4h2k"); got != waidPath {
-		t.Errorf("the row sits under %q, want it moved to %q", got, waidPath)
+	if got := parentOf(t, m, "4h2k"); got == nil || *got != "9xz1" {
+		t.Errorf("the item sits under %v, want it moved under 9xz1", got)
 	}
 }
 
-// A prompt answered with nothing files the item under no project, which is the one prompt where an
+// A prompt answered with nothing moves the item to the top level, which is the one prompt where an
 // empty answer is a write rather than an abandoned edit.
-func TestProjectClearedFilesTheItemUnderNoProject(t *testing.T) {
+func TestParentClearedMovesTheItemToTheTopLevel(t *testing.T) {
 	m, path := filing(t)
 
 	m, _ = press(t, m, "P", "ctrl+u", "enter")
 
 	ts := loopsStamped()
-	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"update","id":"4h2k","project":null}`})
+	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"update","id":"4h2k","parent":null}`})
 
-	if got := groupOf(t, plain(m.View()), "4h2k"); got != "(no project)" {
-		t.Errorf("the row sits under %q, want it under no project", got)
+	if got := parentOf(t, m, "4h2k"); got != nil {
+		t.Errorf("the item sits under %q, want it at the top level", *got)
+	}
+	if view := plain(m.View()); !strings.Contains(view, "filed 4h2k  "+topLevel) {
+		t.Errorf("the receipt does not name the top level:\n%s", view)
 	}
 }
 
-// The inverse of a move is the project the item held before it, null included — which is what makes
-// filing an item that had none reversible.
-func TestUndoOfAProjectRestoresTheOneTheItemHeld(t *testing.T) {
+// The inverse of a move is the parent the item held before it, null included — which is what makes
+// moving a top-level item reversible.
+func TestUndoOfAMoveRestoresTheParentTheItemHeld(t *testing.T) {
 	m, path := filing(t)
 
-	m, _ = press(t, m, "j", "j", "j", "j", "P", "waid", "enter", "u")
+	m, _ = press(t, m, "P", "ctrl+u", "tui design", "enter", "u")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
-		`{"ts":"` + ts + `","ev":"update","id":"p0rt","project":"C:\\dev\\waid"}`,
-		`{"ts":"` + ts + `","ev":"update","id":"p0rt","project":null}`,
+		`{"ts":"` + ts + `","ev":"update","id":"4h2k","parent":"9xz1"}`,
+		`{"ts":"` + ts + `","ev":"update","id":"4h2k","parent":"nktt"}`,
 	})
 
-	if got := groupOf(t, plain(m.View()), "p0rt"); got != "(no project)" {
-		t.Errorf("the undone row sits under %q, want it back under no project", got)
+	if got := parentOf(t, m, "4h2k"); got == nil || *got != "nktt" {
+		t.Errorf("the undone item sits under %v, want it back under nktt", got)
 	}
 }
 
-// Committing the project the item is already filed under is not a write: the log would hold a move
-// that moved nothing.
-func TestProjectCommittedUnchangedWritesNothing(t *testing.T) {
+// Committing the parent the item already sits under is not a write: the log would hold a move that
+// moved nothing.
+func TestParentCommittedUnchangedWritesNothing(t *testing.T) {
 	m, path := filing(t)
 
 	m, _ = press(t, m, "P", "enter")
 
 	assertLog(t, path, nil)
 	if _, written := m.lastReceipt(); written {
-		t.Error("an unchanged project left a receipt, want the prompt treated as abandoned")
+		t.Error("an unchanged parent left a receipt, want the prompt treated as abandoned")
 	}
 }
 
-// A path nothing matches is taken as typed, so a checkout outside the scan roots can still be named.
-func TestProjectTakesAnUnmatchedAbsolutePathAsTyped(t *testing.T) {
-	m, path := filing(t)
-
-	m, _ = press(t, m, "P", "ctrl+u", `D:\elsewhere\repo`, "enter")
-
-	ts := loopsStamped()
-	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"update","id":"4h2k","project":"D:\\elsewhere\\repo"}`})
-}
-
-// A fragment matching nothing and naming no path leaves the item where it is, and the footer says so
-// rather than writing a project that does not exist.
-func TestProjectSaysSoWhenAFragmentMatchesNothing(t *testing.T) {
+// A fragment matching nothing leaves the item where it is, and the footer says so rather than
+// writing a parent that does not exist — there is no path to fall back on, since a path is no longer
+// a place in the tree.
+func TestParentSaysSoWhenAFragmentMatchesNothing(t *testing.T) {
 	m, path := filing(t)
 
 	m, _ = press(t, m, "P", "ctrl+u", "nowhere", "enter")
@@ -189,9 +190,30 @@ func TestProjectSaysSoWhenAFragmentMatchesNothing(t *testing.T) {
 	}
 }
 
+// An item cannot be moved under itself or under anything already hanging beneath it, so neither is
+// ever offered as a destination.
+func TestParentCandidatesExcludeTheItemAndItsDescendants(t *testing.T) {
+	m, _ := filing(t)
+
+	var offered []string
+	for _, candidate := range m.parentCandidates("nktt") {
+		offered = append(offered, candidate.Id)
+	}
+
+	if slices.Contains(offered, "nktt") {
+		t.Errorf("the candidates offer the item itself: %v", offered)
+	}
+	if slices.Contains(offered, "4h2k") {
+		t.Errorf("the candidates offer a descendant of the item: %v", offered)
+	}
+	if !slices.Contains(offered, "9xz1") {
+		t.Errorf("the candidates dropped an item that is neither: %v", offered)
+	}
+}
+
 // A project heading is not an item, so P is inert there and the footer says which row it was pressed
 // on (§4). A collapsed fold is the one heading the cursor can reach.
-func TestProjectIsInertOnAProjectHeading(t *testing.T) {
+func TestParentIsInertOnAProjectHeading(t *testing.T) {
 	m, _ := filing(t)
 
 	m, _ = press(t, m, "enter", "P")
@@ -202,63 +224,4 @@ func TestProjectIsInertOnAProjectHeading(t *testing.T) {
 	if !strings.Contains(m.hint, "this row is a project") {
 		t.Errorf("the hint is %q, want it to name the row P was pressed on", m.hint)
 	}
-}
-
-// The projects a session recorded are candidates too, since a loop is as often filed under a repo
-// the agent worked in as one the log already names.
-func TestProjectMatchesAProjectOnlyASessionKnows(t *testing.T) {
-	m, _ := filing(t)
-	only := `C:\dev\session-only`
-	m.review.sessions = []sessions.Session{{Id: "sess-1", Project: &only}}
-
-	m, _ = press(t, m, "P", "ctrl+u", "session-only")
-
-	if got := m.projectMatches(m.prompt.value); len(got) != 1 || got[0] != only {
-		t.Errorf("the fragment matched %v, want the project only a session knows", got)
-	}
-}
-
-// groupOf is the project heading the row for id sits under, which is what says a move landed in the
-// list and not only in the log.
-func groupOf(t *testing.T, view, id string) string {
-	t.Helper()
-
-	group := ""
-	for _, line := range strings.Split(view, "\n") {
-		if heading, ok := headingName(line); ok {
-			group = heading
-		}
-		if strings.Contains(line, " "+id+" ") {
-			return group
-		}
-	}
-	t.Fatalf("no row for %q in:\n%s", id, view)
-	return ""
-}
-
-// headingName is the project a fold row names. Both markers open an item row too — the cursor takes
-// the collapsed one — so a row whose second column is a status is read as an item rather than a
-// heading.
-func headingName(line string) (string, bool) {
-	trimmed := strings.TrimSpace(line)
-	for _, marker := range []string{"▾ ", "▸ "} {
-		rest, found := strings.CutPrefix(trimmed, marker)
-		if !found {
-			continue
-		}
-		columns := strings.Split(rest, "  ")
-		if len(columns) > 1 && isStatusColumn(columns[1]) {
-			return "", false
-		}
-		return strings.TrimSpace(columns[0]), true
-	}
-	return "", false
-}
-
-func isStatusColumn(column string) bool {
-	switch strings.TrimSpace(column) {
-	case "open", "waiting", "done":
-		return true
-	}
-	return false
 }

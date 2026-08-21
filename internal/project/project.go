@@ -67,8 +67,8 @@ func KnownProjects(items []events.Item, sessionProjects []string) []string {
 	}
 
 	for _, item := range items {
-		if item.Project != nil {
-			add(*item.Project)
+		if item.Origin != nil {
+			add(*item.Origin)
 		}
 	}
 	for _, project := range sessionProjects {
@@ -117,14 +117,14 @@ func GroupByProject(items []events.Item) []Group {
 	orphans := []events.Item{}
 
 	for _, item := range items {
-		if item.Project == nil {
+		if item.Origin == nil {
 			orphans = append(orphans, item)
 			continue
 		}
-		if _, seen := byProject[*item.Project]; !seen {
-			order = append(order, *item.Project)
+		if _, seen := byProject[*item.Origin]; !seen {
+			order = append(order, *item.Origin)
 		}
-		byProject[*item.Project] = append(byProject[*item.Project], item)
+		byProject[*item.Origin] = append(byProject[*item.Origin], item)
 	}
 
 	groups := make([]Group, 0, len(order)+1)

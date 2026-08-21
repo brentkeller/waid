@@ -27,22 +27,22 @@ func loopsFixture() loopsLoadedMsg {
 		items: []events.Item{
 			{
 				Id: "nktt", Title: "Background workers speak the requester's language",
-				Status: events.StatusOpen, Project: &devresults, Tags: []string{"promoted"},
+				Status: events.StatusOpen, Origin: &devresults, Tags: []string{"promoted"},
 				Created: *stamp(15, 16, 0), Updated: *stamp(15, 16, 0),
 			},
 			{
 				Id: "sga9", Title: "Design template + args persistence for localized persisted strings",
-				Status: events.StatusOpen, Project: &devresults,
+				Status: events.StatusOpen, Origin: &devresults,
 				Notes:   []events.Note{{Ts: *stamp(17, 15, 41), Text: "needs to survive a round trip through the queue"}},
 				Created: *stamp(17, 15, 41), Updated: *stamp(17, 15, 41),
 			},
 			{
 				Id: "4h2k", Title: "Deploy blocked until the migration is approved",
-				Status: events.StatusWaiting, Project: &devresults, WaitingOn: text("maria"),
+				Status: events.StatusWaiting, Origin: &devresults, WaitingOn: text("maria"),
 				Created: *stamp(12, 16, 0), Updated: *stamp(12, 16, 0),
 			},
 			{
-				Id: "9xz1", Title: "TUI design spike", Status: events.StatusOpen, Project: &waid,
+				Id: "9xz1", Title: "TUI design spike", Status: events.StatusOpen, Origin: &waid,
 				Created: *stamp(17, 15, 0), Updated: *stamp(17, 15, 0),
 			},
 			{
@@ -50,7 +50,7 @@ func loopsFixture() loopsLoadedMsg {
 				Created: *stamp(17, 14, 0), Updated: *stamp(17, 14, 0),
 			},
 			{
-				Id: "shut", Title: "Already dealt with", Status: events.StatusDone, Project: &waid,
+				Id: "shut", Title: "Already dealt with", Status: events.StatusDone, Origin: &waid,
 				Created: *stamp(16, 9, 0), Updated: *stamp(16, 9, 0),
 			},
 		},

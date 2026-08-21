@@ -33,7 +33,7 @@ func TestAddNoteUpdateAndCloseFoldToOneItem(t *testing.T) {
 		Title:     "Chart legend overflows at 4+ series",
 		Status:    StatusDone,
 		WaitingOn: ptr("design review"),
-		Project:   ptr(`C:\dev\dr\devresults`),
+		Origin:    ptr(`C:\dev\dr\devresults`),
 		Session:   ptr("34782fc3"),
 		Tags:      []string{"bug"},
 		Notes:     []Note{{Ts: "2026-08-14T19:02:55.881Z", Text: "repro only in Firefox"}},
@@ -75,8 +75,8 @@ func TestUpdatePatchesOnlyTheSuppliedFields(t *testing.T) {
 	if item.Title != "renamed" {
 		t.Fatalf("title = %q, want %q", item.Title, "renamed")
 	}
-	if item.Project == nil || *item.Project != `C:\dev\waid` {
-		t.Fatalf("project = %v, want C:\\dev\\waid", item.Project)
+	if item.Origin == nil || *item.Origin != `C:\dev\waid` {
+		t.Fatalf("project = %v, want C:\\dev\\waid", item.Origin)
 	}
 	if !reflect.DeepEqual(item.Tags, []string{"bug"}) {
 		t.Fatalf("tags = %v, want [bug]", item.Tags)
@@ -283,9 +283,9 @@ func TestFoldOfAnEmptyLogReturnsEmptySlices(t *testing.T) {
 	}
 }
 
-// A project written as null moves the item out of every project, which is what makes an assignment
-// reversible for an item that had none to begin with.
-func TestUpdateWithANullProjectClearsIt(t *testing.T) {
+// An origin written as null clears it, which is what makes an assignment reversible for an item
+// that had none to begin with.
+func TestUpdateWithANullProjectClearsTheOrigin(t *testing.T) {
 	state := Fold([]string{
 		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"filed","project":"C:\\dev\\waid"}`,
 		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","project":null}`,
@@ -294,26 +294,91 @@ func TestUpdateWithANullProjectClearsIt(t *testing.T) {
 	if len(state.Items) != 1 {
 		t.Fatalf("items = %d, want 1", len(state.Items))
 	}
-	if project := state.Items[0].Project; project != nil {
-		t.Fatalf("project = %q, want it cleared", *project)
+	if origin := state.Items[0].Origin; origin != nil {
+		t.Fatalf("origin = %q, want it cleared", *origin)
 	}
 }
 
-// A project written as a path moves the item into it, leaving everything else the item holds alone.
-func TestUpdateWithAProjectRefilesTheItem(t *testing.T) {
+// A path on the legacy project key lands on the origin, leaving everything else the item holds
+// alone.
+func TestUpdateWithAProjectSetsTheOrigin(t *testing.T) {
 	state := Fold([]string{
 		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"filed","status":"waiting","waitingOn":"maria"}`,
 		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","project":"C:\\dev\\waid"}`,
 	})
 
 	item := state.Items[0]
-	if item.Project == nil || *item.Project != `C:\dev\waid` {
-		t.Fatalf("project = %v, want C:\\dev\\waid", item.Project)
+	if item.Origin == nil || *item.Origin != `C:\dev\waid` {
+		t.Fatalf("origin = %v, want C:\\dev\\waid", item.Origin)
 	}
 	if item.Status != StatusWaiting || item.WaitingOn == nil || *item.WaitingOn != "maria" {
-		t.Fatalf("the refile moved the status to %q waiting on %v", item.Status, item.WaitingOn)
+		t.Fatalf("setting the origin moved the status to %q waiting on %v", item.Status, item.WaitingOn)
 	}
 	if item.Title != "filed" {
 		t.Fatalf("title = %q, want it left alone", item.Title)
+	}
+}
+
+// The rename is read-compatible: lines written before it carry `project` and lines written after it
+// carry `origin`, and the fold cannot tell the two apart.
+func TestAddReadsOriginFromEitherKey(t *testing.T) {
+	legacy := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"filed","project":"C:\\dev\\waid"}`,
+	})
+	current := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"filed","origin":"C:\\dev\\waid"}`,
+	})
+
+	if !reflect.DeepEqual(legacy.Items, current.Items) {
+		t.Fatalf("project folded to %+v, origin folded to %+v", legacy.Items, current.Items)
+	}
+	if legacy.Items[0].Origin == nil || *legacy.Items[0].Origin != `C:\dev\waid` {
+		t.Fatalf("origin = %v, want C:\\dev\\waid", legacy.Items[0].Origin)
+	}
+}
+
+// An add carrying both keys prefers origin, since a line holding both was written by a build that
+// knows the new name.
+func TestAddPrefersOriginOverProject(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"filed","project":"C:\\dev\\old","origin":"C:\\dev\\waid"}`,
+	})
+
+	if origin := state.Items[0].Origin; origin == nil || *origin != `C:\dev\waid` {
+		t.Fatalf("origin = %v, want C:\\dev\\waid", origin)
+	}
+}
+
+func TestUpdateWithAnOriginOverwritesIt(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"filed","project":"C:\\dev\\old"}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","origin":"C:\\dev\\waid"}`,
+	})
+
+	if origin := state.Items[0].Origin; origin == nil || *origin != `C:\dev\waid` {
+		t.Fatalf("origin = %v, want C:\\dev\\waid", origin)
+	}
+}
+
+func TestUpdateCarryingNeitherKeyLeavesTheOriginAlone(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"filed","origin":"C:\\dev\\waid"}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","title":"renamed"}`,
+	})
+
+	if origin := state.Items[0].Origin; origin == nil || *origin != `C:\dev\waid` {
+		t.Fatalf("origin = %v, want it left alone", origin)
+	}
+}
+
+// An update carrying a null origin clears it, the same as the legacy key does.
+func TestUpdateWithANullOriginClearsIt(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"filed","origin":"C:\\dev\\waid"}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","origin":null}`,
+	})
+
+	if origin := state.Items[0].Origin; origin != nil {
+		t.Fatalf("origin = %q, want it cleared", *origin)
 	}
 }

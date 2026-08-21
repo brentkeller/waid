@@ -61,7 +61,7 @@ func renderShow(data ShowResult, ctx *cli.Ctx) string {
 		fmt.Sprintf("%s  %s", item.Id, item.Title),
 		"",
 		field("status", status),
-		field("project", orDash(item.Project)),
+		field("origin", orDash(item.Origin)),
 		field("tags", tags),
 		field("session", orDash(item.Session)),
 		field("created", stamp(item.Created, ctx)),

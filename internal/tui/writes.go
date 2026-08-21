@@ -155,7 +155,7 @@ func (m Model) addItem(path *string, title string) (Model, tea.Cmd) {
 	// writes for an item declared with none.
 	event := events.AddEvent{
 		Ev: "add", Id: id, Title: title, Status: events.StatusOpen,
-		Project: path, Session: nil, Tags: []string{}, WaitingOn: nil,
+		Origin: path, Session: nil, Tags: []string{}, WaitingOn: nil,
 	}
 	ts, err := events.Append(m.opts.Cfg.EventsPath, event, m.now())
 	if err != nil {
@@ -164,7 +164,7 @@ func (m Model) addItem(path *string, title string) (Model, tea.Cmd) {
 	}
 
 	item := events.Item{
-		Id: id, Title: title, Status: events.StatusOpen, Project: path,
+		Id: id, Title: title, Status: events.StatusOpen, Origin: path,
 		Tags: []string{}, Notes: []events.Note{}, Created: ts, Updated: ts,
 	}
 
@@ -179,7 +179,7 @@ func (m Model) cursorProject() *string {
 	width := m.viewWidth()
 	switch m.tab {
 	case tabLoops:
-		return rowProject(m.loopsTree(width), func(item events.Item) *string { return item.Project })
+		return rowProject(m.loopsTree(width), func(item events.Item) *string { return item.Origin })
 	case tabScan:
 		return rowProject(m.scanTree(width), func(signal detect.Signal) *string { return signal.Project })
 	case tabReview:

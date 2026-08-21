@@ -66,7 +66,7 @@ func Fold(rawLines []string) State {
 				Title:     *title,
 				Status:    *status,
 				WaitingOn: str(record["waitingOn"]),
-				Project:   str(record["project"]),
+				Origin:    readOrigin(record),
 				Session:   str(record["session"]),
 				Tags:      strArray(record["tags"]),
 				Notes:     []Note{},
@@ -154,8 +154,8 @@ func applyToItem(
 			item.Title = *title
 		}
 	}
-	if raw, present := record["project"]; present {
-		item.Project = str(raw)
+	if raw, present := originKey(record); present {
+		item.Origin = str(raw)
 	}
 	if raw, present := record["waitingOn"]; present {
 		item.WaitingOn = str(raw)
@@ -164,6 +164,23 @@ func applyToItem(
 		item.Tags = strArray(raw)
 	}
 	return true
+}
+
+// originKey returns the origin value a record carries and whether it carried one at all. `origin`
+// is the field waid writes; `project` is what lines written before the rename hold, and is read as
+// the same field so nothing already in the log needs rewriting.
+func originKey(record map[string]any) (any, bool) {
+	if raw, present := record["origin"]; present {
+		return raw, true
+	}
+	raw, present := record["project"]
+	return raw, present
+}
+
+// readOrigin narrows the origin a record carries, whichever key it used.
+func readOrigin(record map[string]any) *string {
+	raw, _ := originKey(record)
+	return str(raw)
 }
 
 // readStatus reads a status field, calling onBad for a present-but-invalid value.

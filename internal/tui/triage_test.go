@@ -84,7 +84,7 @@ func TestPromoteWritesTheAddAndDismissPair(t *testing.T) {
 	ts := stamped()
 	want := []string{
 		`{"ts":"` + ts + `","ev":"add","id":"7k3m","title":"1 unpushed commit on tui in waid","status":"open",` +
-			`"project":"C:\\dev\\waid","session":null,"tags":["promoted"],"waitingOn":null}`,
+			`"origin":"C:\\dev\\waid","session":null,"tags":["promoted"],"waitingOn":null}`,
 		`{"ts":"` + ts + `","ev":"dismiss","key":"ahead:C:\\dev\\waid:tui"}`,
 	}
 

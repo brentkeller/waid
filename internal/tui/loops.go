@@ -206,7 +206,7 @@ func (m Model) loopsVisible() []events.Item {
 // CLI finds its row.
 func matchesItem(item events.Item, query string) bool {
 	fields := append([]string{item.Id, item.Title, string(item.Status)}, item.Tags...)
-	for _, optional := range []*string{item.Project, item.WaitingOn} {
+	for _, optional := range []*string{item.Origin, item.WaitingOn} {
 		if optional != nil {
 			fields = append(fields, *optional)
 		}
@@ -400,7 +400,7 @@ func itemIdentity(item events.Item, now time.Time) string {
 		status += " ← " + *item.WaitingOn
 	}
 
-	parts := []string{item.Id, projectLabel(item.Project), status, "created " + agoPhrase(item.Created, now)}
+	parts := []string{item.Id, projectLabel(item.Origin), status, "created " + agoPhrase(item.Created, now)}
 	return strings.Join(parts, " · ")
 }
 

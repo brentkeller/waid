@@ -37,16 +37,16 @@ func TestEncodeKeyOrderMatchesNodeEmissionOrder(t *testing.T) {
 		{
 			name: "add",
 			event: AddEvent{
-				Ts:      "2026-08-15T00:31:16.973Z",
-				Ev:      "add",
-				Id:      "sga9",
-				Title:   "Design template",
-				Status:  StatusOpen,
-				Project: &project,
-				Tags:    []string{"bug", "promoted"},
+				Ts:     "2026-08-15T00:31:16.973Z",
+				Ev:     "add",
+				Id:     "sga9",
+				Title:  "Design template",
+				Status: StatusOpen,
+				Origin: &project,
+				Tags:   []string{"bug", "promoted"},
 			},
 			want: `{"ts":"2026-08-15T00:31:16.973Z","ev":"add","id":"sga9","title":"Design template",` +
-				`"status":"open","project":"C:\\dev\\waid","session":null,"tags":["bug","promoted"],"waitingOn":null}`,
+				`"status":"open","origin":"C:\\dev\\waid","session":null,"tags":["bug","promoted"],"waitingOn":null}`,
 		},
 		{
 			name:  "note",
@@ -87,7 +87,7 @@ func TestEncodeKeyOrderMatchesNodeEmissionOrder(t *testing.T) {
 func TestEncodeEmptyTagsIsAnArrayNotNull(t *testing.T) {
 	got := encode(t, AddEvent{Ts: "2026-08-17T15:32:04.642Z", Ev: "add", Id: "624q", Title: "tmp probe", Status: StatusOpen})
 	want := `{"ts":"2026-08-17T15:32:04.642Z","ev":"add","id":"624q","title":"tmp probe",` +
-		`"status":"open","project":null,"session":null,"tags":[],"waitingOn":null}`
+		`"status":"open","origin":null,"session":null,"tags":[],"waitingOn":null}`
 	if got != want {
 		t.Errorf("Encode\n got %s\nwant %s", got, want)
 	}
@@ -134,19 +134,19 @@ func TestEncodeUsesNodesControlCharacterEscapes(t *testing.T) {
 	}
 }
 
-// Project paths are opaque identifiers in the log, so a Windows path is stored exactly as given.
+// Origin paths are opaque identifiers in the log, so a Windows path is stored exactly as given.
 func TestEncodeStoresWindowsPathsLiterally(t *testing.T) {
 	project := `C:\dev\dr\devresults\devresults\`
-	got := encode(t, AddEvent{Ts: "2026-08-15T00:31:16.973Z", Ev: "add", Id: "sga9", Title: "t", Status: StatusOpen, Project: &project})
-	if !strings.Contains(got, `"project":"C:\\dev\\dr\\devresults\\devresults\\"`) {
+	got := encode(t, AddEvent{Ts: "2026-08-15T00:31:16.973Z", Ev: "add", Id: "sga9", Title: "t", Status: StatusOpen, Origin: &project})
+	if !strings.Contains(got, `"origin":"C:\\dev\\dr\\devresults\\devresults\\"`) {
 		t.Errorf("Encode = %s, want the path stored literally", got)
 	}
 	var decoded AddEvent
 	if err := json.Unmarshal([]byte(got), &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if decoded.Project == nil || *decoded.Project != project {
-		t.Errorf("round trip = %v, want %q", decoded.Project, project)
+	if decoded.Origin == nil || *decoded.Origin != project {
+		t.Errorf("round trip = %v, want %q", decoded.Origin, project)
 	}
 }
 
@@ -212,7 +212,7 @@ func TestAppendStampsAndWritesOneLinePerEvent(t *testing.T) {
 		t.Fatalf("ReadFile: %v", err)
 	}
 	want := `{"ts":"2026-08-17T15:32:04.642Z","ev":"add","id":"624q","title":"tmp probe","status":"open",` +
-		`"project":null,"session":null,"tags":[],"waitingOn":null}` + "\n" +
+		`"origin":null,"session":null,"tags":[],"waitingOn":null}` + "\n" +
 		`{"ts":"2026-08-17T15:32:34.642Z","ev":"close","id":"624q"}` + "\n"
 	if string(raw) != want {
 		t.Errorf("log\n got %s\nwant %s", raw, want)
@@ -261,7 +261,8 @@ func TestAppendReportsAnUnwritablePath(t *testing.T) {
 }
 
 // The authoritative check: every line Node has already written must come back byte-identical when
-// the Go writer re-encodes it.
+// the Go writer re-encodes it. The one sanctioned difference is an add's provenance key, which
+// stored lines spell `project` and the writer now spells `origin`; nothing else may move.
 func TestEncodeReproducesTheRealLogByteForByte(t *testing.T) {
 	raw, err := os.ReadFile(realLogPath())
 	if err != nil {
@@ -278,8 +279,12 @@ func TestEncodeReproducesTheRealLogByteForByte(t *testing.T) {
 		if event == nil {
 			continue
 		}
-		if got := encode(t, event); got != line {
-			t.Errorf("line %d\n got %s\nwant %s", index+1, got, line)
+		want := line
+		if _, isAdd := event.(AddEvent); isAdd {
+			want = originKeyRenamed(line)
+		}
+		if got := encode(t, event); got != want {
+			t.Errorf("line %d\n got %s\nwant %s", index+1, got, want)
 		}
 		checked++
 	}
@@ -316,6 +321,20 @@ func TestRealLogTimestampsUseTheNodeLayout(t *testing.T) {
 	}
 }
 
+// originKeyRenamed spells a stored add line's provenance key the way the writer spells it now. The
+// key sits directly after status, which is what makes the rewrite unambiguous: the value, its
+// position and its escaping are left exactly as stored.
+func originKeyRenamed(line string) string {
+	for _, status := range Statuses {
+		prefix := `"status":"` + string(status) + `",`
+		marker := prefix + `"project":`
+		if index := strings.Index(line, marker); index != -1 {
+			return line[:index] + prefix + `"origin":` + line[index+len(marker):]
+		}
+	}
+	return line
+}
+
 // eventFromLine rebuilds the typed event a stored line came from, returning nil for shapes the Go
 // build never writes.
 func eventFromLine(t *testing.T, line int, raw string) WaidEvent {
@@ -339,6 +358,13 @@ func eventFromLine(t *testing.T, line int, raw string) WaidEvent {
 	case "add":
 		var event AddEvent
 		decode(&event)
+		if event.Origin == nil {
+			var legacy struct {
+				Project *string `json:"project"`
+			}
+			decode(&legacy)
+			event.Origin = legacy.Project
+		}
 		if event.Tags == nil {
 			event.Tags = []string{}
 		}

@@ -109,8 +109,8 @@ func realProjectName(t testing.TB) string {
 	t.Helper()
 
 	for _, item := range realState(t).Items {
-		if item.Project != nil && *item.Project != "" {
-			return filepath.Base(*item.Project)
+		if item.Origin != nil && *item.Origin != "" {
+			return filepath.Base(*item.Origin)
 		}
 	}
 	return ""

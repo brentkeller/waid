@@ -129,8 +129,8 @@ func undoRetitle(id, title string) undoEntry {
 // is what the event carries a null project for.
 func undoRefile(item events.Item) undoEntry {
 	return undoEntry{
-		events:  []events.WaidEvent{events.ProjectEvent{Ev: "update", Id: item.Id, Project: item.Project}},
-		receipt: receipt{verb: verbFiled, subject: item.Id, detail: projectLabel(item.Project)},
+		events:  []events.WaidEvent{events.ProjectEvent{Ev: "update", Id: item.Id, Project: item.Origin}},
+		receipt: receipt{verb: verbFiled, subject: item.Id, detail: projectLabel(item.Origin)},
 		item:    &item,
 	}
 }

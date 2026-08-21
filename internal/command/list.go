@@ -78,7 +78,7 @@ func matches(item events.Item, filters ListFilters) bool {
 	} else if !filters.All && item.Status == events.StatusDone {
 		return false
 	}
-	if filters.Project != nil && (item.Project == nil || *item.Project != *filters.Project) {
+	if filters.Project != nil && (item.Origin == nil || *item.Origin != *filters.Project) {
 		return false
 	}
 	for _, tag := range filters.Tag {

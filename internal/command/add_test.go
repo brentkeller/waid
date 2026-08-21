@@ -225,7 +225,7 @@ func TestAddAppendsTheExactLine(t *testing.T) {
 	)
 
 	want := `{"ts":"2026-08-17T12:00:00.000Z","ev":"add","id":"abcd","title":"Chart legend overflows",` +
-		`"status":"waiting","project":"C:\\dev\\waid","session":"sess-1","tags":["bug","ui"],"waitingOn":"Dan"}`
+		`"status":"waiting","origin":"C:\\dev\\waid","session":"sess-1","tags":["bug","ui"],"waitingOn":"Dan"}`
 	if got := logLines(t, home); len(got) != 1 || got[0] != want {
 		t.Fatalf("log = %q,\nwant [%q]", got, want)
 	}
@@ -240,7 +240,7 @@ func TestAddAppendsTheExactLineWithoutOptions(t *testing.T) {
 	add(t, home, "Ship the thing")
 
 	want := `{"ts":"2026-08-17T12:00:00.000Z","ev":"add","id":"abcd","title":"Ship the thing",` +
-		`"status":"open","project":null,"session":null,"tags":[],"waitingOn":null}`
+		`"status":"open","origin":null,"session":null,"tags":[],"waitingOn":null}`
 	if got := logLines(t, home); len(got) != 1 || got[0] != want {
 		t.Fatalf("log = %q,\nwant [%q]", got, want)
 	}

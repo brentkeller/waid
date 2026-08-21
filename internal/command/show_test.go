@@ -13,10 +13,10 @@ import (
 // showRecord is the --json payload show echoes back.
 type showRecord struct {
 	Item struct {
-		Id      string  `json:"id"`
-		Status  string  `json:"status"`
-		Project *string `json:"project"`
-		Notes   []struct {
+		Id     string  `json:"id"`
+		Status string  `json:"status"`
+		Origin *string `json:"origin"`
+		Notes  []struct {
 			Text string `json:"text"`
 		} `json:"notes"`
 	} `json:"item"`
@@ -61,8 +61,8 @@ func TestShowReturnsTheItemWithNotesAndHistory(t *testing.T) {
 	if record.Item.Status != "done" {
 		t.Errorf("item.status = %q, want done", record.Item.Status)
 	}
-	if record.Item.Project == nil || *record.Item.Project != `C:\dev\waid` {
-		t.Errorf("item.project = %v, want C:\\dev\\waid", record.Item.Project)
+	if record.Item.Origin == nil || *record.Item.Origin != `C:\dev\waid` {
+		t.Errorf("item.origin = %v, want C:\\dev\\waid", record.Item.Origin)
 	}
 	if len(record.Item.Notes) != 1 || record.Item.Notes[0].Text != "blocked on the API" {
 		t.Errorf("item.notes = %v", record.Item.Notes)
@@ -134,7 +134,7 @@ func TestShowRendersTheItemItsNotesAndItsHistory(t *testing.T) {
 	if !regexp.MustCompile(id + `\s+Approve report copy`).MatchString(run.out) {
 		t.Errorf("stdout does not head with the id and title:\n%s", run.out)
 	}
-	for _, part := range []string{"waiting", "Dan", "copy", "pinged him again", "note", "history", "notes"} {
+	for _, part := range []string{"waiting", "Dan", "copy", "origin", "pinged him again", "note", "history", "notes"} {
 		if !strings.Contains(run.out, part) {
 			t.Errorf("stdout does not carry %q:\n%s", part, run.out)
 		}

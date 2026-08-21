@@ -363,7 +363,7 @@ func TestAddDeclaresAnItemFromAnyTab(t *testing.T) {
 
 			assertLog(t, path, []string{
 				`{"ts":"` + loopsStamped() + `","ev":"add","id":"7k3m","title":"Ship the add key","status":"open",` +
-					`"project":` + c.logged + `,"session":null,"tags":[],"waitingOn":null}`,
+					`"origin":` + c.logged + `,"session":null,"tags":[],"waitingOn":null}`,
 			})
 			if view := plain(m.View()); !strings.Contains(view, "added 7k3m  Ship the add key") {
 				t.Errorf("the footer carries no receipt for the add:\n%s", view)
@@ -404,7 +404,7 @@ func TestAddWithoutAProjectDeclaresOneWithoutAProject(t *testing.T) {
 
 	assertLog(t, path, []string{
 		`{"ts":"` + loopsStamped() + `","ev":"add","id":"7k3m","title":"Ship the add key","status":"open",` +
-			`"project":null,"session":null,"tags":[],"waitingOn":null}`,
+			`"origin":null,"session":null,"tags":[],"waitingOn":null}`,
 	})
 }
 
@@ -418,7 +418,7 @@ func TestUndoOfAnAddClosesTheItem(t *testing.T) {
 	ts := loopsStamped()
 	assertLog(t, path, []string{
 		`{"ts":"` + ts + `","ev":"add","id":"7k3m","title":"Ship the add key","status":"open",` +
-			`"project":"C:\\dev\\dr\\devresults\\devresults","session":null,"tags":[],"waitingOn":null}`,
+			`"origin":"C:\\dev\\dr\\devresults\\devresults","session":null,"tags":[],"waitingOn":null}`,
 		`{"ts":"` + ts + `","ev":"close","id":"7k3m"}`,
 	})
 

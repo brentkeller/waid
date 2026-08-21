@@ -14,7 +14,7 @@ func item(id string, project *string) events.Item {
 		Id:      id,
 		Title:   "title",
 		Status:  events.StatusOpen,
-		Project: project,
+		Origin:  project,
 		Tags:    []string{},
 		Notes:   []events.Note{},
 		Created: "2026-08-14T00:00:00.000Z",

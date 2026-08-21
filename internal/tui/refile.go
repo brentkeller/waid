@@ -30,7 +30,7 @@ func (m Model) projectPrompt(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	m.prompt = prompt{kind: promptProject, label: "project", subject: item.Id, value: pathOrEmpty(item.Project)}
+	m.prompt = prompt{kind: promptProject, label: "project", subject: item.Id, value: pathOrEmpty(item.Origin)}
 	return m, nil, true
 }
 
@@ -126,7 +126,7 @@ func (m Model) refile(id, fragment string, choice int) (Model, tea.Cmd) {
 		m.hint = err.Error()
 		return m, nil
 	}
-	if samePath(chosen, item.Project) {
+	if samePath(chosen, item.Origin) {
 		return m, nil
 	}
 
@@ -137,7 +137,7 @@ func (m Model) refile(id, fragment string, choice int) (Model, tea.Cmd) {
 	}
 
 	filed := item
-	filed.Project, filed.Updated = chosen, ts
+	filed.Origin, filed.Updated = chosen, ts
 
 	m = m.applyItem(filed).pushUndo(undoRefile(item))
 	return m.record(receipt{verb: verbFiled, subject: id, detail: projectLabel(chosen)}), nil

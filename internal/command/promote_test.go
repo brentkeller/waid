@@ -182,7 +182,7 @@ func TestPromoteWritesAnAddThenADismissAndMovesTheSignalIntoLoops(t *testing.T) 
 	if len(log) != 2 {
 		t.Fatalf("the log holds %d events, want 2", len(log))
 	}
-	if log[0]["ev"] != "add" || log[0]["id"] != record.Id || log[0]["project"] != repo {
+	if log[0]["ev"] != "add" || log[0]["id"] != record.Id || log[0]["origin"] != repo {
 		t.Errorf("the add event is %v", log[0])
 	}
 	if tags, ok := log[0]["tags"].([]any); !ok || len(tags) != 1 || tags[0] != "promoted" {

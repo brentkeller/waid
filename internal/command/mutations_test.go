@@ -208,7 +208,7 @@ func TestMutationsAppendTheExactLines(t *testing.T) {
 
 	want := []string{
 		`{"ts":"2026-08-17T12:00:00.000Z","ev":"add","id":"abcd","title":"Ship the thing",` +
-			`"status":"open","project":null,"session":null,"tags":[],"waitingOn":null}`,
+			`"status":"open","origin":null,"session":null,"tags":[],"waitingOn":null}`,
 		`{"ts":"2026-08-17T12:00:00.000Z","ev":"close","id":"abcd"}`,
 		`{"ts":"2026-08-17T12:00:00.000Z","ev":"reopen","id":"abcd"}`,
 		`{"ts":"2026-08-17T12:00:00.000Z","ev":"note","id":"abcd","text":"blocked on <legends> & labels"}`,

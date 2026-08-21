@@ -37,6 +37,42 @@ func TestGoldenHomeExercisesEveryEventType(t *testing.T) {
 	}
 }
 
+// The fixture log is written entirely in the pre-rename `project` key, and folds to items carrying
+// origins without being rewritten.
+func TestGoldenHomeFoldsLegacyProjectKeysToOrigins(t *testing.T) {
+	lines := goldenLines(t)
+
+	if containsSubstring(lines, `"origin"`) {
+		t.Fatal("the fixture log carries an origin key, so it no longer proves the fallback")
+	}
+
+	state := events.Fold(lines)
+	origins := map[string]*string{}
+	for _, item := range state.Items {
+		origins[item.Id] = item.Origin
+	}
+	// a1b2 was filed by its add, c3d4 by a later update, and g7h8 by neither.
+	for id, want := range map[string]*string{"a1b2": ptrTo(`C:\dev\waid`), "c3d4": ptrTo(`C:\dev\waid`), "g7h8": nil} {
+		got, found := origins[id]
+		if !found {
+			t.Errorf("%s is missing from the folded items", id)
+			continue
+		}
+		if (got == nil) != (want == nil) || (got != nil && *got != *want) {
+			t.Errorf("%s origin = %v, want %v", id, deref(got), deref(want))
+		}
+	}
+}
+
+func ptrTo[T any](value T) *T { return &value }
+
+func deref(value *string) string {
+	if value == nil {
+		return "<nil>"
+	}
+	return *value
+}
+
 func TestGoldenHomeCoversEveryProblemReason(t *testing.T) {
 	reasons := []events.ProblemReason{
 		events.ReasonUnparseable,
@@ -143,7 +179,7 @@ func TestRunPinsTheClockAndTheIdGenerator(t *testing.T) {
 	}
 
 	want := `{"ts":"2026-08-17T15:32:04.642Z","ev":"add","id":"z9z9","title":"harness pinned",` +
-		`"status":"open","project":null,"session":null,"tags":[],"waitingOn":null}`
+		`"status":"open","origin":null,"session":null,"tags":[],"waitingOn":null}`
 	lines := readLines(t, filepath.Join(home, "events.jsonl"))
 	if got := lines[len(lines)-1]; got != want {
 		t.Errorf("appended line:\n got %s\nwant %s", got, want)

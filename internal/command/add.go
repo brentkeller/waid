@@ -58,7 +58,7 @@ func runAdd(ctx *cli.Ctx) (AddResult, error) {
 		Id:        id,
 		Title:     title,
 		Status:    status,
-		Project:   path,
+		Origin:    path,
 		Session:   session,
 		Tags:      tags,
 		WaitingOn: waitingOn,

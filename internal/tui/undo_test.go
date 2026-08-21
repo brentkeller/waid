@@ -55,7 +55,7 @@ func TestUndoOfAPromoteClosesTheItemAndRestoresTheKey(t *testing.T) {
 	ts := stamped()
 	want := []string{
 		`{"ts":"` + ts + `","ev":"add","id":"7k3m","title":"1 unpushed commit on tui in waid","status":"open",` +
-			`"project":"C:\\dev\\waid","session":null,"tags":["promoted"],"waitingOn":null}`,
+			`"origin":"C:\\dev\\waid","session":null,"tags":["promoted"],"waitingOn":null}`,
 		`{"ts":"` + ts + `","ev":"dismiss","key":"ahead:C:\\dev\\waid:tui"}`,
 		`{"ts":"` + ts + `","ev":"close","id":"7k3m"}`,
 		`{"ts":"` + ts + `","ev":"undismiss","key":"ahead:C:\\dev\\waid:tui"}`,
@@ -207,7 +207,7 @@ func TestPromoteReceiptOffersRenameAndEditsTheTitle(t *testing.T) {
 	m, _ = press(t, m, "enter")
 	assertLog(t, path, []string{
 		`{"ts":"` + stamped() + `","ev":"add","id":"7k3m","title":"1 unpushed commit on tui in waid","status":"open",` +
-			`"project":"C:\\dev\\waid","session":null,"tags":["promoted"],"waitingOn":null}`,
+			`"origin":"C:\\dev\\waid","session":null,"tags":["promoted"],"waitingOn":null}`,
 		`{"ts":"` + stamped() + `","ev":"dismiss","key":"ahead:C:\\dev\\waid:tui"}`,
 		`{"ts":"` + stamped() + `","ev":"update","id":"7k3m","title":"Push the tui branch"}`,
 	})

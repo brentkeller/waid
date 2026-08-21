@@ -34,7 +34,7 @@ func runLoops(ctx *cli.Ctx) (LoopsResult, error) {
 
 	items := []events.Item{}
 	for _, item := range state.Items {
-		if isOpen(item) && (path == nil || (item.Project != nil && *item.Project == *path)) {
+		if isOpen(item) && (path == nil || (item.Origin != nil && *item.Origin == *path)) {
 			items = append(items, item)
 		}
 	}

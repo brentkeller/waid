@@ -154,10 +154,10 @@ func closuresByProject(ctx *cli.Ctx, start, end time.Time) []closure {
 		}
 		counted[item.Id] = true
 
-		key := keyOf(item.Project)
+		key := keyOf(item.Origin)
 		entry, seen := counts[key]
 		if !seen {
-			entry = closure{key: key, project: item.Project}
+			entry = closure{key: key, project: item.Origin}
 			order = append(order, key)
 		}
 		entry.count++

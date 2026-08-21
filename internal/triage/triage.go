@@ -38,7 +38,7 @@ func Promote(path string, state events.State, generate ids.Generator, signal det
 		Id:        id,
 		Title:     title,
 		Status:    events.StatusOpen,
-		Project:   signal.Project,
+		Origin:    signal.Project,
 		Session:   nil,
 		Tags:      []string{PromotedTag},
 		WaitingOn: nil,

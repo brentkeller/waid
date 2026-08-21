@@ -37,8 +37,8 @@ type Item struct {
 	Status Status `json:"status"`
 	// WaitingOn is free text, only meaningful while Status is StatusWaiting.
 	WaitingOn *string `json:"waitingOn"`
-	// Project is the absolute path of the project the item belongs to.
-	Project *string `json:"project"`
+	// Origin is the absolute path the item came from. It is provenance, not a grouping key.
+	Origin *string `json:"origin"`
 	// Session is the Claude Code session the item was captured from.
 	Session *string  `json:"session"`
 	Tags    []string `json:"tags"`
@@ -66,7 +66,7 @@ type AddEvent struct {
 	Id        string   `json:"id"`
 	Title     string   `json:"title"`
 	Status    Status   `json:"status"`
-	Project   *string  `json:"project"`
+	Origin    *string  `json:"origin"`
 	Session   *string  `json:"session"`
 	Tags      []string `json:"tags"`
 	WaitingOn *string  `json:"waitingOn"`

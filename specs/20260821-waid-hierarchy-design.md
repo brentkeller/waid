@@ -118,9 +118,10 @@ the whole set:
 Both become new `ProblemReason` values surfaced by `doctor`. The rule is that a corrupt log still
 renders — the tree degrades to a flat list rather than failing to draw.
 
-`State` gains an index built once per fold: `map[string]int` plus each item's children. `State.Find`
-is a linear scan, and the tree work hammers it — cycle checks, close guards, ancestor walks,
-filter-keeps-ancestors.
+`State` gains an index built once per fold: `map[string]int` plus each item's children, behind
+`State.Find`, `State.Children` and `State.Ancestors`. `Find` is a linear scan today, and the tree
+work hammers it — cycle checks, close guards, ancestor walks, filter-keeps-ancestors. The index is
+derived rather than stored, so `State` encodes to the same JSON it does now.
 
 `internal/project` splits rather than dies. The path helpers — `CompareNames`, `NormalizePath`,
 `KnownProjects` — stay, serving `today` and `week`. The item half, `GroupByProject` and `Resolve`,
@@ -162,6 +163,10 @@ them.
 visible as context. A filtered tree that drops its headings has thrown away the thing that made it
 readable.
 
+A match keeps its **whole subtree**; a node that does not match is kept only as context for a
+descendant that did. So filtering on a project's name shows that project's contents rather than an
+empty heading, and filtering on a leaf's name shows the headings above it and nothing beside it.
+
 ## 5. Closing a parent
 
 A parent cannot be closed while anything beneath it is open. `waid done` on such an item is an
@@ -172,16 +177,19 @@ point of a tree is that a closed project provably has no loose ends. The cost is
 walking the children of a project being dropped rather than finished — which is real, and is why
 `done` takes several ids (§6).
 
+The guard is one function, called by both `waid done` and the app's `x`. Two surfaces that disagreed
+about when a parent may close would be worse than either rule on its own.
+
 ## 6. CLI surface
 
 `-p` keeps its spelling and its matching rules — case-insensitive substring, no match is
 `errs.Userf`, several is `errs.Ambiguous` — but resolves against **item titles** rather than paths.
 It reads as "parent" now.
 
-It also still accepts an absolute path, and files it as `origin` with the item left at top level.
-This is exactly what promotion does, and it means the `waid add "<title>" -p <project path>` form in
-the global `WAID.md` snippet keeps working unchanged. Agents that learned the path form are not
-broken by this spec.
+It also still accepts an absolute path — and `.` for the current directory — filing it as `origin`
+with the item left at top level. This is exactly what promotion does, and it means the
+`waid add "<title>" -p <project path>` form in the global `WAID.md` snippet keeps working unchanged.
+Agents that learned the path form are not broken by this spec.
 
 So the resolver returns a discriminated result rather than a string — a parent id, or an origin path,
 never both. `add` accepts either. `move` accepts a parent only: reparenting to a path is meaningless
@@ -190,14 +198,21 @@ now that a path is not a place in the tree, and an absolute path passed to `move
 
 ```
 waid add "<title>" [-p <parent|path>] [--waiting-on <who>] [--tag <t>]
-waid move <id> [-p <parent> | --top]        reparent; rejects self and descendants
-waid done <id>...                            several ids; refuses while descendants are open
-waid loops [-p <fragment>]                   that node and everything under it
-waid list [--tag t] [--origin <fragment>]    --origin replaces --project
+waid move <id> [-p <parent> | --top]           reparent; rejects self and descendants
+waid done <id>...                               several ids; refuses while descendants are open
+waid loops [-p <fragment>] [--origin <frag>]    a subtree, or everything from one path
+waid list [--tag t] [--origin <fragment>]       --origin replaces --project
 ```
 
 `done` taking several ids exists only because §5 chose refusal over cascade; without it, "close the
-children first" is four invocations. It is a change to `targetItem`, not to the write.
+children first" is four invocations. It is a change to `targetItem`, not to the write. Every id is
+validated before anything is written, so a bad id in the list cannot leave a half-finished close
+behind.
+
+`--origin` is on `loops` as well as `list`, because "what is tracked for this repo" survives the
+reframe as a question — it is simply an origin question now rather than a project one.
+`agent/skills/waid/SKILL.md` opens its triage flow with `waid loops -p .`, and this is what that
+becomes.
 
 `today` and `week` are untouched.
 
@@ -270,6 +285,10 @@ The rest follows from that:
   surprise, and a nudge to a sibling project is one keystroke.
 - **Undo** pushes an inverse `ParentEvent` carrying the prior parent, as `undoRefile` does now.
 
+Only the *picker* is replaced. `refile.go`'s write is what move mode commits with, so it survives the
+deletion of the prompt around it — which is also what lets the app stay usable while the tree is
+being built, rather than losing the ability to refile for the length of the branch.
+
 Typed filtering inside move mode was considered and deferred. `/` already implements the
 ancestor-preserving filter (§4), so it can be folded in later if a tree ever outgrows a screen; doing
 it now would be solving a problem collapsed-by-default appears to remove.
@@ -318,12 +337,17 @@ rather than where the files happen to live.
 1. `Parent` and `Origin` in the fold, with the compatibility read. Nothing consumes them yet.
 2. `internal/tree`: the forest, the `(unassigned)` rule, ordering, ancestor-preserving filter, and the
    `State` index. `doctor` reports cycles and orphans.
-3. CLI: `-p` resolution, `move`, the close guard, multi-id `done`, `--origin`, recursive `loops`.
+3. CLI: `-p` resolution, `move`, the close guard, multi-id `done`, `--origin`, tree rendering for
+   `list` and `loops`, promotion, and the docs that describe all of it — `usage.go`, `README.md`,
+   `agent/CLAUDE.snippet.md` and `agent/skills/waid/SKILL.md`.
 4. `Tree[T]` flattening, with Repos and Agents ported first — their behaviour is unchanged, so their
-   existing goldens are the proof the refactor is sound.
+   existing goldens are the proof the refactor is sound. A golden that moves means the refactor is
+   wrong.
 5. Loops on the flat tree: selectable headings, `h`/`l`, `a`/`A`, move mode, reparent undo.
 
 Steps 1–3 are shippable without touching the app; step 4 is a refactor with no user-visible change.
+The app stays usable throughout: the parent write lands in step 1 (§7.1), so refiling never stops
+working while the tree is being built.
 
 ## 11. Decisions settled during design
 
@@ -346,4 +370,11 @@ Steps 1–3 are shippable without touching the app; step 4 is a refactor with no
   filtering could be deferred rather than built.
 - **`a` adds a sibling and `A` adds a child.** Creating a tier is a first-class action, not a side
   effect of moving one task onto another.
+- **A filter match keeps its whole subtree**; a non-matching node is kept only as context for a
+  descendant that did.
+- **`--origin` is on `loops` as well as `list`.** "What is tracked for this repo" survives the
+  reframe as a question, and the `/waid` skill opens its triage flow with it.
+- **The close guard is one function**, called by `waid done` and the app's `x` alike.
+- **Multi-id `done` validates every id before writing anything**, so a bad id cannot leave a
+  half-finished close behind.
 - **Tags are out of scope**, and unchanged by any of this.

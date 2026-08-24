@@ -66,6 +66,7 @@ func runAdd(ctx *cli.Ctx) (AddResult, error) {
 		Session:   session,
 		Tags:      tags,
 		WaitingOn: waitingOn,
+		Heading:   ctx.Flags.Bool("heading"),
 	}, ctx.Now)
 	if err != nil {
 		return AddResult{}, err

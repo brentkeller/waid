@@ -344,3 +344,35 @@ func TestAddUnderAParentAppendsTheExactLine(t *testing.T) {
 		t.Fatalf("log = %q,\nwant the second line %q", got, want)
 	}
 }
+
+// --heading creates a landmark outright, so a fresh project need not be marked in a second step.
+func TestAddHeadingWritesTheKey(t *testing.T) {
+	home := makeHome(t)
+	t.Setenv(cli.EnvNow, "2026-08-17T12:00:00Z")
+	t.Setenv(cli.EnvIds, "abcd")
+
+	record := add(t, home, "Chart rewrite", "--heading")
+
+	want := `{"ts":"2026-08-17T12:00:00.000Z","ev":"add","id":"abcd","title":"Chart rewrite",` +
+		`"status":"open","origin":null,"session":null,"tags":[],"waitingOn":null,"heading":true}`
+	if got := logLines(t, home); len(got) != 1 || got[0] != want {
+		t.Fatalf("log = %q,\nwant [%q]", got, want)
+	}
+	if !item(t, home, record.Id).Heading {
+		t.Error("folded heading = false, want the item marked")
+	}
+}
+
+// The key is omitted when it was not asked for, so a plain add re-encodes as it always has.
+func TestAddWithoutHeadingWritesNoKey(t *testing.T) {
+	home := makeHome(t)
+
+	record := add(t, home, "Chart rewrite")
+
+	if got := logLines(t, home); len(got) != 1 || strings.Contains(got[0], "heading") {
+		t.Fatalf("log = %q, want no heading key", got)
+	}
+	if item(t, home, record.Id).Heading {
+		t.Error("folded heading = true, want it unmarked")
+	}
+}

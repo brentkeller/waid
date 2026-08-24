@@ -40,7 +40,7 @@ installed path stays proven.
 | `waid loops [-p <parent>] [--origin <frag>]` | Declared open items as a tree, then detected signals. The default view. |
 | `waid scan [-p <project>]` | Detected signals only. |
 | `waid list [--status s] [--origin <frag>] [--tag t] [--all]` | Declared items as a tree. Hides done unless `--all` or `--status done`. |
-| `waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>]` | Record an item, under a parent or with an origin. |
+| `waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>] [--heading]` | Record an item, under a parent or with an origin. `--heading` creates it as a heading. |
 | `waid done <id>...` / `waid reopen <id>` | Close one or more items, or reopen one. |
 | `waid move <id> -p <parent>` / `waid move <id> --top` | Refile an item under another, or move it to the top level. |
 | `waid heading <id>` / `waid heading <id> --off` | Mark an item a heading — a landmark that heads a level whether or not anything is filed under it — or unmark it. |

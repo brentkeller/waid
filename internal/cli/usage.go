@@ -13,6 +13,7 @@ Usage: waid <command> [options]
   waid scan [-p <project>]            Detected signals only
   waid list [--status s] [--origin <frag>] [--tag t] [--all]
   waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>]
+    [--heading]                       Create the item as a heading
   waid done <id>...                   Close one or more; waid reopen <id>
   waid move <id> [-p <parent>|--top]  Refile an item under a parent, or to the top level
   waid heading <id> [--off]           Mark an item a heading, or unmark it

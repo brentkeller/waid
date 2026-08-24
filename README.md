@@ -37,7 +37,7 @@ installed path stays proven.
 | `waid sync [--full]` | Rebuild the derived session cache. Incremental unless `--full`. |
 | `waid today [--date YYYY-MM-DD]` | Sessions and item activity for a day, grouped by project. |
 | `waid week [--last]` | Rollup by project for this week, or the previous one. |
-| `waid loops [-p <parent>] [--origin <frag>]` | Declared open items as a tree, then detected signals. The default view. |
+| `waid loops [-p <parent>] [--origin <frag>] [--headings]` | Declared open items as a tree, then detected signals. The default view. Hides empty headings unless `--headings`. |
 | `waid scan [-p <project>]` | Detected signals only. |
 | `waid list [--status s] [--origin <frag>] [--tag t] [--all] [--headings]` | Declared items as a tree. Hides done unless `--all` or `--status done`, and empty headings unless `--headings`. |
 | `waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>] [--heading]` | Record an item, under a parent or with an origin. `--heading` creates it as a heading. |

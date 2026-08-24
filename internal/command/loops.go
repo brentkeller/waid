@@ -57,6 +57,13 @@ func runLoops(ctx *cli.Ctx) (LoopsResult, error) {
 		roots = tree.Subtree(roots, *target.Parent)
 	}
 
+	// Empty headings are dropped after the filters and before bucketing, so a shelf with nothing on
+	// it stays out of the view and a level whose only head was one renders its leaves directly. The
+	// drop runs ahead of declared, so --headings reaches the flat item set as well as the tree.
+	if !ctx.Flags.Bool("headings") {
+		roots = tree.DropEmptyHeadings(roots)
+	}
+
 	result.Detected = signalsIn(result.Detected, origin)
 	result.Items = declared(roots)
 	result.roots = tree.Bucket(roots)

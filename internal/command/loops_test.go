@@ -514,3 +514,42 @@ func indexOfPrefix(lines []string, prefix string) int {
 	}
 	return -1
 }
+
+// A heading with nothing visible under it is a shelf rather than a loop, so the default view drops
+// it and --headings is what brings it back.
+func TestLoopsHidesAnEmptyHeadingUntilTheFlag(t *testing.T) {
+	home := loopsHome(t)
+	shelf := addItem(t, home, "Port rewrite", "--heading")
+	proj := addItem(t, home, "Search rewrite")
+	task := addItem(t, home, "Reindex script", "-p", "Search rewrite")
+
+	assertOutline(t, loopsOutline(t, home, quiet), "0 "+proj, "1 "+task)
+	assertOutline(t, loopsOutline(t, home, quiet, "--headings"), "0 "+shelf, "0 "+proj, "1 "+task)
+}
+
+// The drop runs before bucketing, so a level whose only head was an empty heading is a level of
+// nothing but leaves and renders them directly. Keeping the heading makes the level mixed again,
+// which is what puts the leaves in a bucket.
+func TestLoopsBucketsTheLevelAnEmptyHeadingHeads(t *testing.T) {
+	home := loopsHome(t)
+	shelf := addItem(t, home, "Port rewrite", "--heading")
+	loose := addItem(t, home, "Book flights")
+
+	assertOutline(t, loopsOutline(t, home, quiet), "0 "+loose)
+	assertOutline(t, loopsOutline(t, home, quiet, "--headings"), "0 "+shelf, "0 (unassigned)", "1 "+loose)
+}
+
+// loops flattens its rendered forest into Items, so the flag reaches --json as well as the text.
+// list, which selects Items from the log and holds the forest beside them, carries the empty
+// heading either way.
+func TestLoopsJsonFollowsTheHeadingsFlag(t *testing.T) {
+	home := loopsHome(t)
+	shelf := addItem(t, home, "Port rewrite", "--heading")
+	loose := addItem(t, home, "Book flights")
+
+	_, hidden := loopsJson(t, home, quiet)
+	assertKeys(t, hidden.itemIds(), []string{loose})
+
+	_, revealed := loopsJson(t, home, quiet, "--headings")
+	assertKeys(t, revealed.itemIds(), []string{shelf, loose})
+}

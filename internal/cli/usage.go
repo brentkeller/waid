@@ -8,7 +8,7 @@ Usage: waid <command> [options]
   waid sync [--full]                  Rebuild the derived session cache
   waid today [--date YYYY-MM-DD]      Sessions + item activity for a day
   waid week [--last]                  Rollup by project for this week (or last)
-  waid loops [-p <parent>] [--origin <frag>]
+  waid loops [-p <parent>] [--origin <frag>] [--headings]
                                       Open items as a tree, then detected signals
   waid scan [-p <project>]            Detected signals only
   waid list [--status s] [--origin <frag>] [--tag t] [--all]

@@ -925,3 +925,27 @@ func goldenFiltered(t *testing.T, width int) {
 func TestGoldenLoopsDeepAt80Columns(t *testing.T) {
 	teatest.RequireEqualOutput(t, []byte(plain(looped(t, 80, loopsChain(8)).View())))
 }
+
+// The two states of the toggle over a log holding a shelf, at the two widths §8 names: with it off
+// the heading is absent and the chip reads unselected, and with it on the row is drawn with a blank
+// marker beside the roots and the chip reads selected (§6.1).
+func TestGoldenLoopsHeadingsOffAt80Columns(t *testing.T) { goldenHeadingsOff(t, 80) }
+
+func TestGoldenLoopsHeadingsOffAt140Columns(t *testing.T) { goldenHeadingsOff(t, 140) }
+
+func goldenHeadingsOff(t *testing.T, width int) {
+	t.Helper()
+
+	teatest.RequireEqualOutput(t, []byte(plain(looped(t, width, loopsWithShelf()).View())))
+}
+
+func TestGoldenLoopsHeadingsOnAt80Columns(t *testing.T) { goldenHeadingsOn(t, 80) }
+
+func TestGoldenLoopsHeadingsOnAt140Columns(t *testing.T) { goldenHeadingsOn(t, 140) }
+
+func goldenHeadingsOn(t *testing.T, width int) {
+	t.Helper()
+
+	m, _ := press(t, looped(t, width, loopsWithShelf()), "S")
+	teatest.RequireEqualOutput(t, []byte(plain(m.View())))
+}

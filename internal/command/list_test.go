@@ -16,10 +16,11 @@ type listRecord struct {
 		Id string `json:"id"`
 	} `json:"items"`
 	Filters struct {
-		Status *string  `json:"status"`
-		Origin *string  `json:"origin"`
-		Tag    []string `json:"tag"`
-		All    bool     `json:"all"`
+		Status   *string  `json:"status"`
+		Origin   *string  `json:"origin"`
+		Tag      []string `json:"tag"`
+		All      bool     `json:"all"`
+		Headings bool     `json:"headings"`
 	} `json:"filters"`
 }
 
@@ -355,5 +356,51 @@ func TestListRowsCarryTheirColumns(t *testing.T) {
 		if !strings.Contains(line, part) {
 			t.Errorf("item line %q does not carry %q", line, part)
 		}
+	}
+}
+
+// A heading with nothing visible under it is a shelf, not a row of work, so the default view drops
+// it. --headings is the only flag that brings it back: --all is the status axis, and reaching
+// across two axes is what the toggle exists to avoid.
+func TestListHidesAnEmptyHeadingUntilTheFlag(t *testing.T) {
+	home := makeHome(t)
+	shelf := addItem(t, home, "Port rewrite", "--heading")
+	proj := addItem(t, home, "Search rewrite")
+	task := addItem(t, home, "Reindex script", "-p", "Search rewrite")
+
+	assertOutline(t, outline(t, home), "0 "+proj, "1 "+task)
+	assertOutline(t, outline(t, home, "--all"), "0 "+proj, "1 "+task)
+	assertOutline(t, outline(t, home, "--headings"), "0 "+shelf, "0 "+proj, "1 "+task)
+}
+
+// The drop runs before bucketing, so a level whose only head was an empty heading is a level of
+// nothing but leaves and renders them directly. Keeping the heading makes the level mixed again,
+// which is what puts the leaves in a bucket.
+func TestListBucketsTheLevelAnEmptyHeadingHeads(t *testing.T) {
+	home := makeHome(t)
+	shelf := addItem(t, home, "Port rewrite", "--heading")
+	loose := addItem(t, home, "Book flights")
+
+	assertOutline(t, outline(t, home), "0 "+loose)
+	assertOutline(t, outline(t, home, "--headings"), "0 "+shelf, "0 (unassigned)", "1 "+loose)
+}
+
+// list selects Items from the log with its own filters and holds the forest beside them, so the
+// flag shapes only what is rendered. An empty heading that passes --status is in --json either way.
+func TestListJSONCarriesAnEmptyHeadingEitherWay(t *testing.T) {
+	home := makeHome(t)
+	shelf := addItem(t, home, "Port rewrite", "--heading")
+	loose := addItem(t, home, "Book flights")
+
+	hidden := list(t, home)
+	assertIds(t, hidden.ids(), shelf, loose)
+	if hidden.Filters.Headings {
+		t.Error("filters.headings = true, want false")
+	}
+
+	revealed := list(t, home, "--headings")
+	assertIds(t, revealed.ids(), shelf, loose)
+	if !revealed.Filters.Headings {
+		t.Error("filters.headings = false, want true")
 	}
 }

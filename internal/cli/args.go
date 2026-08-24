@@ -8,16 +8,17 @@ import (
 
 // booleanFlags never take a value, so they cannot swallow the argument that follows them.
 var booleanFlags = map[string]bool{
-	"json":    true,
-	"no-sync": true,
-	"full":    true,
-	"last":    true,
-	"all":     true,
-	"top":     true,
-	"off":     true,
-	"heading": true,
-	"help":    true,
-	"version": true,
+	"json":     true,
+	"no-sync":  true,
+	"full":     true,
+	"last":     true,
+	"all":      true,
+	"top":      true,
+	"off":      true,
+	"heading":  true,
+	"headings": true,
+	"help":     true,
+	"version":  true,
 }
 
 // aliases are short forms, expanded to their long name before anything else looks at them.

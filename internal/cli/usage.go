@@ -12,6 +12,7 @@ Usage: waid <command> [options]
                                       Open items as a tree, then detected signals
   waid scan [-p <project>]            Detected signals only
   waid list [--status s] [--origin <frag>] [--tag t] [--all]
+    [--headings]                      Show empty headings alongside the matches
   waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>]
     [--heading]                       Create the item as a heading
   waid done <id>...                   Close one or more; waid reopen <id>

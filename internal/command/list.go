@@ -17,10 +17,11 @@ import (
 // ListFilters are the filters that produced a list, echoed back so --json callers can see what was
 // applied.
 type ListFilters struct {
-	Status *events.Status `json:"status"`
-	Origin *string        `json:"origin"`
-	Tag    []string       `json:"tag"`
-	All    bool           `json:"all"`
+	Status   *events.Status `json:"status"`
+	Origin   *string        `json:"origin"`
+	Tag      []string       `json:"tag"`
+	All      bool           `json:"all"`
+	Headings bool           `json:"headings"`
 }
 
 // ListResult is the filtered items alongside the filters that selected them. Items stays flat: it
@@ -63,7 +64,13 @@ func runList(ctx *cli.Ctx) (ListResult, error) {
 	if tags == nil {
 		tags = []string{}
 	}
-	filters := ListFilters{Status: status, Origin: path, Tag: tags, All: ctx.Flags.Bool("all")}
+	filters := ListFilters{
+		Status:   status,
+		Origin:   path,
+		Tag:      tags,
+		All:      ctx.Flags.Bool("all"),
+		Headings: ctx.Flags.Bool("headings"),
+	}
 
 	items := []events.Item{}
 	for _, item := range state.Items {
@@ -81,12 +88,16 @@ func runList(ctx *cli.Ctx) (ListResult, error) {
 // forest builds the tree the text rendering walks. The two kinds of filter are applied separately
 // because they mean different things: status gates each row in its own right, so a done row under
 // an open parent still goes, while a tag or an origin is a query, and a heading that answers it is
-// asked for along with everything under it. Bucketing comes last, so (unassigned) is computed
-// against what survived rather than against the log.
+// asked for along with everything under it. Empty headings are dropped next, unless --headings asked
+// for them, so a shelf with nothing on it stays out of the view. Bucketing comes last, so
+// (unassigned) is computed against what survived rather than against the log.
 func forest(state events.State, filters ListFilters) []tree.Node {
 	roots, _ := tree.Build(state)
 	roots = tree.Prune(roots, func(item events.Item) bool { return passesStatus(item, filters) })
 	roots = tree.Filter(roots, func(item events.Item) bool { return passesQuery(item, filters) })
+	if !filters.Headings {
+		roots = tree.DropEmptyHeadings(roots)
+	}
 	return tree.Bucket(roots)
 }
 

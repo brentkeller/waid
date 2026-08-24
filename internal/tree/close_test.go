@@ -66,6 +66,28 @@ func TestGuardCloseRefusesWhileAGrandchildIsOpen(t *testing.T) {
 }
 
 // The listing is id and title, since two items may share a title and the id is what closes one.
+// Closing reads status and nothing else: a heading holding open work is refused like any other
+// parent.
+func TestGuardCloseRefusesAHeadingHoldingOpenWork(t *testing.T) {
+	state := events.Fold([]string{
+		headingLine("head", "Project", ""),
+		addLine("kid1", "Open child", "head"),
+	})
+
+	if err := GuardClose(state, "head"); err == nil {
+		t.Errorf("closing a heading over open work = nil, want it refused")
+	}
+}
+
+// Being a shelf is not a reason to keep an item: an empty heading closes like any other leaf.
+func TestGuardCloseAllowsAnEmptyHeading(t *testing.T) {
+	state := events.Fold([]string{headingLine("head", "Project", "")})
+
+	if err := GuardClose(state, "head"); err != nil {
+		t.Errorf("closing an empty heading = %v, want it allowed", err)
+	}
+}
+
 func TestGuardCloseListsEveryOpenDescendantByIdAndTitle(t *testing.T) {
 	state := events.Fold([]string{
 		addLine("root", "Root", ""),

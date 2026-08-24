@@ -418,6 +418,84 @@ func TestBucketTreatsAParentWithNoVisibleChildrenAsALeaf(t *testing.T) {
 	}
 }
 
+// headingAt writes an add line for an item declared a heading, so a fixture can hold a shelf that
+// nothing is filed under yet.
+func headingAt(ts string, id string, title string, parent string) string {
+	return strings.TrimSuffix(addAt(ts, id, title, parent), "}") + `,"heading":true}`
+}
+
+// headingLine is headingAt at the timestamp addLine uses.
+func headingLine(id string, title string, parent string) string {
+	return headingAt("2026-08-14T09:00:00.000Z", id, title, parent)
+}
+
+// A declared heading heads its level whether or not anything is filed under it, so it stands beside
+// the parents rather than being swept into the inbox with the loose work.
+func TestBucketKeepsAnEmptyHeadingOutOfTheBucket(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("live", "Zulu project", ""),
+		addLine("kidl", "Open child", "live"),
+		headingLine("bare", "Alpha project", ""),
+		addLine("loos", "Loose task", ""),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"bare", "live", "  kidl", "(unassigned)", "  loos"}, "\n")
+	if got := shape(Bucket(roots)); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// An empty heading sorts by title with the other heads rather than drifting through the leaves by
+// age, which is what keeping a landmark still asks for.
+func TestBuildSortsAnEmptyHeadingWithTheParentsByTitle(t *testing.T) {
+	state := events.Fold([]string{
+		headingAt("2026-08-14T09:00:00.000Z", "zulu", "Zulu", ""),
+		headingAt("2026-08-14T09:01:00.000Z", "alfa", "alpha", ""),
+		addAt("2026-08-14T09:02:00.000Z", "midl", "Middle", ""),
+		addAt("2026-08-14T09:03:00.000Z", "kidm", "Child of Middle", "midl"),
+		addAt("2026-08-14T09:04:00.000Z", "leaf", "Newest leaf", ""),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"alfa", "midl", "  kidm", "zulu", "leaf"}, "\n")
+	if got := shape(roots); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Only a declared heading is spared: an ordinary item with no children lands in the inbox exactly
+// as it did before the flag existed.
+func TestBucketStillGathersAnUnmarkedChildlessItem(t *testing.T) {
+	state := events.Fold([]string{
+		headingLine("head", "Project", ""),
+		addLine("kid1", "Child", "head"),
+		`{"ts":"2026-08-14T09:00:00.000Z","ev":"add","id":"loos","title":"Loose task","heading":false}`,
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"head", "  kid1", "(unassigned)", "  loos"}, "\n")
+	if got := shape(Bucket(roots)); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A level of nothing but leaves keeps them where they are, heading above it or not: a bucket
+// holding an entire level says nothing about it.
+func TestBucketLeavesALevelOfOnlyLeavesUnderAHeadingAlone(t *testing.T) {
+	state := events.Fold([]string{
+		headingLine("head", "Project", ""),
+		addLine("kid1", "First", "head"),
+		addLine("kid2", "Second", "head"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"head", "  kid1", "  kid2"}, "\n")
+	if got := shape(Bucket(roots)); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
 // titled matches items whose title contains fragment, standing in for the query a view filters on.
 func titled(fragment string) func(events.Item) bool {
 	return func(item events.Item) bool {

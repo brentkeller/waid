@@ -86,17 +86,21 @@ func node(state events.State, item events.Item, lifted map[string]bool) Node {
 	return built
 }
 
-// sortSiblings orders one level in place: parents first by title, then leaves most-recently-updated
-// first. Headings are landmarks, so a parent sorts by the one field a rename changes rather than
-// drifting every time a row beneath it is touched. Ties keep log order.
+// heads reports whether a node heads a level: it holds children, or it was declared a heading. A
+// declared heading heads its level whether or not anything is filed under it.
+func heads(node Node) bool { return len(node.Children) > 0 || node.Item.Heading }
+
+// sortSiblings orders one level in place: the nodes that head it first by title, then the rest
+// most-recently-updated first. Headings are landmarks, so a head sorts by the one field a rename
+// changes rather than drifting every time a row beneath it is touched. Ties keep log order.
 func sortSiblings(nodes []Node) {
 	sort.SliceStable(nodes, func(left, right int) bool {
 		a, b := nodes[left], nodes[right]
-		isParent := len(a.Children) > 0
-		if isParent != (len(b.Children) > 0) {
-			return isParent
+		isHead := heads(a)
+		if isHead != heads(b) {
+			return isHead
 		}
-		if isParent {
+		if isHead {
 			return compareTitles(a.Item.Title, b.Item.Title) < 0
 		}
 		return a.Item.Updated > b.Item.Updated
@@ -140,11 +144,12 @@ const UnassignedTitle = "(unassigned)"
 //
 // Leaf-ness is read off the nodes given rather than off the log, so a parent filtered down to no
 // children renders as a leaf and joins the bucket alongside the others. Call this after any
-// filtering, so the bucket follows whatever is in force.
+// filtering, so the bucket follows whatever is in force. An item declared a heading is never
+// gathered, empty or not: the inbox is where unfiled work waits, and a shelf is not work.
 func Bucket(nodes []Node) []Node {
 	parents, leaves := []Node{}, []Node{}
 	for _, current := range nodes {
-		if len(current.Children) == 0 {
+		if !heads(current) {
 			leaves = append(leaves, current)
 			continue
 		}

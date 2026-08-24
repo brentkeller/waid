@@ -519,12 +519,12 @@ func indexOfPrefix(lines []string, prefix string) int {
 // it and --headings is what brings it back.
 func TestLoopsHidesAnEmptyHeadingUntilTheFlag(t *testing.T) {
 	home := loopsHome(t)
-	shelf := addItem(t, home, "Port rewrite", "--heading")
+	addItem(t, home, "Port rewrite", "--heading")
 	proj := addItem(t, home, "Search rewrite")
 	task := addItem(t, home, "Reindex script", "-p", "Search rewrite")
 
 	assertOutline(t, loopsOutline(t, home, quiet), "0 "+proj, "1 "+task)
-	assertOutline(t, loopsOutline(t, home, quiet, "--headings"), "0 "+shelf, "0 "+proj, "1 "+task)
+	assertOutline(t, loopsOutline(t, home, quiet, "--headings"), "0 "+shelfLabel, "0 "+proj, "1 "+task)
 }
 
 // The drop runs before bucketing, so a level whose only head was an empty heading is a level of
@@ -532,11 +532,36 @@ func TestLoopsHidesAnEmptyHeadingUntilTheFlag(t *testing.T) {
 // which is what puts the leaves in a bucket.
 func TestLoopsBucketsTheLevelAnEmptyHeadingHeads(t *testing.T) {
 	home := loopsHome(t)
-	shelf := addItem(t, home, "Port rewrite", "--heading")
+	addItem(t, home, "Port rewrite", "--heading")
 	loose := addItem(t, home, "Book flights")
 
 	assertOutline(t, loopsOutline(t, home, quiet), "0 "+loose)
-	assertOutline(t, loopsOutline(t, home, quiet, "--headings"), "0 "+shelf, "0 (unassigned)", "1 "+loose)
+	assertOutline(t, loopsOutline(t, home, quiet, "--headings"), "0 "+shelfLabel, "0 (unassigned)", "1 "+loose)
+}
+
+// loops renders through the same TreeLines as list, so the reveal draws an empty heading as a
+// heading line — the title alone — rather than as a row carrying an id, a status and an age (§4).
+func TestLoopsDrawsAnEmptyHeadingAsAHeadingLine(t *testing.T) {
+	home := loopsHome(t)
+	shelf := addItem(t, home, "Port rewrite", "--heading")
+	proj := addItem(t, home, "Search rewrite", "--heading")
+	addItem(t, home, "Reindex script", "-p", "Search rewrite")
+
+	run := runLoops(t, home, quiet, "--headings")
+	if run.code != cli.ExitOK {
+		t.Fatalf("loops exited %d: %s", run.code, run.err)
+	}
+
+	lines := strings.Split(run.out, "\n")
+	if got := strings.TrimSpace(lineContaining(t, lines, "Port rewrite")); got != "Port rewrite" {
+		t.Errorf("the empty heading draws %q, want the title alone:\n%s", got, run.out)
+	}
+	if holding := lineContaining(t, lines, "Search rewrite"); !strings.Contains(holding, proj) {
+		t.Errorf("a heading holding work lost the columns of its row: %q", holding)
+	}
+	if strings.Contains(run.out, shelf) {
+		t.Errorf("the empty heading still carries its id:\n%s", run.out)
+	}
 }
 
 // loops flattens its rendered forest into Items, so the flag reaches --json as well as the text.

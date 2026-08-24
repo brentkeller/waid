@@ -714,6 +714,59 @@ func TestLoopsBadgeCountsWhatAHeadingHolds(t *testing.T) {
 	}
 }
 
+// An empty heading is a landmark rather than work, so it draws as a heading line — its title and
+// `0 open`, with the marker column blank since there is nothing folded under it to open — rather
+// than as an item row carrying an id, a status and an age (§4).
+func TestLoopsDrawsAnEmptyHeadingAsAHeadingLine(t *testing.T) {
+	revealed, _ := press(t, looped(t, 140, loopsWithShelf()), "S")
+	view := plain(revealed.View())
+
+	shelf := lineFor(t, view, shelfTitle)
+	if got, want := strings.Join(strings.Fields(shelf), " "), shelfTitle+" 0 open"; got != want {
+		t.Errorf("the empty heading draws %q, want %q", got, want)
+	}
+	if strings.ContainsAny(shelf, foldOpen+foldClosed) {
+		t.Errorf("the empty heading carries a fold marker: %q", shelf)
+	}
+
+	// A heading holding work is a fold like any other: its marker says so, and its count is what it
+	// holds rather than zero.
+	holding := lineFor(t, view, "Localized notifications")
+	if !strings.Contains(holding, foldOpen) || !strings.Contains(holding, "2 open") {
+		t.Errorf("a heading holding work lost its marker or its count: %q", holding)
+	}
+}
+
+// The heading line is still an item's row: the cursor comes to rest on it as it does on every other
+// Loops row, and the fold keys are inert there because it holds nothing to open or close (§4, §7).
+func TestLoopsCursorRestsOnAnEmptyHeading(t *testing.T) {
+	m, _ := press(t, looped(t, 140, loopsWithShelf()), "S")
+
+	for range len(m.loopsVisible()) {
+		if selectedTitle(t, m) == shelfTitle {
+			break
+		}
+		m, _ = press(t, m, "j")
+	}
+	if got := selectedTitle(t, m); got != shelfTitle {
+		t.Fatalf("no walk down the list reached the empty heading, stopped on %q", got)
+	}
+	if item, ok := m.loopsTree(140).SelectedItem(); !ok || item.Id != "prtw" {
+		t.Fatalf("the cursor rests on %+v, want the item behind the empty heading", item)
+	}
+
+	before := plain(m.View())
+	for _, k := range []string{"enter", "h", "l"} {
+		next, _ := press(t, m, k)
+		if got := plain(next.View()); got != before {
+			t.Errorf("%s changed the list from a row with nothing folded under it:\n%s", k, got)
+		}
+		if got := selectedTitle(t, next); got != shelfTitle {
+			t.Errorf("%s moved the cursor off the empty heading onto %q", k, got)
+		}
+	}
+}
+
 // The toggle is a switch of its own rather than a fifth status, so the header draws it apart from
 // the segments behind the rule the tab bar divides its zones with, spelled the way a segment is
 // (§6.1).

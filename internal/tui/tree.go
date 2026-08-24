@@ -63,8 +63,10 @@ type Row[T any] struct {
 	at     int
 	node   bool
 
-	// plain suppresses the fold marker on a row that heads nothing. The move picker's top-level row
-	// is a destination rather than a branch, and a closed marker beside it would read as one.
+	// plain draws a row as a heading line with the marker column left blank, for a row that heads a
+	// level without holding anything visible: the move picker's top-level row is a destination
+	// rather than a branch, and an empty heading is a landmark over work rather than work of its
+	// own. A closed marker beside either would offer a fold that is not there.
 	plain bool
 }
 
@@ -462,8 +464,10 @@ func (t Tree[T]) Lines(width int) []Line {
 	for i, row := range rows {
 		focused := i == cursor
 		// A row holding anything below it is drawn as a fold whether or not it is an item: the
-		// marker and the count are what say a branch is there, and Loops' folds are items (§4).
-		if row.node && !row.HasKids {
+		// marker and the count are what say a branch is there, and Loops' folds are items (§4). A
+		// plain row is a heading line without the marker, so it is drawn as one though it heads
+		// nothing.
+		if row.node && !row.HasKids && !row.plain {
 			lines = append(lines, Line{Text: t.itemLine(row, width, focused), Focused: focused})
 			continue
 		}

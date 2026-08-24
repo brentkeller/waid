@@ -170,10 +170,12 @@ func treeLines(roots []tree.Node, now time.Time) []string {
 }
 
 // TreeLines renders one node and everything under it, a level of indent per generation. A synthetic
-// node is a heading rather than a row: it holds no id, status or age to put in the columns.
+// node is a heading rather than a row: it holds no id, status or age to put in the columns. A
+// heading holding nothing visible draws the same way, being a landmark over work rather than work
+// (§4).
 func TreeLines(node tree.Node, now time.Time, depth int) []string {
 	lines := []string{indentFor(depth) + node.Item.Title}
-	if !node.Synthetic {
+	if !node.Synthetic && !tree.EmptyHeading(node) {
 		lines[0] = ItemLine(node.Item, now, depth)
 	}
 	for _, child := range node.Children {

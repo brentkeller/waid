@@ -245,7 +245,7 @@ func DropEmptyHeadings(nodes []Node) []Node {
 	kept := []Node{}
 	for _, current := range nodes {
 		current.Children = DropEmptyHeadings(current.Children)
-		if current.Item.Heading && len(current.Children) == 0 {
+		if EmptyHeading(current) {
 			continue
 		}
 		kept = append(kept, current)
@@ -253,6 +253,13 @@ func DropEmptyHeadings(nodes []Node) []Node {
 	sortSiblings(kept)
 	return kept
 }
+
+// EmptyHeading reports whether a node is a heading holding no visible children: a shelf with
+// nothing on it. Emptiness is read off the nodes given rather than off the log, so a heading whose
+// work a gate or a query took away is empty in that view. A view that keeps such a node draws it as
+// a heading line rather than as a row of its own columns, since a landmark over no work has no id,
+// status or age worth a column.
+func EmptyHeading(node Node) bool { return node.Item.Heading && len(node.Children) == 0 }
 
 // Subtree narrows a forest to the one node carrying id, together with everything beneath it. The
 // ancestors above it and the branches beside it are dropped: naming a heading asks what it holds,

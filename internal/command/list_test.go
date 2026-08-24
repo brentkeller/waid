@@ -208,9 +208,14 @@ func TestListOriginTakesAWholePathAndComposes(t *testing.T) {
 	assertIds(t, waiting.ids(), ids["copy"])
 }
 
+// shelfLabel is what an outline reads off a revealed empty heading: it draws as a heading line, so
+// the label is the first word of its title rather than the id an item row would lead with.
+const shelfLabel = "Port"
+
 // outline reduces the rendered tree to one "<depth> <label>" per row — an id for a real item, the
-// title for the synthetic bucket — so a test states the nesting it expects rather than matching
-// against columns whose widths are not what is under test.
+// first word of the title for a row drawn as a heading line, which is the synthetic bucket and any
+// heading holding nothing — so a test states the nesting it expects rather than matching against
+// columns whose widths are not what is under test.
 func outline(t *testing.T, home string, args ...string) []string {
 	t.Helper()
 
@@ -364,13 +369,13 @@ func TestListRowsCarryTheirColumns(t *testing.T) {
 // across two axes is what the toggle exists to avoid.
 func TestListHidesAnEmptyHeadingUntilTheFlag(t *testing.T) {
 	home := makeHome(t)
-	shelf := addItem(t, home, "Port rewrite", "--heading")
+	addItem(t, home, "Port rewrite", "--heading")
 	proj := addItem(t, home, "Search rewrite")
 	task := addItem(t, home, "Reindex script", "-p", "Search rewrite")
 
 	assertOutline(t, outline(t, home), "0 "+proj, "1 "+task)
 	assertOutline(t, outline(t, home, "--all"), "0 "+proj, "1 "+task)
-	assertOutline(t, outline(t, home, "--headings"), "0 "+shelf, "0 "+proj, "1 "+task)
+	assertOutline(t, outline(t, home, "--headings"), "0 "+shelfLabel, "0 "+proj, "1 "+task)
 }
 
 // The drop runs before bucketing, so a level whose only head was an empty heading is a level of
@@ -378,11 +383,38 @@ func TestListHidesAnEmptyHeadingUntilTheFlag(t *testing.T) {
 // which is what puts the leaves in a bucket.
 func TestListBucketsTheLevelAnEmptyHeadingHeads(t *testing.T) {
 	home := makeHome(t)
-	shelf := addItem(t, home, "Port rewrite", "--heading")
+	addItem(t, home, "Port rewrite", "--heading")
 	loose := addItem(t, home, "Book flights")
 
 	assertOutline(t, outline(t, home), "0 "+loose)
-	assertOutline(t, outline(t, home, "--headings"), "0 "+shelf, "0 (unassigned)", "1 "+loose)
+	assertOutline(t, outline(t, home, "--headings"), "0 "+shelfLabel, "0 (unassigned)", "1 "+loose)
+}
+
+// An empty heading is a landmark rather than work, so the reveal draws it as a heading line — the
+// title alone, the way the synthetic bucket is drawn — rather than as a row carrying an id, a
+// status and an age. A heading holding work keeps the row it has always had (§4).
+func TestListDrawsAnEmptyHeadingAsAHeadingLine(t *testing.T) {
+	home := makeHome(t)
+	shelf := addItem(t, home, "Port rewrite", "--heading")
+	proj := addItem(t, home, "Search rewrite", "--heading")
+	addItem(t, home, "Reindex script", "-p", "Search rewrite")
+
+	run := waid(t, home, "list", "--headings")
+	if run.code != cli.ExitOK {
+		t.Fatalf("list exited %d: %s", run.code, run.err)
+	}
+
+	line := lineHolding(run.out, "Port rewrite")
+	if got := strings.TrimSpace(line); got != "Port rewrite" {
+		t.Errorf("the empty heading draws %q, want the title alone:\n%s", got, run.out)
+	}
+	if strings.Contains(line, shelf) {
+		t.Errorf("the empty heading still carries its id: %q", line)
+	}
+
+	if holding := lineHolding(run.out, "Search rewrite"); !strings.Contains(holding, proj) {
+		t.Errorf("a heading holding work lost the columns of its row: %q", holding)
+	}
 }
 
 // list selects Items from the log with its own filters and holds the forest beside them, so the

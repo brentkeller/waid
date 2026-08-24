@@ -268,7 +268,8 @@ func itemsIn(nodes []tree.Node) []events.Item {
 }
 
 // leavesIn are the nodes of a forest drawn as item rows rather than as folds, which is the set the
-// row columns are measured across: a fold draws its title and its count and none of the columns.
+// row columns are measured across: a fold draws its title and its count and none of the columns, and
+// so does a heading holding nothing.
 func leavesIn(nodes []tree.Node) []events.Item {
 	var leaves []events.Item
 	for _, node := range nodes {
@@ -276,7 +277,7 @@ func leavesIn(nodes []tree.Node) []events.Item {
 			leaves = append(leaves, leavesIn(node.Children)...)
 			continue
 		}
-		if !node.Synthetic {
+		if !node.Synthetic && !node.Item.Heading {
 			leaves = append(leaves, node.Item)
 		}
 	}
@@ -341,28 +342,32 @@ func loopsRows(nodes []tree.Node, parent string, depth int) []Row[events.Item] {
 			Title: node.Item.Title,
 			Meta:  foldMeta(node),
 			node:  !node.Synthetic,
+			// A heading holding nothing is drawn as a heading line all the same, and a marker beside
+			// it would offer a fold that is not there (§4).
+			plain: tree.EmptyHeading(node),
 		})
 		rows = append(rows, loopsRows(node.Children, key, depth+1)...)
 	}
 	return rows
 }
 
-// foldMeta is the count a fold carries: how many open loops sit beneath it. A row with nothing under
-// it is drawn as an item rather than as a fold, so it carries none.
+// foldMeta is the count a fold carries: how many open loops sit beneath it. An ordinary row with
+// nothing under it is drawn as an item rather than as a fold, so it carries none; a heading is drawn
+// as a heading line either way, and says `0 open` when it holds nothing (§4).
 func foldMeta(node tree.Node) string {
-	if len(node.Children) == 0 {
+	if len(node.Children) == 0 && !node.Item.Heading {
 		return ""
 	}
 	return fmt.Sprintf("%d open", openUnder(node))
 }
 
-// openUnder is the work a fold holds: the still-owed rows beneath it that are leaves. A parent is a
+// openUnder is the work a fold holds: the still-owed rows beneath it that are leaves. A heading is a
 // landmark over work rather than work of its own — it cannot be closed while anything under it is
 // open (§5) — so counting the headings as well would count the same loop again at every level it
-// hangs under.
+// hangs under, and an empty one would be counted as work nobody owes.
 func openUnder(node tree.Node) int {
 	if len(node.Children) == 0 {
-		if node.Synthetic || node.Item.Status == events.StatusDone {
+		if node.Synthetic || node.Item.Heading || node.Item.Status == events.StatusDone {
 			return 0
 		}
 		return 1

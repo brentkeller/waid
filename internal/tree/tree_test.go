@@ -353,6 +353,24 @@ func TestBucketLeavesATopLevelOfOnlyLeavesAlone(t *testing.T) {
 	}
 }
 
+// BucketBelow buckets what Bucket does one level down: the roots keep their loose leaves, and every
+// level under them gathers its own.
+func TestBucketBelowLeavesTheRootsAsTheyAre(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("head", "Parent", ""),
+		addLine("subh", "Subproject", "head"),
+		addLine("gkid", "Under the subproject", "subh"),
+		addLine("kid1", "Loose under the parent", "head"),
+		addLine("loos", "Loose root", ""),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"head", "  subh", "    gkid", "  (unassigned)", "    kid1", "loos"}, "\n")
+	if got := shape(BucketBelow(roots)); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestBucketIsNeverAnItem(t *testing.T) {
 	state := events.Fold([]string{
 		addLine("head", "Parent", ""),

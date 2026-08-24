@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/brentkeller/waid/internal/events"
+	"github.com/brentkeller/waid/internal/tree"
 )
 
 // Moving an item is navigation rather than typing: the tree is already on screen, and making someone
@@ -51,17 +52,24 @@ func (m Model) startMove(t Tree[events.Item]) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	m.loops.moving = moveModel{subject: item.Id, expanded: m.moveFolds(item.Parent)}
+	// The subject is set first, since the folds and the cursor are read off the tree the mode draws,
+	// and that tree is the one the subject has already been lifted out of.
+	m.loops.moving = moveModel{subject: item.Id}
+	m.loops.moving.expanded = m.moveFolds(item.Parent)
 	m.loops.moving.cursor = m.moveCursor(item.Parent)
 	return m, nil, true
 }
 
-// moveFolds are the folds the picker opens on: the path down to the item's current parent, and
-// nothing else. Any tree worth building then fits one screen as roots-plus-one-branch, which is what
-// keeps navigation cheap enough that no search is needed. The parent itself stays closed — it is
-// where the cursor lands, and what it already holds is not the move's business.
+// moveFolds are the folds the picker opens on: every root, so the two levels a destination is
+// usually picked from are both on screen, plus the path down to the item's current parent where it
+// sits deeper than that. Anything below stays folded, which keeps a tree worth building to one
+// screen without a search. The parent itself stays closed — it is where the cursor lands, and what
+// it already holds is not the move's business.
 func (m Model) moveFolds(parent *string) map[string]bool {
 	open := map[string]bool{}
+	for _, root := range m.moveForest() {
+		open[root.Item.Id] = true
+	}
 	if parent == nil {
 		return open
 	}
@@ -100,12 +108,20 @@ func (m Model) moveCandidates() []events.Item {
 	return kept
 }
 
+// moveForest is the tree the destinations are read off: the list's forest over what is left, except
+// that the roots are never gathered into the (unassigned) bucket. A root with nothing under it is a
+// destination in its own right — it is where an item goes to sit at the top level beside the other
+// roots — and a bucket takes no drop, so filing them into one would put them out of reach (§7.1).
+func (m Model) moveForest() []tree.Node {
+	return tree.BucketBelow(m.shapedForest(m.moveCandidates()))
+}
+
 // moveTree is the destinations on offer: the tree with the lifted subtree gone, and the synthetic
-// top-level row pinned above it. Folds are closed by default, which is the one way it differs from
-// the list it stands in for.
+// top-level row pinned above it. Folds are closed by default rather than open, which is the other
+// way it differs from the list it stands in for.
 func (m Model) moveTree(width int) Tree[events.Item] {
 	now := m.now()
-	roots := m.forestOf(m.moveCandidates())
+	roots := m.moveForest()
 	columns := loopsColumnsFor(leavesIn(roots), now)
 
 	top := Row[events.Item]{Depth: 0, Key: moveTopKey, Title: moveTopTitle, plain: true}

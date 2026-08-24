@@ -165,8 +165,9 @@ Three tabs, switched with `1` `2` `3` or `tab` / `shift-tab`:
 under it out of the tree, leaving the tree as it will be after the move: `j` `k` walk it, `h` / `l`
 fold and unfold, `enter` drops the item on the row under the cursor and `esc` abandons the move. The
 picker opens on the item's current parent, with a `── top level ──` row above the roots for an item
-that belongs under nothing. Since the item's own subtree has left the tree, there is no destination
-on screen the move could be refused for.
+that belongs under nothing. It opens with the roots and the rows filed directly under them on screen
+and anything deeper folded away. Since the item's own subtree has left the tree, there is no
+destination on screen the move could be refused for.
 
 Keys that work everywhere: `j` `k` to move, `g` / `G` for first and last, `enter` to fold and
 `h` / `l` — or `←` / `→` — to collapse and expand the fold under the cursor, `/` to

@@ -164,6 +164,18 @@ func Bucket(nodes []Node) []Node {
 	})
 }
 
+// BucketBelow buckets every level under the roots, leaving the top level as it stands. The move
+// picker draws the tree that way: a root with nothing under it is where an item goes to sit beside
+// the other roots, and the bucket is a rendering artifact nothing can be filed into.
+func BucketBelow(nodes []Node) []Node {
+	bucketed := make([]Node, 0, len(nodes))
+	for _, current := range nodes {
+		current.Children = Bucket(current.Children)
+		bucketed = append(bucketed, current)
+	}
+	return bucketed
+}
+
 // Filter narrows a forest to the nodes matching keep, together with the ancestors that lead to
 // them. A match keeps its whole subtree, since filtering on a heading's name asks for what is under
 // it; a node that does not match is kept only as the path to a descendant that did, and so brings

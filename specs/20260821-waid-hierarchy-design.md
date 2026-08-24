@@ -274,13 +274,17 @@ The rest follows from that:
   forbid it.
 - **`(unassigned)` headings are not targets**, as everywhere else. Dropping "into unassigned" is
   dropping onto that level's parent, which is already a row.
+- **The roots are never gathered into `(unassigned)`** in move mode, though every level below them
+  still is. A loose root is where an item goes to sit beside the other roots, and a bucket takes no
+  drop, so filing them into one would put them out of reach.
 - **A synthetic `── top level ──` row** is pinned above the tree, in move mode only. The roots are
   items, so without it there is no row meaning "no parent" — and a dedicated key would be one more
   thing to know for a destination the eye can already find.
-- **Folds start collapsed** except along the path to the item's current parent. Any tree worth
-  building then fits one screen as roots-plus-one-branch, which is what keeps navigation cheap enough
-  that no search is needed. `h`/`l` expand along the way; `enter` cannot toggle here because it
-  commits.
+- **Folds start collapsed below the first two levels**, and open along the path to the item's current
+  parent where it sits deeper than that. The roots and the rows filed directly under them are the two
+  levels a destination is usually picked from, and everything under them stays folded, which keeps a
+  tree worth building to one screen and navigation cheap enough that no search is needed. `h`/`l`
+  expand along the way; `enter` cannot toggle here because it commits.
 - **The cursor opens on the item's current parent**, so an immediate `enter` is a no-op rather than a
   surprise, and a nudge to a sibling project is one keystroke.
 - **Undo** pushes an inverse `ParentEvent` carrying the prior parent, as `undoRefile` does now.

@@ -105,24 +105,58 @@ func TestMoveOffersNeitherTheItemNorItsDescendants(t *testing.T) {
 	}
 }
 
-// Folds open collapsed but for the path down to the item's current parent, which is what keeps a
-// tree worth building to roots-plus-one-branch.
-func TestMoveOpensCollapsedAlongThePathToTheCurrentParent(t *testing.T) {
+// The picker opens on its first two levels: every root is expanded, so the roots and the rows filed
+// directly under them are both there to point at, and what hangs deeper stays folded.
+func TestMoveOpensOnTheFirstTwoLevels(t *testing.T) {
 	m, _ := filing(t)
 
-	// Two rows down is 4h2k, whose parent nktt hangs under vq2n.
-	m, _ = press(t, m, "j", "j", "m")
+	// G is the last row of the list, which the fixture leaves at the top level, so the branch beside
+	// it is left whole.
+	m, _ = press(t, m, "G", "m")
 
 	view := plain(m.View())
 	if !strings.Contains(lineFor(t, view, branchTitle), foldOpen) {
-		t.Errorf("the ancestor of the item's parent is closed:\n%s", view)
+		t.Errorf("a root of the tree opened closed:\n%s", view)
 	}
 	if !strings.Contains(view, workersTitle) {
+		t.Errorf("a row filed under a root is not on screen:\n%s", view)
+	}
+	if strings.Contains(view, blockedTitle) {
+		t.Errorf("a row three levels down opened with the picker:\n%s", view)
+	}
+}
+
+// A parent deeper than those two levels is still on screen: the path down to it opens with the mode,
+// which is what leaves the cursor on the item's current parent wherever it sits.
+func TestMoveOpensAlongThePathToADeepCurrentParent(t *testing.T) {
+	// A chain four deep, so the parent of the deepest row sits a level below what opens by default.
+	m := looped(t, 140, loopsChain(4))
+
+	m, _ = press(t, m, "G", "m")
+
+	if view := plain(m.View()); !strings.Contains(view, "level 2") {
 		t.Errorf("the item's parent is not on screen:\n%s", view)
 	}
-	// The fixture's loose top-level rows were gathered into a bucket, which stays closed.
-	if strings.Contains(view, spikeTitle) {
-		t.Errorf("a fold off the path to the parent opened:\n%s", view)
+	if got := focused(t, m); got != "n002" {
+		t.Errorf("the cursor opened on %q, want the item's current parent", got)
+	}
+}
+
+// A root with nothing under it is a destination in its own right, so the roots are never gathered
+// into the bucket: an item is filed beside them, and a bucket takes no drop.
+func TestMoveOffersTheLooseRootsAsRowsOfTheirOwn(t *testing.T) {
+	m, _ := filing(t)
+
+	m, _ = press(t, m, "j", "j", "m")
+
+	view := plain(m.View())
+	if !strings.Contains(view, spikeTitle) {
+		t.Errorf("a loose root is not offered as a row of its own:\n%s", view)
+	}
+	for _, row := range m.moveTree(m.viewWidth()).allRows() {
+		if row.Depth == 0 && strings.HasSuffix(row.Key, tree.UnassignedTitle) {
+			t.Errorf("the picker gathered its roots into a bucket: %v", destinations(m))
+		}
 	}
 }
 
@@ -209,9 +243,11 @@ func TestMoveDropsOntoALeafAndMakesItAParent(t *testing.T) {
 func TestMoveRefusesTheUnassignedBucket(t *testing.T) {
 	m, path := filing(t)
 
-	m, _ = press(t, m, "j", "j", "m", "G")
+	// Moving the fixture's last row leaves the branch whole, so the bucket under it is the one level
+	// still holding parents and leaves side by side: three rows down from the top-level row.
+	m, _ = press(t, m, "G", "m", "j", "j", "j")
 	if got := focused(t, m); !strings.HasSuffix(got, tree.UnassignedTitle) {
-		t.Fatalf("the cursor is on %q, want the top level's bucket", got)
+		t.Fatalf("the cursor is on %q, want the branch's bucket", got)
 	}
 
 	m, _ = press(t, m, "enter")
@@ -230,13 +266,14 @@ func TestMoveRefusesTheUnassignedBucket(t *testing.T) {
 func TestMoveExpandsAndCollapsesWithoutCommitting(t *testing.T) {
 	m, path := filing(t)
 
-	m, _ = press(t, m, "j", "j", "m", "G", "l")
-	if view := plain(m.View()); !strings.Contains(view, spikeTitle) {
+	// Two rows down from the top-level row is nktt, which the picker opened closed over 4h2k.
+	m, _ = press(t, m, "G", "m", "j", "j", "l")
+	if view := plain(m.View()); !strings.Contains(view, blockedTitle) {
 		t.Errorf("l did not open the fold under the cursor:\n%s", view)
 	}
 
 	m, _ = press(t, m, "h")
-	if view := plain(m.View()); strings.Contains(view, spikeTitle) {
+	if view := plain(m.View()); strings.Contains(view, blockedTitle) {
 		t.Errorf("h did not close the fold under the cursor:\n%s", view)
 	}
 	assertLog(t, path, nil)

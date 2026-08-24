@@ -203,16 +203,23 @@ func (m Model) loopsForest() []tree.Node {
 }
 
 // forestOf is that shaping over whatever set of items it is handed, so the move picker draws the
-// tree the list draws — the same gates, the same ordering, the same bucketing — over what is left
-// once the subtree being moved has been lifted out of it (§7.1).
+// tree the list draws — the same gates, the same ordering — over what is left once the subtree being
+// moved has been lifted out of it (§7.1).
 func (m Model) forestOf(items []events.Item) []tree.Node {
+	return tree.Bucket(m.shapedForest(items))
+}
+
+// shapedForest is that shaping short of the bucketing, which is the one thing the two trees do
+// differently: the picker buckets a level lower, since its top level holds destinations rather than
+// headings (§7.1).
+func (m Model) shapedForest(items []events.Item) []tree.Node {
 	roots, _ := tree.Build(events.State{Items: items})
 	roots = tree.Prune(roots, m.matchesStatus)
 
 	if query := strings.ToLower(m.filter); query != "" {
 		roots = tree.Filter(roots, func(item events.Item) bool { return matchesItem(item, query) })
 	}
-	return tree.Bucket(roots)
+	return roots
 }
 
 // loopsVisible are the items the list is showing, read off the tree rather than filtered a second

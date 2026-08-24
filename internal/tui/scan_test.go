@@ -303,6 +303,36 @@ func TestScanFoldsAProject(t *testing.T) {
 	}
 }
 
+// h and l fold the tree here the way they do on Loops, arrows included: the tabs draw one component,
+// so the keys that walk it are the same wherever it is drawn.
+func TestScanFoldsWithHAndL(t *testing.T) {
+	m := scanned(t, 140, scanFixture())
+
+	// The cursor opens inside an expanded project, so h closes the fold it hangs under.
+	m, _ = press(t, m, "h")
+	if view := plain(m.View()); strings.Contains(view, "#6886") {
+		t.Errorf("h left the folded project's signals on screen:\n%s", view)
+	}
+	if !m.scanTree(m.viewWidth()).OnHeading() {
+		t.Fatal("h did not leave the cursor on the fold it closed")
+	}
+
+	m, _ = press(t, m, "l")
+	if view := plain(m.View()); !strings.Contains(view, "#6886") {
+		t.Errorf("l did not reopen the fold under the cursor:\n%s", view)
+	}
+
+	m, _ = press(t, m, "left")
+	if view := plain(m.View()); strings.Contains(view, "#6886") {
+		t.Errorf("← did not close the fold the cursor was in:\n%s", view)
+	}
+
+	m, _ = press(t, m, "right")
+	if view := plain(m.View()); !strings.Contains(view, "#6886") {
+		t.Errorf("→ did not reopen the fold under the cursor:\n%s", view)
+	}
+}
+
 // The typed query narrows the list the same way the kind row does, and over the same loaded state.
 func TestScanQueryFiltersTheList(t *testing.T) {
 	m := scanned(t, 140, scanFixture())

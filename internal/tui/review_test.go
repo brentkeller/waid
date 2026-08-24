@@ -121,6 +121,33 @@ func TestReviewCollapsesProjectsWithCountsOnTheFold(t *testing.T) {
 	}
 }
 
+// l and h fold the tree here the way they do on Loops, arrows included: the tabs draw one component,
+// so the keys that walk it are the same wherever it is drawn.
+func TestReviewFoldsWithHAndL(t *testing.T) {
+	const session = "Wire -i into the CLI"
+
+	// The projects open closed, so the cursor is on a fold and l is what opens it.
+	m, _ := press(t, reviewed(t, 140, reviewFixture()), "j", "l")
+	if view := plain(m.View()); !strings.Contains(view, session) {
+		t.Errorf("l did not open the fold under the cursor:\n%s", view)
+	}
+
+	m, _ = press(t, m, "h")
+	if view := plain(m.View()); strings.Contains(view, session) {
+		t.Errorf("h did not close the fold the cursor was in:\n%s", view)
+	}
+
+	m, _ = press(t, m, "right")
+	if view := plain(m.View()); !strings.Contains(view, session) {
+		t.Errorf("→ did not open the fold under the cursor:\n%s", view)
+	}
+
+	m, _ = press(t, m, "left")
+	if view := plain(m.View()); strings.Contains(view, session) {
+		t.Errorf("← did not close the fold the cursor was in:\n%s", view)
+	}
+}
+
 // enter opens a fold, and the session rows carry their start time, their title and their prompt
 // count, oldest first.
 func TestReviewExpandsAProjectIntoItsSessions(t *testing.T) {

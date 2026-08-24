@@ -266,6 +266,10 @@ func (m Model) reviewKey(pressed string) (Model, tea.Cmd, bool) {
 		tree.Last()
 	case "enter":
 		tree.Toggle()
+	case "h", "left":
+		tree.Collapse()
+	case "l", "right":
+		tree.Expand()
 	case " ":
 		m.review.preview = !m.review.preview
 		m, cmd := m.previewSync(tree)

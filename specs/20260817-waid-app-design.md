@@ -185,6 +185,7 @@ Global, on every tab:
 | `j` `k` `↑` `↓` | Move the cursor, skipping headings |
 | `g` / `G` | First / last row |
 | `enter` | Expand or collapse the fold under the cursor |
+| `h` `l` `←` `→` | Collapse / expand the fold under the cursor |
 | `/` | Filter; `esc` clears |
 | `a` | Add an item, from any tab |
 | `r` | Refresh the current tab |

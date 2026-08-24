@@ -201,6 +201,10 @@ func (m Model) scanKey(pressed string) (Model, tea.Cmd, bool) {
 		tree.Last()
 	case "enter":
 		tree.Toggle()
+	case "h", "left":
+		tree.Collapse()
+	case "l", "right":
+		tree.Expand()
 	case "s":
 		m.scan.kind = nextScanKind(m.scan.kind)
 		m.scan.cursor = 0

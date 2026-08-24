@@ -443,3 +443,85 @@ func TestUpdateCarryingNoParentKeyLeavesItAlone(t *testing.T) {
 		t.Fatalf("parent = %v, want it left alone", parent)
 	}
 }
+
+// The heading flag is declared on the add line and read by presence, like every other field.
+func TestAddStoresTheHeadingItCarries(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"the area","heading":true}`,
+		`{"ts":"2026-08-14T18:01:00.000Z","ev":"add","id":"bbbb","title":"a task"}`,
+	})
+
+	if !state.Items[0].Heading {
+		t.Fatalf("the add carrying heading folded to an ordinary item")
+	}
+	if state.Items[1].Heading {
+		t.Fatalf("the add carrying no heading folded to a heading")
+	}
+}
+
+// The toggle writes the field in both directions, since an omitted key means "leave it alone".
+func TestUpdateWithAHeadingSetsItBothWays(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"the area"}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","heading":true}`,
+	})
+	if !state.Items[0].Heading {
+		t.Fatalf("heading = false, want it marked")
+	}
+
+	state = Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"the area","heading":true}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","heading":false}`,
+	})
+	if state.Items[0].Heading {
+		t.Fatalf("heading = true, want it unmarked")
+	}
+}
+
+// An update carrying no heading key leaves it alone, so a retitle cannot unmark a heading.
+func TestUpdateCarryingNoHeadingKeyLeavesItAlone(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"the area","heading":true}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"aaaa","title":"renamed"}`,
+	})
+
+	item := state.Items[0]
+	if !item.Heading {
+		t.Fatalf("the retitle unmarked the heading")
+	}
+	if item.Title != "renamed" {
+		t.Fatalf("title = %q, want renamed", item.Title)
+	}
+}
+
+// A value that is not a boolean is ignored rather than reported, the treatment parent, origin and
+// tags already get: only a failure that loses an event outright becomes a Problem.
+func TestHeadingIgnoresANonBooleanValue(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:00:00.000Z","ev":"add","id":"aaaa","title":"the area","heading":"yes"}`,
+		`{"ts":"2026-08-14T18:01:00.000Z","ev":"add","id":"bbbb","title":"a heading","heading":true}`,
+		`{"ts":"2026-08-15T18:00:00.000Z","ev":"update","id":"bbbb","heading":7}`,
+	})
+
+	if len(state.Problems) != 0 {
+		t.Fatalf("problems = %v, want none", reasons(state.Problems))
+	}
+	if state.Items[0].Heading {
+		t.Fatalf("a string heading marked the item")
+	}
+	if !state.Items[1].Heading {
+		t.Fatalf("a numeric heading unmarked the item, want it left alone")
+	}
+}
+
+// Nothing in the log carries the key today, so every line already written folds to Heading: false.
+func TestLinesWrittenBeforeHeadingsFoldToAnOrdinaryItem(t *testing.T) {
+	state := Fold([]string{
+		`{"ts":"2026-08-14T18:22:01.004Z","ev":"add","id":"k3f9","title":"Chart legend overflows","project":"C:\\dev\\dr","status":"open","session":"34782fc3","tags":["bug"]}`,
+		`{"ts":"2026-08-15T14:10:02.113Z","ev":"update","id":"k3f9","status":"waiting","waitingOn":"design review"}`,
+	})
+
+	if state.Items[0].Heading {
+		t.Fatalf("a line written before this field folded to a heading")
+	}
+}

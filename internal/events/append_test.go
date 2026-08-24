@@ -435,3 +435,55 @@ func TestEncodeAddEventCarriesItsParent(t *testing.T) {
 		t.Errorf("Encode\n got %s\nwant %s", got, want)
 	}
 }
+
+// A HeadingEvent always writes the field: an omitempty boolean could never say false, so a toggle
+// that dropped the key would silently leave the heading marked.
+func TestEncodeHeadingEventCarriesTheFlagBothWays(t *testing.T) {
+	tests := []struct {
+		event HeadingEvent
+		want  string
+	}{
+		{
+			event: HeadingEvent{Ts: "2026-08-24T12:00:00.000Z", Ev: "update", Id: "7k3m", Heading: true},
+			want:  `{"ts":"2026-08-24T12:00:00.000Z","ev":"update","id":"7k3m","heading":true}`,
+		},
+		{
+			event: HeadingEvent{Ts: "2026-08-24T12:00:00.000Z", Ev: "update", Id: "7k3m"},
+			want:  `{"ts":"2026-08-24T12:00:00.000Z","ev":"update","id":"7k3m","heading":false}`,
+		},
+	}
+
+	for _, test := range tests {
+		if got := encode(t, test.event); got != test.want {
+			t.Errorf("Encode wrote\n%s\nwant\n%s", got, test.want)
+		}
+	}
+}
+
+// An AddEvent that marks no heading omits the key, so every line already in the log re-encodes byte
+// for byte.
+func TestEncodeAddOmitsAnUnmarkedHeading(t *testing.T) {
+	project := `C:\dev\waid`
+	add := AddEvent{
+		Ts:     "2026-08-15T00:31:16.973Z",
+		Ev:     "add",
+		Id:     "sga9",
+		Title:  "Design template",
+		Status: StatusOpen,
+		Origin: &project,
+		Tags:   []string{"bug"},
+	}
+
+	want := `{"ts":"2026-08-15T00:31:16.973Z","ev":"add","id":"sga9","title":"Design template",` +
+		`"status":"open","origin":"C:\\dev\\waid","session":null,"tags":["bug"],"waitingOn":null}`
+	if got := encode(t, add); got != want {
+		t.Fatalf("Encode wrote\n%s\nwant\n%s", got, want)
+	}
+
+	add.Heading = true
+	want = `{"ts":"2026-08-15T00:31:16.973Z","ev":"add","id":"sga9","title":"Design template",` +
+		`"status":"open","origin":"C:\\dev\\waid","session":null,"tags":["bug"],"waitingOn":null,"heading":true}`
+	if got := encode(t, add); got != want {
+		t.Fatalf("Encode wrote\n%s\nwant\n%s", got, want)
+	}
+}

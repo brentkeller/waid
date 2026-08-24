@@ -73,6 +73,7 @@ func Fold(rawLines []string) State {
 				Notes:     []Note{},
 				Created:   ts,
 				Updated:   ts,
+				Heading:   derefOr(boolOf(record["heading"]), false),
 			}
 			order = append(order, *id)
 
@@ -172,6 +173,11 @@ func applyToItem(
 	if raw, present := record["tags"]; present {
 		item.Tags = strArray(raw)
 	}
+	if raw, present := record["heading"]; present {
+		if heading := boolOf(raw); heading != nil {
+			item.Heading = *heading
+		}
+	}
 	return true
 }
 
@@ -212,6 +218,15 @@ func str(value any) *string {
 		return nil
 	}
 	return &text
+}
+
+// boolOf narrows an untrusted value to a boolean, reporting anything else as absent.
+func boolOf(value any) *bool {
+	flag, ok := value.(bool)
+	if !ok {
+		return nil
+	}
+	return &flag
 }
 
 // strArray narrows an untrusted value to the strings it holds, dropping every other element.

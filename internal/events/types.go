@@ -51,6 +51,9 @@ type Item struct {
 	Created string `json:"created"`
 	// Updated is the ts of the most recent event touching the item.
 	Updated string `json:"updated"`
+	// Heading marks an item as a landmark over work rather than work of its own: it heads a level
+	// whether or not anything is filed under it, and is never gathered into (unassigned).
+	Heading bool `json:"heading"`
 }
 
 // WaidEvent is a line of events.jsonl as waid writes it. Lines read back from disk are untrusted
@@ -77,6 +80,8 @@ type AddEvent struct {
 	Session   *string  `json:"session"`
 	Tags      []string `json:"tags"`
 	WaitingOn *string  `json:"waitingOn"`
+	// Heading is omitted when false, so every line already in the log re-encodes byte for byte.
+	Heading bool `json:"heading,omitempty"`
 }
 
 // UpdateEvent patches the fields it carries, leaving the rest of the item alone. Nothing in this
@@ -101,6 +106,17 @@ type ParentEvent struct {
 	Ev     string  `json:"ev"`
 	Id     string  `json:"id"`
 	Parent *string `json:"parent"`
+}
+
+// HeadingEvent marks or unmarks an item as a heading, and is an update like any other — the fold
+// reads the same `update` line. It is a shape of its own for the reason ParentEvent is one:
+// UpdateEvent omits an absent field, so an omitempty boolean could never say false, and a retitle
+// that dropped the key would silently unmark a heading. The flag is always written.
+type HeadingEvent struct {
+	Ts      string `json:"ts"`
+	Ev      string `json:"ev"`
+	Id      string `json:"id"`
+	Heading bool   `json:"heading"`
 }
 
 // NoteEvent appends a note to an item.
@@ -142,6 +158,7 @@ type UndismissEvent struct {
 func (AddEvent) event()       {}
 func (UpdateEvent) event()    {}
 func (ParentEvent) event()    {}
+func (HeadingEvent) event()   {}
 func (NoteEvent) event()      {}
 func (CloseEvent) event()     {}
 func (ReopenEvent) event()    {}
@@ -151,6 +168,7 @@ func (UndismissEvent) event() {}
 func (e AddEvent) timestamp() string       { return e.Ts }
 func (e UpdateEvent) timestamp() string    { return e.Ts }
 func (e ParentEvent) timestamp() string    { return e.Ts }
+func (e HeadingEvent) timestamp() string   { return e.Ts }
 func (e NoteEvent) timestamp() string      { return e.Ts }
 func (e CloseEvent) timestamp() string     { return e.Ts }
 func (e ReopenEvent) timestamp() string    { return e.Ts }
@@ -160,6 +178,7 @@ func (e UndismissEvent) timestamp() string { return e.Ts }
 func (e AddEvent) stamp(ts string) WaidEvent       { e.Ts = firstTs(e.Ts, ts); return e }
 func (e UpdateEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }
 func (e ParentEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }
+func (e HeadingEvent) stamp(ts string) WaidEvent   { e.Ts = firstTs(e.Ts, ts); return e }
 func (e NoteEvent) stamp(ts string) WaidEvent      { e.Ts = firstTs(e.Ts, ts); return e }
 func (e CloseEvent) stamp(ts string) WaidEvent     { e.Ts = firstTs(e.Ts, ts); return e }
 func (e ReopenEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }

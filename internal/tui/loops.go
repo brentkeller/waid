@@ -167,11 +167,19 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 }
 
 // owed is everything the log still holds against the user, which is what `waid loops` means by an
-// open loop and what the tab's badge carries. The status row narrows the list without touching it: a
-// filter narrows the view and not the work.
+// open loop and what the tab's badge carries. The status row and the headings toggle narrow the list
+// without touching it: a filter narrows the view and not the work.
+//
+// It is counted off a tree rather than off the flat list so a heading with no open descendants is
+// left out — the badge is what is owed, and an empty shelf is owed nothing (§4). The gate keeps the
+// closed ancestors that lead down to open work, so what survived is filtered a second time to leave
+// them out of the count.
 func (m Model) owed() []events.Item {
+	roots, _ := tree.Build(events.State{Items: m.loops.items})
+	roots = tree.Prune(roots, func(item events.Item) bool { return item.Status != events.StatusDone })
+
 	var kept []events.Item
-	for _, item := range m.loops.items {
+	for _, item := range itemsIn(tree.DropEmptyHeadings(roots)) {
 		if item.Status != events.StatusDone {
 			kept = append(kept, item)
 		}

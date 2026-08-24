@@ -641,6 +641,79 @@ func TestLoopsBadgeHoldsStillWhileTheHeaderCountRises(t *testing.T) {
 	}
 }
 
+// The badge is what is owed and a shelf with nothing on it is owed nothing, so an empty heading is
+// left out of the count whatever the toggle says (§4).
+func TestLoopsBadgeLeavesOutAnEmptyHeading(t *testing.T) {
+	m := looped(t, 140, loopsWithShelf())
+
+	if got, want := m.counts[tabLoops], 6; got != want {
+		t.Errorf("the Loops badge is %d with the toggle off, want %d", got, want)
+	}
+
+	revealed, _ := press(t, m, "S")
+	if got, want := revealed.counts[tabLoops], 6; got != want {
+		t.Errorf("the Loops badge is %d with the toggle on, want %d", got, want)
+	}
+	if view := plain(revealed.View()); !strings.Contains(view, shelfTitle) {
+		t.Errorf("the badge was read off a list the toggle never revealed:\n%s", view)
+	}
+}
+
+// Emptiness is read in the view rather than off the flag: a heading over open work is owed along
+// with it, one holding nothing but done work or nothing but another shelf is owed nothing, and an
+// ordinary item is work however few children it has (§4).
+func TestLoopsBadgeCountsWhatAHeadingHolds(t *testing.T) {
+	item := func(id, title string, status events.Status, parent *string, heading bool) events.Item {
+		return events.Item{
+			Id: id, Title: title, Status: status, Parent: parent, Heading: heading,
+			Created: *stamp(13, 9, 0), Updated: *stamp(13, 9, 0),
+		}
+	}
+
+	cases := []struct {
+		name  string
+		items []events.Item
+		want  int
+	}{
+		{
+			name: "a heading over open work",
+			items: []events.Item{
+				item("shlf", "Port rewrite", events.StatusOpen, nil, true),
+				item("work", "Read the port design", events.StatusOpen, text("shlf"), false),
+			},
+			want: 2,
+		},
+		{
+			name:  "an ordinary item with no children",
+			items: []events.Item{item("lone", "Read the port design", events.StatusOpen, nil, false)},
+			want:  1,
+		},
+		{
+			name: "a heading over nothing but done work",
+			items: []events.Item{
+				item("shlf", "Port rewrite", events.StatusOpen, nil, true),
+				item("shut", "Already dealt with", events.StatusDone, text("shlf"), false),
+			},
+			want: 0,
+		},
+		{
+			name: "a heading over nothing but another empty heading",
+			items: []events.Item{
+				item("shlf", "Port rewrite", events.StatusOpen, nil, true),
+				item("innr", "The port itself", events.StatusOpen, text("shlf"), true),
+			},
+			want: 0,
+		},
+	}
+
+	for _, c := range cases {
+		m := looped(t, 140, loopsLoadedMsg{items: c.items, at: loopsNow})
+		if got := m.counts[tabLoops]; got != c.want {
+			t.Errorf("the Loops badge over %s is %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
 // The toggle is a switch of its own rather than a fifth status, so the header draws it apart from
 // the segments behind the rule the tab bar divides its zones with, spelled the way a segment is
 // (§6.1).

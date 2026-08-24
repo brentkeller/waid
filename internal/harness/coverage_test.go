@@ -11,7 +11,7 @@ import (
 
 // writeCommands are the commands that append to events.jsonl. They are judged by the log they leave
 // behind rather than by what they print, since the log is the artifact that outlives the run.
-var writeCommands = []string{"add", "done", "move", "reopen", "note", "dismiss", "promote", "undismiss"}
+var writeCommands = []string{"add", "done", "move", "heading", "reopen", "note", "dismiss", "promote", "undismiss"}
 
 // undispatchable are the commands this package cannot run. `ui` is a long-running terminal app, so
 // there is no one-shot invocation to capture: with the piped stdio a spawned run gets, the only

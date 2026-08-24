@@ -15,6 +15,7 @@ Usage: waid <command> [options]
   waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>]
   waid done <id>...                   Close one or more; waid reopen <id>
   waid move <id> [-p <parent>|--top]  Refile an item under a parent, or to the top level
+  waid heading <id> [--off]           Mark an item a heading, or unmark it
   waid note <id> "<text>"
   waid show <id>                      Full item with notes and history
   waid transcript <id>                A session's turns, oldest first

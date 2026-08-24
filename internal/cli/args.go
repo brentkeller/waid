@@ -14,6 +14,7 @@ var booleanFlags = map[string]bool{
 	"last":    true,
 	"all":     true,
 	"top":     true,
+	"off":     true,
 	"help":    true,
 	"version": true,
 }

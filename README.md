@@ -43,6 +43,7 @@ installed path stays proven.
 | `waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>]` | Record an item, under a parent or with an origin. |
 | `waid done <id>...` / `waid reopen <id>` | Close one or more items, or reopen one. |
 | `waid move <id> -p <parent>` / `waid move <id> --top` | Refile an item under another, or move it to the top level. |
+| `waid heading <id>` / `waid heading <id> --off` | Mark an item a heading — a landmark that heads a level whether or not anything is filed under it — or unmark it. |
 | `waid note <id> "<text>"` | Append a note to an item. |
 | `waid show <id>` | Full item with its notes and event history. |
 | `waid transcript <id>` | A session's turns, oldest first. |

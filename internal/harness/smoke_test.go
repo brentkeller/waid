@@ -176,3 +176,67 @@ func TestSmokeJsonIsASingleDocumentOnStdout(t *testing.T) {
 		t.Errorf("list reported %d items, want 1", len(listed.Items))
 	}
 }
+
+// The heading flag is written by one command and read by another, so the round trip is what the
+// smoke test drives: mark through the binary, then read the field back off show.
+func TestSmokeHeadingMarksAndReadsBack(t *testing.T) {
+	home := smokeHome(t)
+
+	added := waid(t, home, "add", "Localized notifications", "-p", home, "--json")
+	if added.Code != 0 {
+		t.Fatalf("add exited %d: %s", added.Code, added.Stderr)
+	}
+	var item struct {
+		Id string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(added.Stdout), &item); err != nil {
+		t.Fatalf("decoding add: %v\n%s", err, added.Stdout)
+	}
+
+	marked := waid(t, home, "heading", item.Id, "--json")
+	if marked.Code != 0 {
+		t.Fatalf("heading exited %d: %s", marked.Code, marked.Stderr)
+	}
+	var echoed struct {
+		Id      string `json:"id"`
+		Title   string `json:"title"`
+		Heading bool   `json:"heading"`
+	}
+	if err := json.Unmarshal([]byte(marked.Stdout), &echoed); err != nil {
+		t.Fatalf("decoding heading: %v\n%s", err, marked.Stdout)
+	}
+	if echoed.Id != item.Id || echoed.Title != "Localized notifications" || !echoed.Heading {
+		t.Errorf("heading echoed %+v, want %s marked", echoed, item.Id)
+	}
+
+	if got := showsHeading(t, home, item.Id); !got {
+		t.Errorf("show reports heading %v after marking, want true", got)
+	}
+
+	unmarked := waid(t, home, "heading", item.Id, "--off", "--json")
+	if unmarked.Code != 0 {
+		t.Fatalf("heading --off exited %d: %s", unmarked.Code, unmarked.Stderr)
+	}
+	if got := showsHeading(t, home, item.Id); got {
+		t.Errorf("show reports heading %v after --off, want false", got)
+	}
+}
+
+// showsHeading reads the folded flag back off show --json, which is the surface §4 puts it on.
+func showsHeading(t *testing.T, home string, id string) bool {
+	t.Helper()
+
+	shown := waid(t, home, "show", id, "--json")
+	if shown.Code != 0 {
+		t.Fatalf("show exited %d: %s", shown.Code, shown.Stderr)
+	}
+	var report struct {
+		Item struct {
+			Heading bool `json:"heading"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal([]byte(shown.Stdout), &report); err != nil {
+		t.Fatalf("decoding show: %v\n%s", err, shown.Stdout)
+	}
+	return report.Item.Heading
+}

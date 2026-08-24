@@ -116,6 +116,17 @@ func restore(item events.Item) []events.WaidEvent {
 	return inverse
 }
 
+// undoHeading puts back the value the heading flag held before the toggle. The event always carries
+// the field, so restoring an unmarked item is a write like any other rather than an omitted key that
+// would leave the mark standing (§1).
+func undoHeading(item events.Item) undoEntry {
+	return undoEntry{
+		events:  []events.WaidEvent{events.HeadingEvent{Ev: "update", Id: item.Id, Heading: item.Heading}},
+		receipt: headingReceipt(item),
+		item:    &item,
+	}
+}
+
 // undoRetitle puts back the title an item carried before it was edited.
 func undoRetitle(id, title string) undoEntry {
 	return undoEntry{

@@ -156,6 +156,8 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		return m.noteSelected(tree)
 	case "m":
 		return m.startMove(tree)
+	case "P":
+		return m.headingSelected(tree)
 	default:
 		return m, nil, false
 	}
@@ -509,8 +511,13 @@ func itemIdentity(item events.Item, now time.Time) string {
 		status += " ← " + *item.WaitingOn
 	}
 
-	parts := []string{item.Id, projectLabel(item.Origin), status, "created " + agoPhrase(item.Created, now)}
-	return strings.Join(parts, " · ")
+	parts := []string{item.Id, projectLabel(item.Origin), status}
+	// A heading is a landmark over work rather than a state the item is in, so it is named beside the
+	// status rather than folded into it — the shape `waid show` prints (§4).
+	if item.Heading {
+		parts = append(parts, "heading")
+	}
+	return strings.Join(append(parts, "created "+agoPhrase(item.Created, now)), " · ")
 }
 
 // projectLabel names a project the way a line of prose has room for: the directory the checkout sits

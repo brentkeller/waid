@@ -158,7 +158,7 @@ Three tabs, switched with `1` `2` `3` or `tab` / `shift-tab`:
 
 | Tab | Shows | Acts |
 | --- | --- | --- |
-| Loops | Declared items as a tree, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `m` move, `n` note, `p` toggle the pane. |
+| Loops | Declared items as a tree, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `m` move, `n` note, `P` mark a heading, `S` reveal the headings holding nothing, `p` toggle the pane. |
 | Repos | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
 | Agents | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `pgup`/`pgdn` scroll it, `home`/`end` jump to either end, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
 
@@ -179,12 +179,9 @@ refresh — on Agents that re-reads every transcript on disk, so a session run s
 shows up — `u` to undo, `?` for the key table, `q` to quit. A key that belongs to another tab says so
 in the footer rather than doing nothing quietly.
 
-A prompt taking text — a title, a note, a parent — commits on `enter`, abandons on `esc`, and
-empties on `ctrl-u`. `e` and `P` open on the value they are replacing, so a correction is a word of
-typing and `ctrl-u` is how one starts from nothing. `P` searches: type any part of another item's
-title, `tab` moves through the matches the footer lists, and `enter` files the item under the one it
-is on. The item being moved and everything beneath it are never offered, so a move cannot make an
-item its own descendant's child, and an empty answer moves it to the top level.
+A prompt taking text — a title or a note — commits on `enter`, abandons on `esc`, and empties on
+`ctrl-u`. `e` opens on the title it is replacing, so a correction is a word of typing and `ctrl-u`
+is how one starts from nothing.
 
 Writes land on the keypress with no confirm step, so the footer's receipt is what says a press did
 anything, and `u` reverses the last one — as another event, since the log is append-only. The stack

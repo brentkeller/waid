@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -642,5 +643,116 @@ func TestLoopsWritesAddressAHeading(t *testing.T) {
 	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"note","id":"vq2n","text":"the strings are extracted"}`})
 	if pane := detailPane(t, noted.View()); !strings.Contains(pane, "the strings are extracted") {
 		t.Errorf("the detail pane does not carry the note written against the heading:\n%s", pane)
+	}
+}
+
+// headingLine is the event P appends against the fixture's first row.
+func headingLine(id string, heading bool) string {
+	return fmt.Sprintf(`{"ts":"%s","ev":"update","id":"%s","heading":%t}`, loopsStamped(), id, heading)
+}
+
+// P marks the row under the cursor a heading on the keypress, and the flag is written whatever the
+// item already held — the log is a history of what was asked for, which is how `waid heading` writes
+// it too (§6).
+func TestHeadingMarksTheItemUnderTheCursor(t *testing.T) {
+	m, path := working(t)
+
+	m, cmd := press(t, m, "P")
+	if cmd != nil {
+		t.Error("P issued a command, want the write made on the keypress")
+	}
+
+	assertLog(t, path, []string{headingLine("vq2n", true)})
+
+	if item, loaded := m.loadedItem("vq2n"); !loaded || !item.Heading {
+		t.Errorf("the loaded item is %+v, want it marked a heading", item)
+	}
+	if view := plain(m.View()); !strings.Contains(view, "marked vq2n  Localized notifications") {
+		t.Errorf("the footer carries no receipt for the mark:\n%s", view)
+	}
+}
+
+// The mark is a toggle both ways, since a one-way one is a mis-tap away from an edit of the log by
+// hand (§9).
+func TestHeadingUnmarksAnItemAlreadyMarked(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "P", "P")
+
+	assertLog(t, path, []string{headingLine("vq2n", true), headingLine("vq2n", false)})
+
+	if item, loaded := m.loadedItem("vq2n"); !loaded || item.Heading {
+		t.Errorf("the loaded item is %+v, want the mark taken off it", item)
+	}
+	if view := plain(m.View()); !strings.Contains(view, "unmarked vq2n  Localized notifications") {
+		t.Errorf("the footer carries no receipt for the unmark:\n%s", view)
+	}
+}
+
+// The inverse of the toggle is the value the item held before it, written as a heading event of its
+// own rather than as an omitted key (§6).
+func TestUndoOfAHeadingRestoresThePriorValue(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "P", "u")
+
+	assertLog(t, path, []string{headingLine("vq2n", true), headingLine("vq2n", false)})
+
+	if item, loaded := m.loadedItem("vq2n"); !loaded || item.Heading {
+		t.Errorf("the undone item is %+v, want the flag back where it was", item)
+	}
+	if view := plain(m.View()); !strings.Contains(view, "unmarked vq2n  Localized notifications") {
+		t.Errorf("the footer carries no receipt for the undo:\n%s", view)
+	}
+}
+
+// The (unassigned) bucket holds no item, so P is inert there and the footer says which row it was
+// pressed on rather than staying silent (§6).
+func TestHeadingIsInertOnTheUnassignedBucket(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "j", "j", "j")
+	if item, ok := m.loopsTree(m.viewWidth()).SelectedItem(); ok {
+		t.Fatalf("the cursor is on %v, want the (unassigned) bucket", item.Id)
+	}
+
+	m, _ = press(t, m, "P")
+
+	if log := written(t, path); len(log) != 0 {
+		t.Errorf("P on the bucket wrote %v", log)
+	}
+	if !strings.Contains(m.hint, "P marks an item a heading") {
+		t.Errorf("P on the bucket left the hint %q, want it to name what the key does", m.hint)
+	}
+}
+
+// P is a Loops key, so pressing it on Repos or Agents is inert and the footer names the tab that
+// owns it, as every other tab key already does (§6).
+func TestHeadingIsALoopsKey(t *testing.T) {
+	m, path := working(t)
+
+	for _, c := range []struct{ digit, title string }{{"2", "Repos"}, {"3", "Agents"}} {
+		elsewhere, _ := press(t, m, c.digit, "P")
+
+		if !strings.Contains(elsewhere.hint, "Loops") {
+			t.Errorf("P on %s left the hint %q, want it to name the tab that owns the key", c.title, elsewhere.hint)
+		}
+		if log := written(t, path); len(log) != 0 {
+			t.Errorf("P on %s wrote %v", c.title, log)
+		}
+	}
+}
+
+// The pane names the flag beside the status, which is where `waid show` names it (§4).
+func TestHeadingIsNamedInTheDetailPane(t *testing.T) {
+	m, _ := working(t)
+
+	if pane := detailPane(t, m.View()); strings.Contains(pane, "heading") {
+		t.Errorf("the pane names a heading on an item nobody marked one:\n%s", pane)
+	}
+
+	marked, _ := press(t, m, "P")
+	if pane := detailPane(t, marked.View()); !strings.Contains(pane, "open · heading") {
+		t.Errorf("the pane does not name the heading beside the status:\n%s", pane)
 	}
 }

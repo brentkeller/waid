@@ -51,6 +51,41 @@ func (m Model) doneSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
 	return m.record(receipt{verb: "closed", subject: item.Id, detail: item.Title}), nil, true
 }
 
+// headingSelected marks the item under the cursor a heading, or takes the mark off one that already
+// holds it (§6). The event is written whatever the item held, which is how `waid heading` writes it:
+// the log is a history of what was asked for, the fold is idempotent, and a key that sometimes wrote
+// and sometimes did not would make `u` guess.
+func (m Model) headingSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
+	m, item, ok := m.loopTarget(tree, "P marks an item a heading")
+	if !ok {
+		return m, nil, true
+	}
+
+	heading := !item.Heading
+	event := events.HeadingEvent{Ev: "update", Id: item.Id, Heading: heading}
+	ts, err := events.Append(m.opts.Cfg.EventsPath, event, m.now())
+	if err != nil {
+		m.hint = writeFailed("heading", err)
+		return m, nil, true
+	}
+
+	marked := item
+	marked.Heading, marked.Updated = heading, ts
+
+	m = m.applyItem(marked).pushUndo(undoHeading(item))
+	return m.record(headingReceipt(marked)), nil, true
+}
+
+// headingReceipt is what the toggle says it did, in the wording `waid heading` prints for the same
+// write. It is read off the item as it stands afterwards, so the inverse can share it.
+func headingReceipt(item events.Item) receipt {
+	verb := "unmarked"
+	if item.Heading {
+		verb = "marked"
+	}
+	return receipt{verb: verb, subject: item.Id, detail: item.Title}
+}
+
 // waitingSelected asks who the item is waiting on. The name is what the status is for — an item
 // waiting on nobody is just open — so it is collected before anything is written.
 func (m Model) waitingSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {

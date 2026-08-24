@@ -65,6 +65,11 @@ type loopsModel struct {
 	// status is the segment of the status row that is selected; the zero value is what is owed.
 	status loopsStatus
 
+	// headings is whether a heading with nothing visible under it is drawn. It is an axis of its own
+	// rather than a segment of the status row, so it composes with every status; the zero value hides
+	// them, and `S` flips it for the length of the session (§3).
+	headings bool
+
 	// collapsed is whether the detail pane has been folded away. The pane is open otherwise: §1.1 draws
 	// it under the list, and `p` collapses it when density matters more.
 	collapsed bool
@@ -132,6 +137,10 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	case "s":
 		m.loops.status = nextLoopsStatus(m.loops.status)
+		m.loops.cursor = 0
+		return m, nil, true
+	case "S":
+		m.loops.headings = !m.loops.headings
 		m.loops.cursor = 0
 		return m, nil, true
 	case "r":
@@ -205,8 +214,15 @@ func (m Model) loopsForest() []tree.Node {
 // forestOf is that shaping over whatever set of items it is handed, so the move picker draws the
 // tree the list draws — the same gates, the same ordering — over what is left once the subtree being
 // moved has been lifted out of it (§7.1).
+// The empty headings are dropped here rather than in the shaping the picker shares, since the picker
+// offers every heading whatever the toggle says (§3). The pass runs before the bucketing, so a level
+// whose only head was a dropped heading is a level of nothing but leaves and renders them directly.
 func (m Model) forestOf(items []events.Item) []tree.Node {
-	return tree.Bucket(m.shapedForest(items))
+	roots := m.shapedForest(items)
+	if !m.loops.headings {
+		roots = tree.DropEmptyHeadings(roots)
+	}
+	return tree.Bucket(roots)
 }
 
 // shapedForest is that shaping short of the bucketing, which is the one thing the two trees do

@@ -540,6 +540,107 @@ func TestLoopsBadgeIgnoresTheStatusFilter(t *testing.T) {
 	}
 }
 
+// shelfTitle is what the heading holding nothing is called, so the assertions read as prose.
+const shelfTitle = "Port rewrite"
+
+// loopsWithShelf is the §4 fixture plus a heading with nothing filed under it: the row the toggle
+// reveals, and the one every status hides while it is off (§3).
+func loopsWithShelf() loopsLoadedMsg {
+	msg := loopsFixture()
+	msg.items = append(msg.items, events.Item{
+		Id: "prtw", Title: shelfTitle, Status: events.StatusOpen, Heading: true,
+		Created: *stamp(13, 9, 0), Updated: *stamp(13, 9, 0),
+	})
+	return msg
+}
+
+// A heading with nothing visible under it is a shelf rather than work, so the list leaves it out
+// until S asks for it, and S again puts it away (§3, §6.1).
+func TestLoopsHidesAnEmptyHeadingUntilS(t *testing.T) {
+	m := looped(t, 140, loopsWithShelf())
+
+	if view := plain(m.View()); strings.Contains(view, shelfTitle) {
+		t.Errorf("the list draws an empty heading before S:\n%s", view)
+	}
+
+	revealed, _ := press(t, m, "S")
+	if !revealed.loops.headings {
+		t.Error("S left the headings toggle off")
+	}
+	if view := plain(revealed.View()); !strings.Contains(view, shelfTitle) {
+		t.Errorf("S did not reveal the empty heading:\n%s", view)
+	}
+
+	hidden, _ := press(t, revealed, "S")
+	if hidden.loops.headings {
+		t.Error("a second S left the headings toggle on")
+	}
+	if view := plain(hidden.View()); strings.Contains(view, shelfTitle) {
+		t.Errorf("a second S left the empty heading on screen:\n%s", view)
+	}
+}
+
+// The toggle is an axis of its own rather than a fifth segment, so it composes with the status row:
+// every segment holds it, and the list it hands back is still showing the shelves (§3).
+func TestLoopsHeadingsToggleHoldsWhileTheStatusCycles(t *testing.T) {
+	m, _ := press(t, looped(t, 140, loopsWithShelf()), "S")
+
+	for _, want := range []loopsStatus{loopsWaiting, loopsDone, loopsAll, loopsOwed} {
+		m, _ = press(t, m, "s")
+		if !m.loops.headings {
+			t.Fatalf("the headings toggle went off as the row moved to %q", want)
+		}
+		if m.loops.status != want {
+			t.Fatalf("s moved the status row to %q, want %q", m.loops.status, want)
+		}
+	}
+
+	if view := plain(m.View()); !strings.Contains(view, shelfTitle) {
+		t.Errorf("a lap of the status row lost the revealed heading:\n%s", view)
+	}
+}
+
+// The typed query narrows what the toggle reveals without turning it off, so clearing the query
+// brings the shelf back rather than leaving it hidden (§3).
+func TestLoopsHeadingsToggleHoldsWhileAQueryIsTypedAndCleared(t *testing.T) {
+	m, _ := press(t, looped(t, 140, loopsWithShelf()), "S")
+
+	filtered, _ := press(t, m, "/", "m", "a", "r", "i", "a", "enter")
+	if !filtered.loops.headings {
+		t.Error("typing a query turned the headings toggle off")
+	}
+	if view := plain(filtered.View()); strings.Contains(view, shelfTitle) {
+		t.Errorf("the query kept a heading it does not match:\n%s", view)
+	}
+
+	cleared, _ := press(t, filtered, "esc")
+	if !cleared.loops.headings {
+		t.Error("clearing the query turned the headings toggle off")
+	}
+	if view := plain(cleared.View()); !strings.Contains(view, shelfTitle) {
+		t.Errorf("clearing the query did not bring the revealed heading back:\n%s", view)
+	}
+}
+
+// The badge is what is owed and the header's count is what is drawn, so revealing the shelves moves
+// the second and leaves the first where it was (§4).
+func TestLoopsBadgeHoldsStillWhileTheHeaderCountRises(t *testing.T) {
+	m := looped(t, 140, loopsWithShelf())
+	badge := m.counts[tabLoops]
+
+	if view := plain(m.View()); !strings.Contains(view, "6 items") {
+		t.Errorf("the header does not count the drawn rows before S:\n%s", view)
+	}
+
+	revealed, _ := press(t, m, "S")
+	if got := revealed.counts[tabLoops]; got != badge {
+		t.Errorf("S moved the Loops badge from %d to %d", badge, got)
+	}
+	if view := plain(revealed.View()); !strings.Contains(view, "7 items") {
+		t.Errorf("the header did not count the revealed heading:\n%s", view)
+	}
+}
+
 // The digits address the tabs on every tab, so the status row is reached by `s` alone (§4).
 func TestLoopsDigitsStayWithTheTabs(t *testing.T) {
 	m := looped(t, 140, loopsFixture())

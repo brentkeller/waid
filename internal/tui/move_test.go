@@ -105,6 +105,24 @@ func TestMoveOffersNeitherTheItemNorItsDescendants(t *testing.T) {
 	}
 }
 
+// The picker never applies §3's pass: filing the first item under a fresh project is the reason to
+// have one, so an empty heading is a destination whether or not the list is showing it.
+func TestMoveOffersAnEmptyHeadingWhicheverWayTheToggleIsSet(t *testing.T) {
+	base := looped(t, 140, loopsWithShelf())
+	revealed, _ := press(t, base, "S")
+
+	for _, c := range []struct {
+		toggle string
+		m      Model
+	}{{"off", base}, {"on", revealed}} {
+		picking, _ := press(t, c.m, "m")
+
+		if offered := destinations(picking); !slices.Contains(offered, "prtw") {
+			t.Errorf("with the toggle %s the picker drops the empty heading: %v", c.toggle, offered)
+		}
+	}
+}
+
 // The picker opens on its first two levels: every root is expanded, so the roots and the rows filed
 // directly under them are both there to point at, and what hangs deeper stays folded.
 func TestMoveOpensOnTheFirstTwoLevels(t *testing.T) {

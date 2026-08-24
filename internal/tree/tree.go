@@ -229,6 +229,31 @@ func Prune(nodes []Node, keep func(events.Item) bool) []Node {
 	return kept
 }
 
+// DropEmptyHeadings drops every heading left holding no visible children, so a shelf with nothing
+// on it stays out of a reading view. Emptiness is read off the nodes given rather than off the log,
+// so a heading whose work a gate or a query took away is empty in that view.
+//
+// Call it after Prune and Filter and before Bucket. Bucketing first would leave (unassigned)
+// holding leaves that have nothing to be unassigned from: a level whose only head was a dropped
+// heading is a level of nothing but leaves, and renders them directly.
+//
+// The drop recurses, so a heading emptied by the loss of its own only child goes with it. An item
+// that was not declared a heading is left where it is, childless or not.
+//
+// The forest given is left untouched.
+func DropEmptyHeadings(nodes []Node) []Node {
+	kept := []Node{}
+	for _, current := range nodes {
+		current.Children = DropEmptyHeadings(current.Children)
+		if current.Item.Heading && len(current.Children) == 0 {
+			continue
+		}
+		kept = append(kept, current)
+	}
+	sortSiblings(kept)
+	return kept
+}
+
 // Subtree narrows a forest to the one node carrying id, together with everything beneath it. The
 // ancestors above it and the branches beside it are dropped: naming a heading asks what it holds,
 // not where it sits. A forest holding no such node comes back empty.

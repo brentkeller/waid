@@ -496,6 +496,104 @@ func TestBucketLeavesALevelOfOnlyLeavesUnderAHeadingAlone(t *testing.T) {
 	}
 }
 
+// A shelf with nothing on it says nothing, so a reading view drops it unless the reader asked for
+// it.
+func TestDropEmptyHeadingsDropsAHeadingWithNoVisibleChildren(t *testing.T) {
+	state := events.Fold([]string{
+		headingLine("bare", "Empty project", ""),
+		addLine("loos", "Loose task", ""),
+	})
+
+	roots, _ := Build(state)
+	want := "loos"
+	if got := shape(DropEmptyHeadings(roots)); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Emptiness is read off the nodes given, so a heading still holding a visible row stands, and one
+// whose only child a gate took away goes.
+func TestDropEmptyHeadingsKeepsAHeadingHoldingVisibleChildren(t *testing.T) {
+	state := events.Fold([]string{
+		headingLine("live", "Live project", ""),
+		addLine("kidl", "Open child", "live"),
+		headingLine("spnt", "Spent project", ""),
+		addLine("kids", "Closed child", "spnt"),
+		`{"ts":"2026-08-14T09:01:00.000Z","ev":"update","id":"kids","status":"done"}`,
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"live", "  kidl"}, "\n")
+	if got := shape(DropEmptyHeadings(openOnly(roots))); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Only a declared heading is dropped: an ordinary childless item is work waiting to be filed, and
+// the inbox is where it waits.
+func TestDropEmptyHeadingsLeavesOrdinaryItemsAlone(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("prnt", "Parent", ""),
+		addLine("kid1", "Child", "prnt"),
+		addLine("loos", "Loose task", ""),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"prnt", "  kid1", "loos"}, "\n")
+	if got := shape(DropEmptyHeadings(roots)); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// The drop recurses, so a heading left empty by the loss of its only child goes with it rather than
+// surviving one pass behind.
+func TestDropEmptyHeadingsRecursesIntoAHeadingItEmpties(t *testing.T) {
+	state := events.Fold([]string{
+		headingLine("area", "Area", ""),
+		headingLine("proj", "Project", "area"),
+		addLine("loos", "Loose task", ""),
+	})
+
+	roots, _ := Build(state)
+	want := "loos"
+	if got := shape(DropEmptyHeadings(roots)); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A parent the drop leaves childless no longer heads its level, so it sorts with the leaves the way
+// every other narrowing pass leaves a level ordered.
+func TestDropEmptyHeadingsReordersAParentItLeavesChildless(t *testing.T) {
+	state := events.Fold([]string{
+		addAt("2026-08-14T09:00:00.000Z", "prnt", "Zulu parent", ""),
+		headingAt("2026-08-14T09:01:00.000Z", "bare", "Empty project", "prnt"),
+		addAt("2026-08-14T09:02:00.000Z", "keep", "Alpha parent", ""),
+		addAt("2026-08-14T09:03:00.000Z", "kidk", "Child", "keep"),
+	})
+
+	roots, _ := Build(state)
+	want := strings.Join([]string{"keep", "  kidk", "prnt"}, "\n")
+	if got := shape(DropEmptyHeadings(roots)); got != want {
+		t.Errorf("shape =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Several views shape one Build, so the pass reads the forest it is given rather than editing it.
+func TestDropEmptyHeadingsDoesNotDisturbTheForestGiven(t *testing.T) {
+	state := events.Fold([]string{
+		addLine("prnt", "Parent", ""),
+		headingLine("bare", "Empty project", "prnt"),
+		addLine("kid1", "Child", "prnt"),
+	})
+
+	roots, _ := Build(state)
+	before := shape(roots)
+	DropEmptyHeadings(roots)
+	if after := shape(roots); after != before {
+		t.Errorf("shape =\n%s\nwant\n%s", after, before)
+	}
+}
+
 // titled matches items whose title contains fragment, standing in for the query a view filters on.
 func titled(fragment string) func(events.Item) bool {
 	return func(item events.Item) bool {

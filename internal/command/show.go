@@ -51,6 +51,9 @@ func renderShow(data ShowResult, ctx *cli.Ctx) string {
 	if item.WaitingOn != nil {
 		status = fmt.Sprintf("%s ← %s", status, *item.WaitingOn)
 	}
+	if item.Heading {
+		status = fmt.Sprintf("%s  heading", status)
+	}
 
 	tags := "-"
 	if len(item.Tags) > 0 {

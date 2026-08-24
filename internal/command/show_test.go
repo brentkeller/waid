@@ -13,10 +13,11 @@ import (
 // showRecord is the --json payload show echoes back.
 type showRecord struct {
 	Item struct {
-		Id     string  `json:"id"`
-		Status string  `json:"status"`
-		Origin *string `json:"origin"`
-		Notes  []struct {
+		Id      string  `json:"id"`
+		Status  string  `json:"status"`
+		Origin  *string `json:"origin"`
+		Heading bool    `json:"heading"`
+		Notes   []struct {
 			Text string `json:"text"`
 		} `json:"notes"`
 	} `json:"item"`
@@ -152,4 +153,45 @@ func TestShowOmitsTheNotesBlockWhenThereAreNone(t *testing.T) {
 	if !strings.Contains(run.out, "  history") {
 		t.Errorf("stdout carries no history block:\n%s", run.out)
 	}
+}
+
+func TestShowCarriesTheHeadingFlag(t *testing.T) {
+	home := makeHome(t)
+	shelf := addItem(t, home, "Localized notifications", "--heading")
+	task := addItem(t, home, "Read the port design once more")
+
+	if !show(t, home, shelf).Item.Heading {
+		t.Error("item.heading = false, want the marked item to carry it")
+	}
+	if show(t, home, task).Item.Heading {
+		t.Error("item.heading = true, want an ordinary item to carry false")
+	}
+}
+
+func TestShowNamesAHeadingBesideTheStatus(t *testing.T) {
+	home := makeHome(t)
+	shelf := addItem(t, home, "Localized notifications", "--heading")
+	task := addItem(t, home, "Read the port design once more")
+
+	marked := statusLine(t, waid(t, home, "show", shelf).out)
+	if !strings.Contains(marked, "open") || !strings.Contains(marked, "heading") {
+		t.Errorf("status line = %q, want it to name the status and the heading", marked)
+	}
+
+	if plain := statusLine(t, waid(t, home, "show", task).out); strings.Contains(plain, "heading") {
+		t.Errorf("status line = %q, want no heading on an ordinary item", plain)
+	}
+}
+
+// statusLine is the line show hangs the status off, which is where a heading is named.
+func statusLine(t *testing.T, out string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "status") {
+			return line
+		}
+	}
+	t.Fatalf("no status line in:\n%s", out)
+	return ""
 }

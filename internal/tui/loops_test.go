@@ -641,6 +641,54 @@ func TestLoopsBadgeHoldsStillWhileTheHeaderCountRises(t *testing.T) {
 	}
 }
 
+// The toggle is a switch of its own rather than a fifth status, so the header draws it apart from
+// the segments behind the rule the tab bar divides its zones with, spelled the way a segment is
+// (§6.1).
+func TestLoopsHeaderDrawsTheHeadingsChip(t *testing.T) {
+	m := looped(t, 80, loopsWithShelf())
+	rule := m.theme.TabRule.Render("│")
+
+	off := m.loopsHeader(80)
+	if want := rule + "  " + m.theme.FilterInactive.Render("headings"); !strings.Contains(off, want) {
+		t.Errorf("the header does not draw the chip unselected behind the rule:\n%s", plain(off))
+	}
+	if row := plain(off); strings.Contains(row, "‹headings›") {
+		t.Errorf("the chip reads as selected while the toggle is off:\n%s", row)
+	}
+
+	revealed, _ := press(t, m, "S")
+	on := revealed.loopsHeader(80)
+	if want := rule + "  " + m.theme.FilterActive.Render("‹headings›"); !strings.Contains(on, want) {
+		t.Errorf("S did not draw the chip selected behind the rule:\n%s", plain(on))
+	}
+}
+
+// The chip is appended between the segments and the counts and carries its printed width with it, so
+// the counts keep hanging off the right edge with the toggle either way (§6.1).
+func TestLoopsHeaderKeepsTheCountsFlushRightAt80Columns(t *testing.T) {
+	m := looped(t, 80, loopsWithShelf())
+	revealed, _ := press(t, m, "S")
+
+	cases := []struct {
+		toggle string
+		header string
+		counts string
+	}{
+		{"off", m.loopsHeader(80), "6 items"},
+		{"on", revealed.loopsHeader(80), "7 items"},
+	}
+
+	for _, c := range cases {
+		row := plain(c.header)
+		if !strings.HasSuffix(row, c.counts) {
+			t.Errorf("the header with the toggle %s does not end in %q:\n%s", c.toggle, c.counts, row)
+		}
+		if got, want := lipgloss.Width(row), 79; got != want {
+			t.Errorf("the header with the toggle %s is %d columns wide, want %d:\n%s", c.toggle, got, want, row)
+		}
+	}
+}
+
 // The digits address the tabs on every tab, so the status row is reached by `s` alone (§4).
 func TestLoopsDigitsStayWithTheTabs(t *testing.T) {
 	m := looped(t, 140, loopsFixture())

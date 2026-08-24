@@ -1,7 +1,7 @@
 ╭──────────╮
 │ Loops  6 │ Repos │ Agents │                                                                                                     ⠋ scanning
 ┴──────────┴───────┴────────┴───────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ‹open›  waiting  done  all                                                                                                         6 items
+ ‹open›  waiting  done  all  │  headings                                                                                            6 items
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▾ Localized notifications                                                                                                            2 open
      sga9  open     Design template + args persistence for localized persisted strings                                                   19m

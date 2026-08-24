@@ -559,7 +559,23 @@ func (m Model) noteLines(item events.Item, width int) []string {
 // loopsHeader is the segmented status row with the counts opposite it (§1.1).
 func (m Model) loopsHeader(width int) string {
 	row, rowWidth := m.segmentRow(loopsStatusLabels(), m.loopsSegment())
-	return m.headerLine(row, rowWidth, m.loopsCounts(), width)
+	chip, chipWidth := m.loopsHeadingsChip()
+	return m.headerLine(row+chip, rowWidth+chipWidth, m.loopsCounts(), width)
+}
+
+// loopsHeadingsChip draws the toggle that reveals the headings holding nothing (§6.1). It is a
+// switch of its own rather than another status, so it sits behind the rule the tab bar divides its
+// zones with and is spelled the way a segment is. The printed width comes back alongside it, since
+// the styling makes the string longer than the columns it occupies.
+func (m Model) loopsHeadingsChip() (string, int) {
+	label, style := "headings", m.theme.FilterInactive
+	if m.loops.headings {
+		label, style = "‹headings›", m.theme.FilterActive
+	}
+
+	// The gap either side of the rule, and the rule itself, are the columns the label is drawn past.
+	const chrome = 5
+	return "  " + m.theme.TabRule.Render("│") + "  " + style.Render(label), chrome + lipgloss.Width(label)
 }
 
 // loopsStatusLabels name the segments. What is owed is drawn `open`, since that is the word the CLI

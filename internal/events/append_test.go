@@ -487,3 +487,31 @@ func TestEncodeAddOmitsAnUnmarkedHeading(t *testing.T) {
 		t.Fatalf("Encode wrote\n%s\nwant\n%s", got, want)
 	}
 }
+
+// A TagsEvent always writes the field: an omitempty array could never say "no tags", so a write
+// that dropped the key would silently leave the tags standing.
+func TestEncodeTagsEventCarriesTheSetBothWays(t *testing.T) {
+	tests := []struct {
+		event TagsEvent
+		want  string
+	}{
+		{
+			event: TagsEvent{Ts: "2026-08-24T12:00:00.000Z", Ev: "update", Id: "7k3m", Tags: []string{"bug", "ui"}},
+			want:  `{"ts":"2026-08-24T12:00:00.000Z","ev":"update","id":"7k3m","tags":["bug","ui"]}`,
+		},
+		{
+			event: TagsEvent{Ts: "2026-08-24T12:00:00.000Z", Ev: "update", Id: "7k3m", Tags: []string{}},
+			want:  `{"ts":"2026-08-24T12:00:00.000Z","ev":"update","id":"7k3m","tags":[]}`,
+		},
+		{
+			event: TagsEvent{Ts: "2026-08-24T12:00:00.000Z", Ev: "update", Id: "7k3m"},
+			want:  `{"ts":"2026-08-24T12:00:00.000Z","ev":"update","id":"7k3m","tags":[]}`,
+		},
+	}
+
+	for _, test := range tests {
+		if got := encode(t, test.event); got != test.want {
+			t.Errorf("Encode wrote\n%s\nwant\n%s", got, test.want)
+		}
+	}
+}

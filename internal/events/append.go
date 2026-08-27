@@ -29,10 +29,19 @@ func FormatTs(t time.Time) string {
 // details of Go's default JSON output would break compatibility with the lines Node has already
 // written, so both are undone here: `<`, `>` and `&` stay raw, and so do U+2028 and U+2029.
 func Encode(event WaidEvent) ([]byte, error) {
-	if add, ok := event.(AddEvent); ok && add.Tags == nil {
-		// Node emits an empty array rather than null when no tags were given.
-		add.Tags = []string{}
-		event = add
+	// Node emits an empty array rather than null when no tags were given, and a TagsEvent says "no
+	// tags" the same way — it exists to carry the set whatever the set is.
+	switch typed := event.(type) {
+	case AddEvent:
+		if typed.Tags == nil {
+			typed.Tags = []string{}
+			event = typed
+		}
+	case TagsEvent:
+		if typed.Tags == nil {
+			typed.Tags = []string{}
+			event = typed
+		}
 	}
 
 	var buf bytes.Buffer

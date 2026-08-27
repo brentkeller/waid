@@ -108,6 +108,17 @@ type ParentEvent struct {
 	Parent *string `json:"parent"`
 }
 
+// TagsEvent replaces the tags an item carries, and is an update like any other — the fold reads the
+// same `update` line. It is a shape of its own for the reason HeadingEvent is one: UpdateEvent omits
+// an absent field, so an omitempty array could never say "no tags", and a retitle that dropped the
+// key would silently leave them standing. The set is always written.
+type TagsEvent struct {
+	Ts   string   `json:"ts"`
+	Ev   string   `json:"ev"`
+	Id   string   `json:"id"`
+	Tags []string `json:"tags"`
+}
+
 // HeadingEvent marks or unmarks an item as a heading, and is an update like any other — the fold
 // reads the same `update` line. It is a shape of its own for the reason ParentEvent is one:
 // UpdateEvent omits an absent field, so an omitempty boolean could never say false, and a retitle
@@ -159,6 +170,7 @@ func (AddEvent) event()       {}
 func (UpdateEvent) event()    {}
 func (ParentEvent) event()    {}
 func (HeadingEvent) event()   {}
+func (TagsEvent) event()      {}
 func (NoteEvent) event()      {}
 func (CloseEvent) event()     {}
 func (ReopenEvent) event()    {}
@@ -169,6 +181,7 @@ func (e AddEvent) timestamp() string       { return e.Ts }
 func (e UpdateEvent) timestamp() string    { return e.Ts }
 func (e ParentEvent) timestamp() string    { return e.Ts }
 func (e HeadingEvent) timestamp() string   { return e.Ts }
+func (e TagsEvent) timestamp() string      { return e.Ts }
 func (e NoteEvent) timestamp() string      { return e.Ts }
 func (e CloseEvent) timestamp() string     { return e.Ts }
 func (e ReopenEvent) timestamp() string    { return e.Ts }
@@ -179,6 +192,7 @@ func (e AddEvent) stamp(ts string) WaidEvent       { e.Ts = firstTs(e.Ts, ts); r
 func (e UpdateEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }
 func (e ParentEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }
 func (e HeadingEvent) stamp(ts string) WaidEvent   { e.Ts = firstTs(e.Ts, ts); return e }
+func (e TagsEvent) stamp(ts string) WaidEvent      { e.Ts = firstTs(e.Ts, ts); return e }
 func (e NoteEvent) stamp(ts string) WaidEvent      { e.Ts = firstTs(e.Ts, ts); return e }
 func (e CloseEvent) stamp(ts string) WaidEvent     { e.Ts = firstTs(e.Ts, ts); return e }
 func (e ReopenEvent) stamp(ts string) WaidEvent    { e.Ts = firstTs(e.Ts, ts); return e }

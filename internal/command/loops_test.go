@@ -148,6 +148,57 @@ func TestLoopsFiltersByRecordedOrigin(t *testing.T) {
 	assertKeys(t, record.itemIds(), []string{"p2vn"})
 }
 
+// Tags ask the same question of an item that they ask in list: every tag given has to be on the
+// item, and a match brings the subtree under it along.
+func TestLoopsTagFiltersConjunctively(t *testing.T) {
+	home := loopsHome(t)
+	seedLog(t, home,
+		map[string]any{
+			"ts": "2026-08-09T09:00:00.000Z", "ev": "add", "id": "k3f9",
+			"title": "Chart legend overflows at 4+ series", "tags": []string{"bug"},
+		},
+		map[string]any{
+			"ts": "2026-08-10T09:00:00.000Z", "ev": "add", "id": "p2vn",
+			"title": "Decide whether events.jsonl gets its own repo", "tags": []string{"bug", "design"},
+		},
+		map[string]any{"ts": "2026-08-11T09:00:00.000Z", "ev": "add", "id": "q8xt", "title": "Book flights"},
+	)
+
+	_, bugs := loopsJson(t, home, quiet, "--tag", "bug")
+	assertKeys(t, bugs.itemIds(), []string{"k3f9", "p2vn"})
+
+	_, both := loopsJson(t, home, quiet, "--tag", "bug", "--tag", "design")
+	assertKeys(t, both.itemIds(), []string{"p2vn"})
+}
+
+func TestLoopsKeepsTheAncestorsOfATaggedMatch(t *testing.T) {
+	home := loopsHome(t)
+	area := addItem(t, home, "DevResults")
+	proj := addItem(t, home, "Search rewrite", "-p", "DevResults")
+	task := addItem(t, home, "Reindex script", "-p", "Search rewrite", "--tag", "bug")
+	addItem(t, home, "Unrelated loose end")
+
+	assertOutline(t, loopsOutline(t, home, quiet, "--tag", "bug"), "0 "+area, "1 "+proj, "2 "+task)
+}
+
+// A tag asks about the item log, which detection knows nothing about, so the signals are left whole.
+func TestLoopsLeavesDetectedSignalsAloneWhenFilteringByTag(t *testing.T) {
+	root := t.TempDir()
+	alpha := makeRepo(t, root, "alpha")
+	beta := makeRepo(t, root, "beta")
+	home := detectHome(t, root)
+	addItem(t, home, "Chart legend overflows", "--tag", "bug")
+
+	_, record := loopsJson(t, home, cli.Seams{
+		Git: fakeGit{alpha: {branch: ptr("main"), dirty: 2}, beta: {branch: ptr("main"), dirty: 3}},
+		Gh:  fakeGh{},
+	}, "--tag", "bug")
+
+	if len(record.Detected) != 2 {
+		t.Errorf("detected is %v, want both repos", signalKeys(record.Detected))
+	}
+}
+
 func TestLoopsReservesTheDetectionFieldsWithNothingDetected(t *testing.T) {
 	home := loopsHome(t)
 	seedLoops(t, home)

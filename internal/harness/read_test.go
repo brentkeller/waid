@@ -103,6 +103,7 @@ func detectionInvocations(fixture string) map[string]harness.Invocation {
 		"loops by project":            {Args: []string{"loops", "-p", "waid"}, GhFixture: fixture},
 		"loops by project json":       {Args: []string{"loops", "-p", "waid", "--json"}, GhFixture: fixture},
 		"loops by empty project json": {Args: []string{"loops", "-p", "demo project", "--json"}, GhFixture: fixture},
+		"loops by tag json":           {Args: []string{"loops", "--tag", "bug", "--json"}, GhFixture: fixture},
 	}
 }
 

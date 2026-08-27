@@ -48,11 +48,10 @@ func runLoops(ctx *cli.Ctx) (LoopsResult, error) {
 
 	roots, _ := tree.Build(state)
 	roots = tree.Prune(roots, isOpen)
-	if origin != nil {
-		roots = tree.Filter(roots, func(item events.Item) bool {
-			return item.Origin != nil && *item.Origin == *origin
-		})
-	}
+	// The origin and the tags are the same kind of filter list applies, so they are asked through
+	// the same predicate: a query, whose match brings the subtree under it along.
+	query := ListFilters{Origin: origin, Tag: ctx.Flags.List("tag")}
+	roots = tree.Filter(roots, func(item events.Item) bool { return passesQuery(item, query) })
 	if target.Parent != nil {
 		roots = tree.Subtree(roots, *target.Parent)
 	}

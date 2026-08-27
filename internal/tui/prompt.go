@@ -19,6 +19,7 @@ const (
 	promptRename
 	promptWaiting
 	promptNote
+	promptTags
 	promptAdd
 	promptDate
 )
@@ -146,14 +147,16 @@ func (p prompt) edit(msg tea.KeyMsg, width int) (prompt, tea.Cmd) {
 	return p.fit(width), cmd
 }
 
-// commitPrompt closes the prompt and makes the write its answer asked for. An empty answer is an
-// abandoned edit rather than a write of nothing.
+// commitPrompt closes the prompt and makes the write its answer asked for.
 func (m Model) commitPrompt() (Model, tea.Cmd) {
 	answered := m.prompt
 	m.prompt = prompt{}
 
+	// An empty answer is an abandoned edit rather than a write of nothing — except for the tags, where
+	// it is a write of nothing in the literal sense: an item with no tags is a state to want, and esc is
+	// what abandons an edit. The other prompts have no such state, so a blank there says nothing at all.
 	value := strings.TrimSpace(answered.text())
-	if value == "" {
+	if value == "" && answered.kind != promptTags {
 		return m, nil
 	}
 
@@ -164,6 +167,8 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 		return m.waitOn(answered.subject, value)
 	case promptNote:
 		return m.addNote(answered.subject, value)
+	case promptTags:
+		return m.setTags(answered.subject, value)
 	case promptAdd:
 		return m.addItem(answered.target, value)
 	case promptDate:

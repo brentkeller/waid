@@ -154,6 +154,8 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		return m.editSelected(tree)
 	case "n":
 		return m.noteSelected(tree)
+	case "t":
+		return m.tagSelected(tree)
 	case "m":
 		return m.startMove(tree)
 	case "P":
@@ -512,7 +514,31 @@ func (m Model) detailLines(width int) []string {
 	for _, line := range wrap(item.Title, width) {
 		lines = append(lines, m.theme.Row.Render(line))
 	}
+	lines = append(lines, m.tagLines(item, width)...)
 	return append(lines, m.noteLines(item, width)...)
+}
+
+// tagLines is the tags the item is marked with, hung under its title on a line of their own and left
+// out entirely when it carries none — the way `waid show` leaves out the field and the notes block.
+// The label is the name `waid show` gives the field, and the tags are joined the way it joins them
+// rather than bracketed the way the list's meta column packs them into a column.
+func (m Model) tagLines(item events.Item, width int) []string {
+	if len(item.Tags) == 0 {
+		return nil
+	}
+
+	label := "tags" + strings.Repeat(" ", loopsColumnGap)
+	hang := strings.Repeat(" ", lipgloss.Width(label))
+
+	var lines []string
+	for i, line := range wrap(strings.Join(item.Tags, ", "), width-lipgloss.Width(label)) {
+		prefix := label
+		if i > 0 {
+			prefix = hang
+		}
+		lines = append(lines, m.theme.Meta.Render(prefix+line))
+	}
+	return lines
 }
 
 // itemIdentity is the pane's first line: the id, the project, the status with whoever the item waits

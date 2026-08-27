@@ -127,6 +127,17 @@ func undoHeading(item events.Item) undoEntry {
 	}
 }
 
+// undoTags puts back the set an item carried before it was tagged. The event always carries the
+// field, so an item that carried none is written back to none rather than left holding the tags the
+// write gave it (§1).
+func undoTags(item events.Item) undoEntry {
+	return undoEntry{
+		events:  []events.WaidEvent{events.TagsEvent{Ev: "update", Id: item.Id, Tags: item.Tags}},
+		receipt: tagsReceipt(item),
+		item:    &item,
+	}
+}
+
 // undoRetitle puts back the title an item carried before it was edited.
 func undoRetitle(id, title string) undoEntry {
 	return undoEntry{

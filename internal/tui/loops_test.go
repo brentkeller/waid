@@ -1075,3 +1075,24 @@ func goldenHeadingsOn(t *testing.T, width int) {
 	m, _ := press(t, looped(t, width, loopsWithShelf()), "S")
 	teatest.RequireEqualOutput(t, []byte(plain(m.View())))
 }
+
+// The pane names the tags the item carries, the way `waid show` prints the field.
+func TestLoopsDetailPaneRendersTheTags(t *testing.T) {
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j", "j")
+
+	pane := detailPane(t, m.View())
+	for _, want := range []string{"nktt", "tags", "promoted"} {
+		if !strings.Contains(pane, want) {
+			t.Errorf("the detail pane does not carry %q:\n%s", want, pane)
+		}
+	}
+}
+
+// An item carrying none prints no tags line, the way `waid show` leaves out an empty notes block.
+func TestLoopsDetailPaneLeavesOutAnEmptyTagsLine(t *testing.T) {
+	m, _ := press(t, looped(t, 140, loopsFixture()), "j")
+
+	if pane := detailPane(t, m.View()); strings.Contains(pane, "tags") {
+		t.Errorf("the pane drew a tags line for an item with none:\n%s", pane)
+	}
+}

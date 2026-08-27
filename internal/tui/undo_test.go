@@ -198,13 +198,12 @@ func TestPromoteReceiptOffersRenameAndEditsTheTitle(t *testing.T) {
 		t.Errorf("e did not open the rename prompt:\n%s", plain(m.View()))
 	}
 
-	m, _ = press(t, m, "ctrl+u", "Push the tui branch")
-	typed, _ := press(t, m, "q")
-	if typed.prompt.value != "Push the tui branchq" {
-		t.Errorf("q typed into the prompt left %q, want it treated as text", typed.prompt.value)
+	m, _ = press(t, m, "ctrl+u", "Push the tui branch", "q")
+	if m.prompt.text() != "Push the tui branchq" {
+		t.Errorf("q typed into the prompt left %q, want it treated as text", m.prompt.text())
 	}
 
-	m, _ = press(t, m, "enter")
+	m, _ = press(t, m, "backspace", "enter")
 	assertLog(t, path, []string{
 		`{"ts":"` + stamped() + `","ev":"add","id":"7k3m","title":"1 unpushed commit on tui in waid","status":"open",` +
 			`"origin":"C:\\dev\\waid","session":null,"tags":["promoted"],"waitingOn":null}`,

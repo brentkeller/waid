@@ -109,7 +109,13 @@ var globalBindings = []binding{
 var promptBindings = []binding{
 	{[]string{"enter"}, "enter", "commit the answer"},
 	{[]string{"esc"}, "esc", "abandon it"},
-	{[]string{"ctrl+u"}, "ctrl-u", "empty the input, leaving the prompt open"},
+	{[]string{"left", "right"}, "← →", "move the cursor a character"},
+	{[]string{"ctrl+left", "ctrl+right"}, "ctrl-← / ctrl-→", "move it a word — alt-← / alt-→ and alt-b / alt-f do the same"},
+	{[]string{"home", "end"}, "ctrl-a / ctrl-e", "start / end of the answer — home / end do the same"},
+	{[]string{"backspace", "delete"}, "backspace / delete", "take the character behind / in front of the cursor"},
+	{[]string{"ctrl+w"}, "ctrl-w", "cut the word behind the cursor"},
+	{[]string{"ctrl+k"}, "ctrl-k", "cut to the end of the answer"},
+	{[]string{"ctrl+u"}, "ctrl-u", "cut back to the start, leaving the prompt open"},
 }
 
 // tabBindings are the keys that mean something on one tab only. A key listed here and pressed
@@ -258,6 +264,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.prompt.kind != promptNone {
+			m.prompt = m.prompt.fit(m.viewWidth())
+		}
 	case tea.KeyMsg:
 		return m.key(msg)
 	case loopsLoadedMsg:

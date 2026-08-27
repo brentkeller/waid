@@ -51,7 +51,7 @@ func (m Model) renameSelected() (Model, tea.Cmd, bool) {
 	}
 
 	// The input opens on the title being corrected, for the reason Loops' edit does.
-	m.prompt = prompt{kind: promptRename, label: "rename", subject: target.subject, prior: target.detail, value: target.detail}
+	m.prompt = m.open(prompt{kind: promptRename, label: "rename", subject: target.subject, prior: target.detail})
 	return m, nil, true
 }
 

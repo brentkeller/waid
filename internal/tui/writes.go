@@ -94,7 +94,7 @@ func (m Model) waitingSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	m.prompt = prompt{kind: promptWaiting, label: "waiting on", subject: item.Id}
+	m.prompt = m.open(prompt{kind: promptWaiting, label: "waiting on", subject: item.Id})
 	return m, nil, true
 }
 
@@ -132,7 +132,7 @@ func (m Model) editSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
 
 	// The input opens on the title being corrected, since a correction is usually a word of a title
 	// rather than a fresh one. ctrl-u empties it for the times it is a fresh one.
-	m.prompt = prompt{kind: promptRename, label: "edit", subject: item.Id, prior: item.Title, value: item.Title}
+	m.prompt = m.open(prompt{kind: promptRename, label: "edit", subject: item.Id, prior: item.Title})
 	return m, nil, true
 }
 
@@ -143,7 +143,7 @@ func (m Model) noteSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	m.prompt = prompt{kind: promptNote, label: "note", subject: item.Id}
+	m.prompt = m.open(prompt{kind: promptNote, label: "note", subject: item.Id})
 	return m, nil, true
 }
 
@@ -197,7 +197,7 @@ type addTarget struct {
 // the two keys are one press there.
 func (m Model) addPrompt(child bool) (Model, tea.Cmd) {
 	target := m.addTarget(child)
-	m.prompt = prompt{kind: promptAdd, label: "add", subject: target.label, target: target}
+	m.prompt = m.open(prompt{kind: promptAdd, label: "add", subject: target.label, target: target})
 	return m, nil
 }
 

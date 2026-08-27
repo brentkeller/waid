@@ -308,8 +308,8 @@ func TestLoopsPromptsHoldTheKeyboard(t *testing.T) {
 	m, _ := working(t)
 
 	m, _ = press(t, m, "e", "ctrl+u", "q")
-	if m.prompt.value != "q" {
-		t.Errorf("q typed into the prompt left %q, want it treated as text", m.prompt.value)
+	if m.prompt.text() != "q" {
+		t.Errorf("q typed into the prompt left %q, want it treated as text", m.prompt.text())
 	}
 }
 
@@ -539,7 +539,7 @@ func TestEditOpensOnTheTitleItCorrects(t *testing.T) {
 
 	m, _ = press(t, m, "G", "e")
 
-	if got, want := m.prompt.value, "Deploy blocked until the migration is approved"; got != want {
+	if got, want := m.prompt.text(), "Deploy blocked until the migration is approved"; got != want {
 		t.Errorf("the edit opened on %q, want the title it corrects %q", got, want)
 	}
 	if view := plain(m.View()); !strings.Contains(view, "edit 4h2k Deploy blocked") {
@@ -566,8 +566,8 @@ func TestCtrlUClearsThePromptInput(t *testing.T) {
 
 	m, _ = press(t, m, "e", "ctrl+u")
 
-	if m.prompt.value != "" {
-		t.Errorf("ctrl-u left %q in the input, want it emptied", m.prompt.value)
+	if m.prompt.text() != "" {
+		t.Errorf("ctrl-u left %q in the input, want it emptied", m.prompt.text())
 	}
 	if m.prompt.kind != promptRename {
 		t.Error("ctrl-u closed the prompt, want it left open to type into")
@@ -580,8 +580,8 @@ func TestCtrlUClearsAnAddInProgress(t *testing.T) {
 
 	m, _ = press(t, m, "a", "h", "i", "ctrl+u")
 
-	if m.prompt.value != "" {
-		t.Errorf("ctrl-u left %q in the add, want it emptied", m.prompt.value)
+	if m.prompt.text() != "" {
+		t.Errorf("ctrl-u left %q in the add, want it emptied", m.prompt.text())
 	}
 }
 

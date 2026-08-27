@@ -281,7 +281,7 @@ func (m Model) reviewKey(pressed string) (Model, tea.Cmd, bool) {
 		m.review.cursor = 0
 		return m, nil, true
 	case "d":
-		m.prompt = prompt{kind: promptDate, label: "date", subject: "(YYYY-MM-DD)"}
+		m.prompt = m.open(prompt{kind: promptDate, label: "date", subject: "(YYYY-MM-DD)"})
 		return m, nil, true
 	case "r":
 		// The refresh is full: the cache skips a transcript whose size and mtime have not moved, and the

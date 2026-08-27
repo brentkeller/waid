@@ -3,7 +3,10 @@ package tui
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/cursor"
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // promptKind is what an open prompt is collecting, and what its answer does — a write, for all but
@@ -20,6 +23,10 @@ const (
 	promptDate
 )
 
+// promptMaxHeight caps the rows a wrapping answer takes from the list above it. Past the cap the
+// input scrolls, keeping the cursor in view, so a long note stays typeable on a short terminal.
+const promptMaxHeight = 6
+
 // prompt is the inline input the footer takes text in. It holds the keyboard the way the filter does,
 // so a title containing `q` cannot quit the app out from under the person typing it.
 type prompt struct {
@@ -31,34 +38,112 @@ type prompt struct {
 	subject string
 
 	// prior is what the answer replaces, kept for the inverse the write pushes onto the undo stack.
+	// It is also what the input opens on, since a prompt that replaces something opens on it.
 	prior string
 
 	// target is where an added item lands, resolved from the row the prompt was opened on. The
 	// subject names it for the footer; this is what the write carries, since the two differ.
 	target addTarget
 
-	value string
+	input textarea.Model
 }
 
-// promptKey edits the answer. esc abandons it, enter commits it, and ctrl-u empties it — which is what
-// makes a prompt that opens on an existing value rewritable from nothing. shift-backspace is not
-// offered for it: terminals send the same byte for that as for a plain backspace.
+// text is the answer as it stands.
+func (p prompt) text() string { return p.input.Value() }
+
+// open fits a prompt with the input that takes its answer, seeded with what the answer replaces and
+// with the cursor at the end of it, so a prefilled prompt is ready to be appended to or backed over.
+func (m Model) open(p prompt) prompt {
+	input := textarea.New()
+	input.ShowLineNumbers = false
+	input.MaxHeight = promptMaxHeight
+
+	// A static cursor asks for no blink ticks, so the app still wakes only for the work it is
+	// doing rather than on a timer while a prompt sits open.
+	input.Cursor.SetMode(cursor.CursorStatic)
+
+	input.FocusedStyle = promptStyles(m.theme)
+	input.BlurredStyle = input.FocusedStyle
+
+	// enter commits the answer, so it cannot also open a line: every prompt collects one line, and
+	// the writes reading the answer back expect one.
+	input.KeyMap.InsertNewline.SetEnabled(false)
+
+	// ctrl-arrow moves by word beside the readline keys, since ctrl-arrow is what the editors and
+	// browsers around the app use for the same move. The whole binding is named rather than appended
+	// to, so it does not depend on what the component happens to bind by default.
+	input.KeyMap.WordForward.SetKeys("ctrl+right", "alt+right", "alt+f")
+	input.KeyMap.WordBackward.SetKeys("ctrl+left", "alt+left", "alt+b")
+
+	input.SetValue(p.prior)
+	input.CursorEnd()
+	input.Focus()
+
+	p.input = input
+	return p.fit(m.viewWidth())
+}
+
+// promptResized is the no-op the input is handed after it is resized, so it scrolls the cursor back
+// into view: the component repositions itself only while handling a message.
+type promptResized struct{}
+
+// fit sizes the input to the terminal and to what has been typed into it. The label is the input's
+// own per-line prompt, which is what makes a wrapped answer hang under the first line's text instead
+// of under the label; the height follows the wrap, so the footer grows by the rows the answer takes
+// and the list above it gives up exactly that many.
+func (p prompt) fit(width int) prompt {
+	prefix := " " + strings.TrimSpace(p.label+" "+p.subject) + " "
+	p.input.SetPromptFunc(lipgloss.Width(prefix), func(line int) string {
+		if line == 0 {
+			return prefix
+		}
+		return ""
+	})
+	p.input.SetWidth(width)
+	p.input.SetHeight(p.input.LineInfo().Height)
+	// The scroll is measured against what the input last drew, so the rewrap has to be drawn before it
+	// can be scrolled to: at the old width the answer took fewer rows than there are to move through.
+	p.input.View()
+	p.input, _ = p.input.Update(promptResized{})
+	return p
+}
+
+// promptStyles dresses the input in the footer's own colour, cursor line included: the prompt is one
+// line that happens to wrap, so no row of it is lit differently from the rest.
+func promptStyles(theme Theme) textarea.Style {
+	return textarea.Style{
+		Base:       lipgloss.NewStyle(),
+		Text:       theme.FilterActive,
+		Prompt:     theme.FilterActive,
+		CursorLine: theme.FilterActive,
+	}
+}
+
+// promptKey edits the answer. esc abandons it and enter commits it; everything else is text or a
+// move within it, which is the input's own business (§4).
 func (m Model) promptKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.prompt = prompt{}
+		return m, nil
 	case tea.KeyEnter:
 		return m.commitPrompt()
-	case tea.KeyCtrlU:
-		m.prompt.value = ""
-	case tea.KeyBackspace:
-		if runes := []rune(m.prompt.value); len(runes) > 0 {
-			m.prompt.value = string(runes[:len(runes)-1])
-		}
-	case tea.KeyRunes, tea.KeySpace:
-		m.prompt.value += msg.String()
 	}
-	return m, nil
+
+	var cmd tea.Cmd
+	m.prompt, cmd = m.prompt.edit(msg, m.viewWidth())
+	return m, cmd
+}
+
+// edit hands the key to the input and refits the prompt around what it did. The input is given the
+// full height it may take before the key lands: it repositions its own view only while handling a
+// message, and a height momentarily too short for the answer leaves it scrolled past the first line.
+func (p prompt) edit(msg tea.KeyMsg, width int) (prompt, tea.Cmd) {
+	p.input.SetHeight(promptMaxHeight)
+
+	var cmd tea.Cmd
+	p.input, cmd = p.input.Update(msg)
+	return p.fit(width), cmd
 }
 
 // commitPrompt closes the prompt and makes the write its answer asked for. An empty answer is an
@@ -67,7 +152,7 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 	answered := m.prompt
 	m.prompt = prompt{}
 
-	value := strings.TrimSpace(answered.value)
+	value := strings.TrimSpace(answered.text())
 	if value == "" {
 		return m, nil
 	}
@@ -87,7 +172,8 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 	return m, nil
 }
 
-// promptLine is the prompt as the footer shows it, with the cursor the filter uses.
+// promptLine is the prompt as the footer shows it — the label, the answer wrapped under it, and the
+// cursor sitting where the next keystroke lands.
 func (m Model) promptLine() string {
-	return m.theme.FilterActive.Render(" " + m.prompt.label + " " + m.prompt.subject + " " + m.prompt.value + "▏")
+	return strings.TrimRight(m.prompt.input.View(), "\n")
 }

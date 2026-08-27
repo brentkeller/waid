@@ -29,7 +29,7 @@ var aliases = map[string]string{"p": "project", "t": "tag", "h": "help"}
 var retired = map[string]string{"project": "-p for a parent, or --origin for a path"}
 
 // repeatable flags collect every occurrence into a list instead of overwriting.
-var repeatable = map[string]bool{"tag": true}
+var repeatable = map[string]bool{"tag": true, "remove": true}
 
 // Flags holds parsed command-line flags. Booleans, single values, and repeated values are kept
 // apart so a flag's presence stays distinguishable from an empty value.

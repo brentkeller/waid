@@ -158,7 +158,7 @@ Three tabs, switched with `1` `2` `3` or `tab` / `shift-tab`:
 
 | Tab | Shows | Acts |
 | --- | --- | --- |
-| Loops | Declared items as a tree, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `m` move, `n` note, `y` copy the item id, `P` mark a heading, `S` reveal the headings holding nothing, `p` toggle the pane. |
+| Loops | Declared items as a tree, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `m` move, `n` note, `t` edit the tags, `y` copy the item id, `P` mark a heading, `S` reveal the headings holding nothing, `p` toggle the pane. |
 | Repos | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
 | Agents | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `pgup`/`pgdn` scroll it, `home`/`end` jump to either end, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
 
@@ -170,18 +170,22 @@ that belongs under nothing. It opens with the roots and the rows filed directly 
 and anything deeper folded away. Since the item's own subtree has left the tree, there is no
 destination on screen the move could be refused for.
 
-Keys that work everywhere: `j` `k` to move, `g` / `G` for first and last, `enter` to fold and
-`h` / `l` — or `←` / `→` — to collapse and expand the fold under the cursor, `/` to
+Keys that work everywhere: `j` `k` — or `↑` / `↓` — to move, `g` / `G` for first and last, `enter`
+to fold and `h` / `l` — or `←` / `→` — to collapse and expand the fold under the cursor, `/` to
 filter (`esc` clears), `s` to cycle the tab's segmented row — Loops' statuses, Repos' kinds,
 Agents' today/yesterday/week/last week plus whatever day `d` picked — `a` to add an item beside the
 row under the cursor and `A` to add one under it, which is how a tier of the tree is made, `r` to
 refresh — on Agents that re-reads every transcript on disk, so a session run since the app opened
-shows up — `u` to undo, `?` for the key table, `q` to quit. A key that belongs to another tab says so
-in the footer rather than doing nothing quietly.
+shows up — `u` to undo, `?` for the key table, `q` or `ctrl-c` to quit. A key that belongs to
+another tab says so in the footer rather than doing nothing quietly.
 
-A prompt taking text — a title or a note — commits on `enter`, abandons on `esc`, and empties on
-`ctrl-u`. `e` opens on the title it is replacing, so a correction is a word of typing and `ctrl-u`
-is how one starts from nothing.
+A prompt taking text — a title, a note or a set of tags — commits on `enter` and abandons on `esc`.
+`e` and `t` open on what they are replacing, so a correction is a word of typing. A prompt holds the
+keyboard while it is open, so its editing keys are the only ones bound: `←` / `→` move a character
+and `ctrl-←` / `ctrl-→` — or `alt-←` / `alt-→`, or `alt-b` / `alt-f` — move a word, `ctrl-a` and
+`ctrl-e` — or `home` and `end` — go to either end, `backspace` and `delete` take the character
+behind and in front of the cursor, `ctrl-w` cuts the word behind it, `ctrl-k` cuts to the end and
+`ctrl-u` cuts back to the start, which is how one starts from nothing.
 
 Writes land on the keypress with no confirm step, so the footer's receipt is what says a press did
 anything, and `u` reverses the last one — as another event, since the log is append-only. The stack

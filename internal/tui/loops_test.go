@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -1094,5 +1095,64 @@ func TestLoopsDetailPaneLeavesOutAnEmptyTagsLine(t *testing.T) {
 
 	if pane := detailPane(t, m.View()); strings.Contains(pane, "tags") {
 		t.Errorf("the pane drew a tags line for an item with none:\n%s", pane)
+	}
+}
+
+// y puts the item id on the clipboard, which is what the CLI takes to address it. The copy writes
+// nothing to the log, so it leaves a hint rather than a receipt.
+func TestLoopsCopiesTheItemId(t *testing.T) {
+	copied := []string{}
+	restore := copyText
+	copyText = func(text string) error {
+		copied = append(copied, text)
+		return nil
+	}
+	t.Cleanup(func() { copyText = restore })
+
+	m, path := working(t)
+	next, cmd := press(t, m, "j", "j", "y")
+	next = deliver(t, next, cmd)
+
+	if want := "nktt"; len(copied) != 1 || copied[0] != want {
+		t.Fatalf("y copied %v, want the item id %q", copied, want)
+	}
+	if !strings.Contains(next.hint, "nktt") {
+		t.Errorf("y left the hint %q, want it to name what was copied", next.hint)
+	}
+	if log := written(t, path); len(log) != 0 {
+		t.Errorf("y wrote %v, want nothing — a copy is not a write", log)
+	}
+	if len(next.receipts) != 0 {
+		t.Errorf("y recorded %d receipts, want none", len(next.receipts))
+	}
+
+	copyText = func(string) error { return errors.New("no clipboard tool available") }
+	broken, cmd := press(t, m, "j", "j", "y")
+	broken = deliver(t, broken, cmd)
+	if !strings.Contains(broken.hint, "no clipboard tool") {
+		t.Errorf("a failed copy left the hint %q, want the reason in the footer", broken.hint)
+	}
+}
+
+// The (unassigned) bucket is a rendering artifact rather than an item, so it carries no id to copy
+// and the footer says which row the key was pressed on (§4).
+func TestLoopsCopyIsInertOnTheBucket(t *testing.T) {
+	copied := []string{}
+	restore := copyText
+	copyText = func(text string) error {
+		copied = append(copied, text)
+		return nil
+	}
+	t.Cleanup(func() { copyText = restore })
+
+	m, _ := working(t)
+	next, cmd := press(t, m, "j", "j", "j", "y")
+	next = deliver(t, next, cmd)
+
+	if len(copied) != 0 {
+		t.Errorf("y on the bucket copied %v, want nothing", copied)
+	}
+	if !strings.Contains(next.hint, "project") {
+		t.Errorf("y on the bucket left the hint %q, want it to name the row", next.hint)
 	}
 }

@@ -158,6 +158,8 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		return m.tagSelected(tree)
 	case "m":
 		return m.startMove(tree)
+	case "y":
+		return m.copyItemId(tree)
 	case "P":
 		return m.headingSelected(tree)
 	default:
@@ -646,4 +648,17 @@ func (m Model) loopsSegment() int {
 // counted with the rest since a heading is an item like any other (§1).
 func (m Model) loopsCounts() string {
 	return plural(len(m.loopsVisible()), "item")
+}
+
+// copyItemId puts the id on the system clipboard, which is what the CLI takes to address the item —
+// `waid done <id>` and the rest. The copy runs off the update loop, since the clipboard is reached
+// through a process of its own (§6).
+func (m Model) copyItemId(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
+	m, item, ok := m.loopTarget(tree, "y copies an item id")
+	if !ok {
+		return m, nil, true
+	}
+
+	id := item.Id
+	return m, func() tea.Msg { return copiedMsg{id: id, err: copyText(id)} }, true
 }

@@ -67,9 +67,9 @@ var tabTitles = [numTabs]string{"Loops", "Repos", "Agents"}
 // tabFooters are the key hints each tab keeps in the footer — the keys worth having in front of you
 // while working the tab, as opposed to the full table `?` opens.
 var tabFooters = [numTabs]string{
-	tabLoops:  "x done · w waiting · e edit · t tags · m move · n note · y copy id · a add · / filter · s status · h headings · H heading · ? keys",
+	tabLoops:  "x done · w waiting · e edit · t tags · m move · n note · y copy id · a add · / filter · s status · h headings · H heading · P dock · ? keys",
 	tabScan:   "p promote · d dismiss · o open in browser · r refresh · / filter · ? keys",
-	tabReview: "space preview · R resume · o open repo · y copy id · s range · d date · ? keys",
+	tabReview: "space preview · P dock · R resume · o open repo · y copy id · s range · d date · ? keys",
 }
 
 // tabEmpty is what a tab says when it has nothing to show.
@@ -133,6 +133,9 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"s"}, "s", "cycle the status filter — open, waiting, done, all"},
 		{[]string{"h"}, "h", "show the headings holding nothing"},
 		{[]string{" "}, "space", "toggle the detail pane"},
+		{[]string{"pgup", "pgdown"}, "pgup / pgdn", "scroll the detail pane"},
+		{[]string{"home", "end"}, "home / end", "top / bottom of the detail"},
+		{[]string{"P"}, "P", "dock the detail pane on the bottom or the right"},
 	},
 	tabScan: {
 		{[]string{"p"}, "p", "promote"},
@@ -143,6 +146,7 @@ var tabBindings = [numTabs][]binding{
 	},
 	tabReview: {
 		{[]string{" "}, "space", "preview"},
+		{[]string{"P"}, "P", "dock the preview on the bottom or the right"},
 		{[]string{"pgup", "pgdown"}, "pgup / pgdn", "scroll the open preview"},
 		{[]string{"home", "end"}, "home / end", "top / bottom of the transcript"},
 		{[]string{"R"}, "R", "resume in claude"},
@@ -197,6 +201,10 @@ type Model struct {
 	// receipts are the writes this session made, in order. The last one is what the footer shows,
 	// and the whole log is replayed to the restored terminal on quit (§3.1).
 	receipts []receipt
+
+	// dock is where the detail pane sits against the list on Loops and Agents. It is one setting for both
+	// tabs, and `P` flips it for the length of the session.
+	dock dock
 
 	// loops is the Loops tab's own state: the folded log and the tree over it.
 	loops loopsModel
@@ -263,6 +271,14 @@ func (m Model) viewWidth() int {
 // Update is pure: every read runs as a tea.Cmd off the update loop and returns a message, so
 // Update never waits on the filesystem or the network.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	if model, ok := next.(Model); ok {
+		next = model.follow()
+	}
+	return next, cmd
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -449,6 +465,31 @@ func (m Model) bodyRows() int {
 	return m.height - lines(m.tabBar(m.viewWidth())) - 1 - lines(m.footer())
 }
 
+// paneDock is where the detail pane is drawn at the current width: where it was docked, unless that is
+// the right and the terminal is too narrow to put anything beside the list, which docks it on the
+// bottom instead (§5).
+func (m Model) paneDock() dock {
+	if m.dock == dockRight && Split(m.viewWidth()).SideBySide {
+		return dockRight
+	}
+	return dockBottom
+}
+
+// toggleDock moves the detail pane to the other edge. A terminal too narrow for the right leaves it
+// on the bottom, and the footer says why rather than letting the key look inert.
+func (m Model) toggleDock() Model {
+	if m.dock == dockRight {
+		m.dock = dockBottom
+		return m
+	}
+
+	m.dock = dockRight
+	if m.paneDock() != dockRight {
+		m.hint = fmt.Sprintf("the pane docks on the right at %d columns or wider", splitMinWidth)
+	}
+	return m
+}
+
 // tabBar is the three lines at the top: the cap over the active tab, the labels, and the rule the
 // list hangs from. The right-hand slot rides on the label line (§1).
 func (m Model) tabBar(width int) string {
@@ -513,7 +554,7 @@ func (m Model) body(width, height int) string {
 	case tabLoops:
 		return m.loopsBody(width, height)
 	case tabScan:
-		return m.scanBody(width)
+		return m.scanBody(width, height)
 	case tabReview:
 		return m.reviewBody(width, height)
 	}

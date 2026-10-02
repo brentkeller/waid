@@ -67,6 +67,9 @@ type scanModel struct {
 	cursor   int
 	expanded map[string]bool
 
+	// top is the first line of the list on screen once it holds more than its rows.
+	top int
+
 	// triaged are the keys promoted or dismissed since the pass ran. They are held here rather than
 	// removed from the result so the pass stays the thing detection returned, and a fresh pass clears
 	// them — detection already excludes a dismissed key from the next one.
@@ -480,20 +483,35 @@ func scanRow(signal detect.Signal, columns scanColumns, width int) string {
 
 // scanBody is the tab between the bar and the footer: the filter row and its counts, the rule under
 // them, and the tree.
-func (m Model) scanBody(width int) string {
+func (m Model) scanBody(width, height int) string {
 	body := []string{m.scanHeader(width), m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
 
 	tree := m.scanTree(width)
-	if tree.Len() == 0 {
-		body = append(body, m.theme.Dim.Render("  "+tabEmpty[tabScan]))
-	} else {
-		body = append(body, tree.View(width, m.theme))
+	list := []string{m.theme.Dim.Render("  " + tabEmpty[tabScan])}
+	if tree.Len() > 0 {
+		list = strings.Split(tree.View(width, m.theme), "\n")
 	}
+	// The notes stay under the list rather than scrolling away with it, so the list scrolls in the rows
+	// they leave.
+	if height > 0 {
+		rows := m.scanListRows(height)
+		list = padRows(scrollLines(list, scrollTop(m.scan.top, tree.CursorLine(), len(list), rows), rows), rows)
+	}
+	body = append(body, list...)
 
 	if strip := m.noteStrip(m.scan.result.Notes); strip != "" {
 		body = append(body, strip)
 	}
 	return strings.Join(body, "\n")
+}
+
+// scanListRows is the rows the list scrolls in: the body less the header and the notes under it.
+func (m Model) scanListRows(height int) int {
+	rows := height - listHeadRows
+	if strip := m.noteStrip(m.scan.result.Notes); strip != "" {
+		rows -= lines(strip)
+	}
+	return max(rows, 1)
 }
 
 // scanHeader is the segmented kind row with the counts opposite it (§1.2).

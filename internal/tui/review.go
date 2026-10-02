@@ -44,7 +44,7 @@ const (
 )
 
 // The preview's turns: the marker a role is announced with, the column its text hangs from, and the
-// gutter the pane keeps in front of it when it is drawn as an overlay.
+// gutter the pane keeps in front of it when it is docked on the bottom.
 const (
 	turnMark      = "▸"
 	turnIndent    = 2
@@ -111,6 +111,9 @@ type reviewModel struct {
 
 	cursor   int
 	expanded map[string]bool
+
+	// top is the first line of the list on screen once it holds more than its rows.
+	top int
 
 	// preview is whether the transcript pane is open. It is closed until space opens it, and its
 	// geometry is the width rule rather than a setting of its own (§5).
@@ -274,6 +277,8 @@ func (m Model) reviewKey(pressed string) (Model, tea.Cmd, bool) {
 		m.review.preview = !m.review.preview
 		m, cmd := m.previewSync(tree)
 		return m, cmd, true
+	case "P":
+		return m.toggleDock(), nil, true
 	case "pgup", "pgdown", "home", "end":
 		return m.previewPage(pressed)
 	case "s":
@@ -445,19 +450,29 @@ func (m Model) previewPage(pressed string) (Model, tea.Cmd, bool) {
 	return m, nil, true
 }
 
-// previewWidth is the columns the pane is drawn in: the split's detail column when the terminal is
-// wide enough for one, and the whole body less its gutter when it is not (§5).
+// previewWidth is the columns the pane is drawn in: the split's detail column when it is docked on the
+// right, and the whole body less its gutter when it is docked on the bottom (§5).
 func (m Model) previewWidth() int {
-	if panes := Split(m.viewWidth()); panes.SideBySide {
-		return panes.Detail
+	if m.paneDock() == dockRight {
+		return Split(m.viewWidth()).Detail
 	}
 	return m.viewWidth() - previewMargin
 }
 
-// previewRows is the rows the transcript itself is drawn in, once the tab's own header and the
-// session heading pinned above the turns have taken theirs.
+// previewRows is the rows the transcript itself is drawn in, once the tab's own header, the rule a
+// bottom pane hangs from, and the session heading pinned above the turns have taken theirs.
 func (m Model) previewRows() int {
-	return m.bodyRows() - reviewHeadRows - previewHeadRows
+	return m.previewPaneRows(m.bodyRows()) - previewHeadRows
+}
+
+// previewPaneRows is the rows the pane draws in out of the body's: everything under the header when it
+// is docked on the right, and its share less its rule when it is docked on the bottom.
+func (m Model) previewPaneRows(height int) int {
+	rows := height - reviewHeadRows
+	if m.paneDock() == dockBottom {
+		return bottomPaneRows(rows) - 1
+	}
+	return rows
 }
 
 // previewSync keeps the open pane pointed at the row under the cursor: a session it has not read yet
@@ -734,31 +749,48 @@ func reviewRow(session sessions.Session, columns reviewColumns, width int) strin
 // is the rows the body has been given, and is zero until the terminal says how tall it is.
 func (m Model) reviewBody(width, height int) string {
 	head := []string{m.reviewHeader(width), m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
-	rows := height - len(head)
-
+	right := m.review.preview && m.paneDock() == dockRight
 	panes := Split(width)
-	// Below the threshold a side-by-side split leaves the transcript a gutter too narrow to read prose
-	// in, so the preview takes the whole width and the list gives way to it. The margin stands in for
-	// the divider the split would have put in front of it, so the overlay hangs off the same column
-	// every other row of the app does.
-	if m.review.preview && !panes.SideBySide {
-		overlay := m.previewLines(width-previewMargin, rows)
-		for i, line := range overlay {
-			overlay[i] = strings.TrimRight(strings.Repeat(" ", previewMargin)+line, " ")
-		}
-		return strings.Join(append(head, overlay...), "\n")
-	}
-
 	listWidth := width
-	if m.review.preview {
+	if right {
 		listWidth = panes.List
 	}
 
 	list := m.reviewList(listWidth)
-	if m.review.preview {
-		list = m.splitRows(list, m.previewLines(panes.Detail, rows), panes.List)
+	if height > 0 {
+		listRows := m.reviewListRows(height)
+		list = scrollLines(list, scrollTop(m.review.top, m.reviewTree(listWidth).CursorLine(), len(list), listRows), listRows)
+		if m.review.preview && !right {
+			list = padRows(list, listRows)
+		}
+	}
+
+	paneRows := 0
+	if height > 0 {
+		paneRows = max(m.previewPaneRows(height), 0)
+	}
+	switch {
+	case right:
+		list = m.splitRows(list, m.previewLines(panes.Detail, paneRows), panes.List)
+	case m.review.preview:
+		// The margin stands in for the divider a split would have put in front of the pane, so it hangs
+		// off the same column every other row of the app does.
+		list = append(list, m.theme.Divider.Render(strings.Repeat("─", max(width, 0))))
+		for _, line := range m.previewLines(width-previewMargin, paneRows) {
+			list = append(list, strings.TrimRight(strings.Repeat(" ", previewMargin)+line, " "))
+		}
 	}
 	return strings.Join(append(head, list...), "\n")
+}
+
+// reviewListRows is the rows the list scrolls in: the body less the header and, while it is open on
+// the bottom, the preview.
+func (m Model) reviewListRows(height int) int {
+	rows := height - listHeadRows
+	if m.review.preview && m.paneDock() == dockBottom {
+		rows -= bottomPaneRows(rows)
+	}
+	return max(rows, 1)
 }
 
 // reviewList is the tree's lines, or what the tab says when the window holds nothing.

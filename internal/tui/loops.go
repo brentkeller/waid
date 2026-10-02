@@ -40,12 +40,11 @@ const (
 	loopsTitleMin  = 24
 )
 
-// The detail pane: the gutter its lines hang from, the column a note's text hangs from, and the
-// fewest rows it will draw itself in before the list's share of the body decides.
+// The detail pane: the gutter its lines hang from when it is docked on the bottom, and the column a
+// note's text hangs from.
 const (
 	loopsDetailIndent = 1
 	loopsNoteIndent   = 2
-	loopsDetailMin    = 4
 )
 
 // loopsLoadedMsg carries a finished read of the event log back into the update loop. Every read is a
@@ -74,8 +73,17 @@ type loopsModel struct {
 	// it under the list, and `space` collapses it when density matters more.
 	collapsed bool
 
+	// detailTop is the first line of the detail the pane is showing, and detailId the item it was
+	// scrolled on. The offset applies only while the cursor stays on that item, so every other item
+	// opens at its top.
+	detailTop int
+	detailId  string
+
 	cursor   int
 	expanded map[string]bool
+
+	// top is the first line of the list on screen once it holds more than its rows.
+	top int
 
 	// moving is the destination picker, open over the list while an item is being moved (§7.1). Its
 	// zero value is the mode closed, which is every frame but those.
@@ -135,6 +143,10 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 	case " ":
 		m.loops.collapsed = !m.loops.collapsed
 		return m, nil, true
+	case "P":
+		return m.toggleDock(), nil, true
+	case "pgup", "pgdown", "home", "end":
+		return m.detailPage(tree, pressed)
 	case "s":
 		m.loops.status = nextLoopsStatus(m.loops.status)
 		m.loops.cursor = 0
@@ -450,51 +462,75 @@ func loopsRow(item events.Item, columns loopsColumns, now time.Time, width int) 
 }
 
 // loopsBody is the tab between the bar and the footer: the counts, the rule under them, the tree, and
-// the detail pane under it while it is open (§1.1). The height is the rows the body was given, and is
-// zero until the terminal has said how tall it is.
+// the detail pane under it or beside it while it is open (§1.1). The height is the rows the body was
+// given, and is zero until the terminal has said how tall it is.
 func (m Model) loopsBody(width, height int) string {
 	if m.loops.moving.active() {
-		return m.moveBody(width)
+		return m.moveBody(width, height)
 	}
 
 	head := []string{m.loopsHeader(width), m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
-	list := m.loopsList(width)
-	if m.loops.collapsed {
-		return strings.Join(slices.Concat(head, list), "\n")
+	right := !m.loops.collapsed && m.paneDock() == dockRight
+	panes := Split(width)
+	listWidth := width
+	if right {
+		listWidth = panes.List
 	}
 
-	rows := height - len(head)
-	pane := m.detailPane(width, rows)
-	// The pane hangs off the bottom of the body rather than following the last row of the list, so the
-	// list does not shift under the cursor as the item it is pointed at grows notes.
-	if grow := rows - len(list) - len(pane); grow > 0 {
-		list = append(list, make([]string, grow)...)
+	tree := m.loopsTree(listWidth)
+	list := m.loopsList(tree, listWidth)
+	// The list scrolls in the rows the header and the pane leave it, so both stay put however long it
+	// grows. Until the terminal has said how tall it is there are no rows to fit, and it is drawn whole.
+	if height > 0 {
+		rows := m.loopsListRows(height)
+		list = padRows(scrollLines(list, scrollTop(m.loops.top, tree.CursorLine(), len(list), rows), rows), rows)
 	}
-	return strings.Join(slices.Concat(head, list, pane), "\n")
+
+	switch {
+	case m.loops.collapsed:
+		return strings.Join(slices.Concat(head, list), "\n")
+	case right:
+		detail := window(m.detailLines(panes.Detail), m.detailTop(), max(height-len(head), 0), m.theme)
+		return strings.Join(slices.Concat(head, m.splitRows(list, detail, panes.List)), "\n")
+	}
+	return strings.Join(slices.Concat(head, list, m.detailPane(width, height-len(head))), "\n")
+}
+
+// loopsListRows is the rows the list scrolls in: the body less the header and, while it is open on the
+// bottom, the detail pane. It never falls below one, so the cursor's row survives a terminal too short
+// for both.
+func (m Model) loopsListRows(height int) int {
+	rows := height - listHeadRows
+	if !m.loops.moving.active() && !m.loops.collapsed && m.paneDock() == dockBottom {
+		rows -= bottomPaneRows(rows)
+	}
+	return max(rows, 1)
 }
 
 // loopsList is the tree's lines, or what the tab says when nothing is owed.
-func (m Model) loopsList(width int) []string {
-	tree := m.loopsTree(width)
+func (m Model) loopsList(tree Tree[events.Item], width int) []string {
 	if tree.Len() == 0 {
 		return []string{m.theme.Dim.Render("  " + tabEmpty[tabLoops])}
 	}
 	return strings.Split(tree.View(width, m.theme), "\n")
 }
 
-// detailPane is the strip under the list: a rule, then `show`'s data for the row the cursor is on. It
-// takes at most half the rows the body has, so a long title or a run of notes narrows the pane rather
-// than squeezing the list out of the tab.
+// detailPane is the strip under the list: a rule, then `show`'s data for the row the cursor is on.
+// Given rows, it fills exactly the share bottomPaneRows gives it, so a long title or a run of notes is cut
+// short rather than squeezing the list, and a short one leaves blank rows rather than giving them up.
 func (m Model) detailPane(width, rows int) []string {
 	limit := 0
 	if rows > 0 {
-		limit = max(rows/2, loopsDetailMin)
+		limit = bottomPaneRows(rows) - 1
 	}
 
 	pane := []string{m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
 	gutter := strings.Repeat(" ", loopsDetailIndent)
-	for _, line := range window(m.detailLines(width-loopsDetailIndent), 0, limit, m.theme) {
+	for _, line := range window(m.detailLines(width-loopsDetailIndent), m.detailTop(), limit, m.theme) {
 		pane = append(pane, strings.TrimRight(gutter+line, " "))
+	}
+	if rows > 0 {
+		pane = padRows(pane, limit+1)
 	}
 	return pane
 }
@@ -661,4 +697,65 @@ func (m Model) copyItemId(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
 
 	id := item.Id
 	return m, func() tea.Msg { return copiedMsg{id: id, err: copyText(id)} }, true
+}
+
+// detailTop is the first line of the detail the pane draws: where it was paged to while the cursor is
+// still on the item it was paged on, and the top of the detail otherwise.
+func (m Model) detailTop() int {
+	item, selected := m.loopsTree(m.viewWidth()).SelectedItem()
+	if !selected || item.Id != m.loops.detailId {
+		return 0
+	}
+	return m.loops.detailTop
+}
+
+// detailWidth is the columns the detail's lines are laid out in: the split's detail column when the
+// pane is docked on the right, and the whole body less its gutter when it is on the bottom.
+func (m Model) detailWidth() int {
+	if m.paneDock() == dockRight {
+		return Split(m.viewWidth()).Detail
+	}
+	return m.viewWidth() - loopsDetailIndent
+}
+
+// detailRows is the rows the detail's lines are drawn in: everything under the header when the pane
+// is docked on the right, and its share less its rule when it is on the bottom.
+func (m Model) detailRows() int {
+	rows := m.bodyRows() - listHeadRows
+	if m.paneDock() == dockBottom {
+		return bottomPaneRows(rows) - 1
+	}
+	return rows
+}
+
+// detailPage moves the pane's window over the selected item's detail, a page short of the whole pane
+// the way the Agents preview pages, and never past the end of what the item holds.
+func (m Model) detailPage(tree Tree[events.Item], pressed string) (Model, tea.Cmd, bool) {
+	if m.loops.collapsed {
+		m.hint = keyLabel(pressed) + " scrolls the detail — press space to open the pane"
+		return m, nil, true
+	}
+	item, selected := tree.SelectedItem()
+	if !selected {
+		return m, nil, true
+	}
+
+	rows := max(m.detailRows(), 1)
+	page := max(int(float64(rows)*pageShare), 1)
+	last := max(len(m.detailLines(m.detailWidth()))-rows, 0)
+
+	top := m.detailTop()
+	switch pressed {
+	case "pgup":
+		top -= page
+	case "pgdown":
+		top += page
+	case "home":
+		top = 0
+	case "end":
+		top = last
+	}
+
+	m.loops.detailId, m.loops.detailTop = item.Id, min(max(top, 0), last)
+	return m, nil, true
 }

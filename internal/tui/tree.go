@@ -238,6 +238,17 @@ func (t *Tree[T]) clamp() {
 	t.Cursor = max(t.snap(t.rows()), 0)
 }
 
+// CursorLine is the printed line the cursor is on, which is what a list scrolled to fit its rows
+// keeps in sight.
+func (t Tree[T]) CursorLine() int {
+	return max(t.snap(t.rows()), 0)
+}
+
+// LineCount is the lines the tree draws: every row no closed fold is hiding.
+func (t Tree[T]) LineCount() int {
+	return len(t.rows())
+}
+
 // Down and Up move a row at a time, skipping what cannot be selected, and stop at the ends rather
 // than wrapping.
 func (t *Tree[T]) Down() {

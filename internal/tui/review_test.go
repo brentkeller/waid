@@ -289,12 +289,13 @@ var transcripts = map[string][]sessions.Turn{
 	},
 }
 
-// previewing is a Review model with the transcript seam faked and the cursor resting on the first
+// previewing is a Review model with the pane docked on the right, the transcript seam faked, and the cursor resting on the first
 // session of the first project, which is the row the preview reads.
 func previewing(t *testing.T, width int) Model {
 	t.Helper()
 
 	m := reviewed(t, width, reviewFixture())
+	m.dock = dockRight
 	m.review.readTurns = func(path string) ([]sessions.Turn, error) {
 		turns, recorded := transcripts[path]
 		if !recorded {
@@ -390,20 +391,46 @@ func TestReviewPreviewIsASideSplitAtWideWidths(t *testing.T) {
 }
 
 // Below the threshold a side-by-side split leaves the transcript a gutter too narrow for prose, so
-// the preview takes the whole width and the list gives way to it (§5).
-func TestReviewPreviewIsAnOverlayBelowTheSplit(t *testing.T) {
+// a pane docked on the right is drawn under the list instead, across the whole width (§5).
+func TestReviewPreviewDocksOnTheBottomBelowTheSplit(t *testing.T) {
 	m, cmd := press(t, previewing(t, 100), " ")
-	view := plain(deliver(t, m, cmd).View())
+	assertPreviewOnTheBottom(t, plain(deliver(t, m, cmd).View()))
+}
 
-	if strings.Contains(view, `C:\dev\dr\devresults\devresults`) {
-		t.Errorf("the list is still drawn at 100 columns, want the preview as a full-width overlay:\n%s", view)
+// The pane docks on the bottom until `P` moves it, and `P` moves it back.
+func TestReviewPreviewDockToggles(t *testing.T) {
+	m := previewing(t, 140)
+	m.dock = dockBottom
+
+	opened, cmd := press(t, m, " ")
+	opened = deliver(t, opened, cmd)
+	assertPreviewOnTheBottom(t, plain(opened.View()))
+
+	right, _ := press(t, opened, "P")
+	if right.paneDock() != dockRight {
+		t.Fatalf("P left the pane docked on the bottom at 140 columns")
 	}
-	if !strings.Contains(view, "▸ you") {
-		t.Errorf("the overlay does not carry the transcript:\n%s", view)
+	back, _ := press(t, right, "P")
+	assertPreviewOnTheBottom(t, plain(back.View()))
+}
+
+// assertPreviewOnTheBottom checks the list is drawn whole and the transcript under it at full width.
+func assertPreviewOnTheBottom(t *testing.T, view string) {
+	t.Helper()
+
+	list := strings.Index(view, `C:\dev\dr\devresults\devresults`)
+	turn := strings.Index(view, "▸ you")
+	if list < 0 || turn < 0 || turn < list {
+		t.Fatalf("want the list with the transcript under it:\n%s", view)
+	}
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, `C:\dev\dr\devresults\devresults`) && strings.Contains(line, "│") {
+			t.Errorf("the list shares a row with the pane, want the pane under it:\n%s", view)
+		}
 	}
 	// A line this long only fits the pane when the pane has the whole terminal.
 	if !strings.Contains(view, "Add the terminal I/O layer now — raw mode, the alternate") {
-		t.Errorf("the overlay wrapped as if it were a split pane:\n%s", view)
+		t.Errorf("the pane wrapped as if it were a split pane:\n%s", view)
 	}
 }
 
@@ -781,6 +808,7 @@ func scrolling(t *testing.T, turns int) Model {
 	t.Helper()
 
 	m := reviewed(t, 140, reviewFixture())
+	m.dock = dockRight
 	m.review.readTurns = func(string) ([]sessions.Turn, error) { return longTranscript(turns), nil }
 
 	opened, cmd := press(t, m, "down", "enter", " ")

@@ -39,6 +39,9 @@ type moveModel struct {
 	subject  string
 	cursor   int
 	expanded map[string]bool
+
+	// top is the first line of the picker on screen once it holds more than its rows.
+	top int
 }
 
 // active reports whether the picker is open, which is when it holds the keyboard.
@@ -207,9 +210,15 @@ func (m Model) commitMove(t Tree[events.Item]) (Model, tea.Cmd) {
 // moveBody is the picker in place of the list: the header naming what is being moved, the rule under
 // it, and the destinations. The detail pane is left out — the question the mode asks is where a row
 // sits, not what it says.
-func (m Model) moveBody(width int) string {
+func (m Model) moveBody(width, height int) string {
 	head := []string{m.moveHeader(width), m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
-	return strings.Join(append(head, strings.Split(m.moveTree(width).View(width, m.theme), "\n")...), "\n")
+	tree := m.moveTree(width)
+	list := strings.Split(tree.View(width, m.theme), "\n")
+	if height > 0 {
+		rows := m.loopsListRows(height)
+		list = scrollLines(list, scrollTop(m.loops.moving.top, tree.CursorLine(), len(list), rows), rows)
+	}
+	return strings.Join(append(head, list...), "\n")
 }
 
 // moveHeader names the item being moved, how much comes with it, and the two keys that end the mode.

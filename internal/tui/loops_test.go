@@ -79,6 +79,10 @@ func loopsNested() loopsLoadedMsg {
 	return msg
 }
 
+// loopsHeight is the terminal the Loops tests run in: tall enough that every fixture's list fits the
+// rows the detail pane leaves it, so a test about what the list holds is not a test of its scrolling.
+const loopsHeight = 40
+
 // looped is a model sized, left on Loops, and holding a finished read of the log.
 func looped(t *testing.T, width int, msg loopsLoadedMsg) Model {
 	t.Helper()
@@ -87,7 +91,8 @@ func looped(t *testing.T, width int, msg loopsLoadedMsg) Model {
 	m.clock = func() time.Time { return loopsNow }
 	m.loops.load = func() tea.Msg { return msg }
 
-	next, _ := m.Update(m.loops.load())
+	sized, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: loopsHeight})
+	next, _ := sized.Update(m.loops.load())
 	return next.(Model)
 }
 
@@ -973,14 +978,53 @@ func TestLoopsDetailPaneCollapsesWithP(t *testing.T) {
 	}
 }
 
-// The pane hangs off the bottom of the body rather than following the last row of the list, so the
-// list does not shift under the cursor as the item it is pointed at grows notes.
-func TestLoopsDetailPaneSitsOnTheBottomOfTheBody(t *testing.T) {
-	m, _ := press(t, looped(t, 140, loopsFixture()), "down")
+// The pane keeps its height whatever the selected item holds, so its rule stays on one row as the
+// cursor passes between an item with notes and one without, and the list above it does not shift.
+func TestLoopsDetailPaneHoldsItsHeight(t *testing.T) {
+	bare := looped(t, 140, loopsFixture())
+	noted, _ := press(t, bare, "down")
 
-	lines := strings.Split(plain(m.View()), "\n")
-	if got := lines[len(lines)-4]; !strings.Contains(got, loopsNote) {
-		t.Errorf("the last body line is %q, want the pane's last line:\n%s", got, plain(m.View()))
+	if !strings.Contains(detailPane(t, noted.View()), loopsNote) {
+		t.Fatalf("the cursor is not on an item with notes:\n%s", plain(noted.View()))
+	}
+	if got, want := paneRule(t, noted.View()), paneRule(t, bare.View()); got != want {
+		t.Errorf("the pane's rule moved from row %d to row %d as the cursor reached the notes", want, got)
+	}
+}
+
+// paneRule is the row the detail pane's rule is drawn on.
+func paneRule(t *testing.T, view string) int {
+	t.Helper()
+
+	pane := detailPane(t, view)
+	return len(strings.Split(plain(view), "\n")) - 3 - len(strings.Split(pane, "\n")) - 1
+}
+
+// A list longer than its rows scrolls under the header rather than pushing it off the screen, and
+// the cursor stays in sight however far down it goes.
+func TestLoopsListScrollsUnderTheHeader(t *testing.T) {
+	m := looped(t, 140, loopsChain(30))
+	sized, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 24})
+	m = sized.(Model)
+
+	m, _ = press(t, m, "G")
+	view := plain(m.View())
+	if lines := strings.Split(view, "\n"); len(lines) != 24 {
+		t.Errorf("the view drew %d lines, want the terminal's 24:\n%s", len(lines), view)
+	}
+	if !strings.Contains(view, "‹open›") {
+		t.Errorf("the header scrolled away:\n%s", view)
+	}
+	if !strings.Contains(view, "level 29") {
+		t.Errorf("the cursor's row is off screen:\n%s", view)
+	}
+	if strings.Contains(view, "level 0") {
+		t.Errorf("the top of the list is still drawn with the cursor at the bottom:\n%s", view)
+	}
+
+	m, _ = press(t, m, "g")
+	if view := plain(m.View()); !strings.Contains(view, "level 0") {
+		t.Errorf("g did not bring the top of the list back:\n%s", view)
 	}
 }
 
@@ -1000,7 +1044,7 @@ func TestLoopsDetailPaneIsCutToItsShareOfTheBody(t *testing.T) {
 	m, _ := press(t, looped(t, 140, msg), "down")
 	pane := detailPane(t, m.View())
 
-	if got, want := len(strings.Split(pane, "\n")), 9; got > want {
+	if got, want := len(strings.Split(pane, "\n")), bottomPaneRows(m.bodyRows()-listHeadRows)-1; got > want {
 		t.Errorf("the pane drew %d lines, want at most %d:\n%s", got, want, pane)
 	}
 	if !strings.Contains(pane, "…") {
@@ -1154,5 +1198,111 @@ func TestLoopsCopyIsInertOnTheBucket(t *testing.T) {
 	}
 	if !strings.Contains(next.hint, "project") {
 		t.Errorf("y on the bucket left the hint %q, want it to name the row", next.hint)
+	}
+}
+
+// `P` docks the detail pane beside the list, where the list keeps every row under the header, and
+// a second press puts it back on the bottom.
+func TestLoopsDetailPaneDocksOnTheRight(t *testing.T) {
+	m, _ := press(t, looped(t, 140, loopsFixture()), "down", "P")
+	view := plain(m.View())
+
+	beside := false
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "sga9") && strings.Contains(line, "│") && strings.Contains(line, "sga9 · devresults") {
+			beside = true
+		}
+		if lipgloss.Width(line) > 140 {
+			t.Errorf("a split line is %d columns wide, want no more than 140:\n%s", lipgloss.Width(line), line)
+		}
+	}
+	if !beside {
+		t.Errorf("the detail is not drawn beside the list:\n%s", view)
+	}
+	if got, want := m.loopsListRows(m.bodyRows()), m.bodyRows()-listHeadRows; got != want {
+		t.Errorf("the list scrolls in %d rows with the pane on the right, want all %d under the header", got, want)
+	}
+
+	back, _ := press(t, m, "P")
+	if !strings.Contains(detailPane(t, back.View()), "sga9 · devresults") {
+		t.Errorf("a second P did not put the pane back on the bottom:\n%s", plain(back.View()))
+	}
+}
+
+// A terminal too narrow for a split keeps the pane on the bottom, and says why rather than leaving `P`
+// looking inert.
+func TestLoopsDetailPaneStaysOnTheBottomWhenNarrow(t *testing.T) {
+	m, _ := press(t, looped(t, 80, loopsFixture()), "P")
+
+	if m.paneDock() != dockBottom {
+		t.Errorf("the pane docked on the right at 80 columns")
+	}
+	if view := plain(m.View()); !strings.Contains(view, "docks on the right at 120 columns") {
+		t.Errorf("P at 80 columns says nothing about why the pane stayed put:\n%s", view)
+	}
+}
+
+// On a tall terminal the pane stops at its cap and the rest of the rows go to the list, so a tall
+// window shows more items rather than more blank pane.
+func TestLoopsDetailPaneIsCappedOnATallTerminal(t *testing.T) {
+	m := looped(t, 140, loopsChain(80))
+	sized, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 70})
+	m = sized.(Model)
+
+	if got := len(strings.Split(detailPane(t, m.View()), "\n")); got != bottomPaneMax {
+		t.Errorf("the pane drew %d lines on a 70-row terminal, want the cap of %d", got, bottomPaneMax)
+	}
+	if got, want := m.loopsListRows(m.bodyRows()), m.bodyRows()-listHeadRows-bottomPaneMax-1; got != want {
+		t.Errorf("the list scrolls in %d rows, want the %d the capped pane leaves", got, want)
+	}
+}
+
+// noteHeavy is the fixture with a run of numbered notes on sga9, more than any pane holds.
+func noteHeavy() loopsLoadedMsg {
+	msg := loopsFixture()
+	for i := range msg.items {
+		if msg.items[i].Id != "sga9" {
+			continue
+		}
+		msg.items[i].Notes = nil
+		for n := range 40 {
+			msg.items[i].Notes = append(msg.items[i].Notes, events.Note{Ts: *stamp(17, 15, 41), Text: fmt.Sprintf("note %02d", n)})
+		}
+	}
+	return msg
+}
+
+// The detail pages the way the Agents preview does, and opens at its top again on another item.
+func TestLoopsDetailPaneScrolls(t *testing.T) {
+	m, _ := press(t, looped(t, 140, noteHeavy()), "down")
+	if pane := detailPane(t, m.View()); !strings.Contains(pane, "sga9 · devresults") || strings.Contains(pane, "note 39") {
+		t.Fatalf("the pane does not open at the top of the detail:\n%s", pane)
+	}
+
+	paged, _ := press(t, m, "pgdown")
+	if pane := detailPane(t, paged.View()); strings.Contains(pane, "sga9 · devresults") {
+		t.Errorf("pgdown left the head of the detail on screen:\n%s", pane)
+	}
+
+	ended, _ := press(t, m, "end")
+	if pane := detailPane(t, ended.View()); !strings.Contains(pane, "note 39") {
+		t.Errorf("end did not reach the last note:\n%s", pane)
+	}
+	homed, _ := press(t, ended, "home")
+	if pane := detailPane(t, homed.View()); !strings.Contains(pane, "sga9 · devresults") {
+		t.Errorf("home did not return to the top:\n%s", pane)
+	}
+
+	moved, _ := press(t, ended, "down", "up")
+	if pane := detailPane(t, moved.View()); !strings.Contains(pane, "sga9 · devresults") {
+		t.Errorf("returning to the item kept the scroll from before the cursor left it:\n%s", pane)
+	}
+}
+
+// With the pane folded away there is nothing to scroll, so the footer says how to open it.
+func TestLoopsDetailPagingIsInertWithThePaneClosed(t *testing.T) {
+	m, _ := press(t, looped(t, 140, noteHeavy()), " ", "pgdown")
+	if view := plain(m.View()); !strings.Contains(view, "press space to open the pane") {
+		t.Errorf("pgdown with the pane closed does not say how to open it:\n%s", view)
 	}
 }

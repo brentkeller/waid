@@ -40,6 +40,10 @@ func key(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlC}
 	case "ctrl+u":
 		return tea.KeyMsg{Type: tea.KeyCtrlU}
+	case "up":
+		return tea.KeyMsg{Type: tea.KeyUp}
+	case "down":
+		return tea.KeyMsg{Type: tea.KeyDown}
 	case "left":
 		return tea.KeyMsg{Type: tea.KeyLeft}
 	case "right":

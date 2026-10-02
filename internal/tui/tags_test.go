@@ -10,7 +10,7 @@ import (
 func TestTagOpensOnTheTagsItCarries(t *testing.T) {
 	m, _ := working(t)
 
-	m, _ = press(t, m, "j", "j", "t")
+	m, _ = press(t, m, "down", "down", "t")
 
 	if m.prompt.kind != promptTags {
 		t.Fatalf("t opened prompt %d, want the tags prompt", m.prompt.kind)
@@ -27,7 +27,7 @@ func TestTagOpensOnTheTagsItCarries(t *testing.T) {
 func TestTagRewritesTheSet(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "j", "t", "ctrl+u", "bug, ui", "enter")
+	m, _ = press(t, m, "down", "down", "t", "ctrl+u", "bug, ui", "enter")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"update","id":"nktt","tags":["bug","ui"]}`})
@@ -46,7 +46,7 @@ func TestTagRewritesTheSet(t *testing.T) {
 func TestTagCommittedEmptyClearsTheSet(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "j", "t", "ctrl+u", "enter")
+	m, _ = press(t, m, "down", "down", "t", "ctrl+u", "enter")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"update","id":"nktt","tags":[]}`})
@@ -64,7 +64,7 @@ func TestTagCommittedEmptyClearsTheSet(t *testing.T) {
 func TestTagAbandonedWithEscWritesNothing(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "j", "t", "ctrl+u", "bug", "esc")
+	m, _ = press(t, m, "down", "down", "t", "ctrl+u", "bug", "esc")
 
 	assertLog(t, path, nil)
 	if _, written := m.lastReceipt(); written {
@@ -77,7 +77,7 @@ func TestTagAbandonedWithEscWritesNothing(t *testing.T) {
 func TestTagNormalisesWhatIsTyped(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "j", "t", "ctrl+u", "  bug , ui ,, bug ", "enter")
+	m, _ = press(t, m, "down", "down", "t", "ctrl+u", "  bug , ui ,, bug ", "enter")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"update","id":"nktt","tags":["bug","ui"]}`})
@@ -87,7 +87,7 @@ func TestTagNormalisesWhatIsTyped(t *testing.T) {
 func TestUndoOfATagRestoresTheSetItReplaced(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "j", "t", "ctrl+u", "bug", "enter", "u")
+	m, _ = press(t, m, "down", "down", "t", "ctrl+u", "bug", "enter", "u")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
@@ -104,7 +104,7 @@ func TestUndoOfATagRestoresTheSetItReplaced(t *testing.T) {
 func TestUndoOfATagRestoresAnItemThatCarriedNone(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "t", "bug", "enter", "u")
+	m, _ = press(t, m, "down", "t", "bug", "enter", "u")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
@@ -121,7 +121,7 @@ func TestUndoOfATagRestoresAnItemThatCarriedNone(t *testing.T) {
 func TestTagOnANonItemRowIsInert(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "j", "j", "t")
+	m, _ = press(t, m, "down", "down", "down", "t")
 
 	assertLog(t, path, nil)
 	if m.prompt.kind != promptNone {

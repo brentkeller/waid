@@ -191,9 +191,9 @@ func (m Model) scanKey(pressed string) (Model, tea.Cmd, bool) {
 	tree := m.scanTree(m.viewWidth())
 
 	switch pressed {
-	case "j", "down":
+	case "down":
 		tree.Down()
-	case "k", "up":
+	case "up":
 		tree.Up()
 	case "g":
 		tree.First()
@@ -201,9 +201,9 @@ func (m Model) scanKey(pressed string) (Model, tea.Cmd, bool) {
 		tree.Last()
 	case "enter":
 		tree.Toggle()
-	case "h", "left":
+	case "left":
 		tree.Collapse()
-	case "l", "right":
+	case "right":
 		tree.Expand()
 	case "s":
 		m.scan.kind = nextScanKind(m.scan.kind)

@@ -37,7 +37,7 @@ func walk(t *testing.T, tree Tree[string]) []string {
 	}
 }
 
-// The cursor stops at the ends rather than running off them: k on the first row and j on the last
+// The cursor stops at the ends rather than running off them: ↑ on the first row and ↓ on the last
 // both leave it where it was, however many times they are pressed.
 func TestCursorClampsAtBothEnds(t *testing.T) {
 	tree := fixture()

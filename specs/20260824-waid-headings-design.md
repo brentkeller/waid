@@ -203,12 +203,11 @@ heading that passes `--status` is in `list --json` either way.
 
 ## 6. The app
 
-`P` toggles the heading flag on the row under the cursor. It is a write like `x` or `w`: it leaves a
+`H` toggles the heading flag on the row under the cursor. It is a write like `x` or `w`: it leaves a
 receipt, it is undone by `u` — the inverse is a `HeadingEvent` carrying the prior value — and it is
 inert with a reason in the footer on a row holding no item, which is the `(unassigned)` bucket.
 
-`P` rather than `H`: `h` collapses a fold, so a shift-slip while walking the tree with `h` and `l`
-would write an event. `P` is unbound on every tab, and shifted pairs are already how the tab spells a
+`H` is unbound on every tab, and shifted pairs are already how the tab spells a
 variant of a key — `a` adds a sibling, `A` adds a child.
 
 Both keys are Loops keys: they join `tabBindings[tabLoops]`, so pressing either on Repos or Agents is
@@ -222,7 +221,7 @@ such thing, since it shows every heading regardless (§3).
 ### 6.1 The headings chip
 
 `S` flips §3's toggle — the shifted sibling of `s`, which cycles the statuses, so the two filter keys
-sit together. Not `H`, for the reason `P` is not `H`.
+sit together. Not `H`, which marks a heading.
 
 The chip is drawn on the header row, after the status segments and set apart from them by `│` in
 `Theme.TabRule` — the glyph and the style the tab bar already uses to divide one zone from another,
@@ -258,7 +257,7 @@ ever declared a shelf. A project that should be one is marked with a keystroke.
   key; `--headings` reveals what the default view hides on both `list` and `loops`, and `--all`
   without it does not; marking an item that is already marked writes the event anyway; `--json`
   carries the field, and reaches `loops`' item set but not `list`'s.
-- **App:** `P` writes, receipts and undoes; an empty heading is absent until `S` and present after
+- **App:** `H` writes, receipts and undoes; an empty heading is absent until `S` and present after
   it; the toggle composes — it holds while `s` cycles the statuses and while a query is typed and
   cleared; the chip draws both states with the divider between it and the segments; the move picker
   offers the heading either way; the badge holds still while the header count rises; goldens

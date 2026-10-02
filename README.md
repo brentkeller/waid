@@ -158,20 +158,20 @@ Three tabs, switched with `1` `2` `3` or `tab` / `shift-tab`:
 
 | Tab | Shows | Acts |
 | --- | --- | --- |
-| Loops | Declared items as a tree, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `m` move, `n` note, `t` edit the tags, `y` copy the item id, `P` mark a heading, `S` reveal the headings holding nothing, `p` toggle the pane. |
+| Loops | Declared items as a tree, with a detail pane carrying `show`'s notes and history. | `x` done, `w` waiting, `e` retitle, `m` move, `n` note, `t` edit the tags, `y` copy the item id, `H` mark a heading, `h` reveal the headings holding nothing, `space` toggle the pane. |
 | Repos | Detected signals as a project tree. | `p` promote, `d` dismiss, `o` open in browser, `e` rename what `p` just created. |
 | Agents | Sessions by project for a day or a week, with a transcript preview. | `space` preview, `pgup`/`pgdn` scroll it, `home`/`end` jump to either end, `R` resume in Claude, `o` open the repo, `y` copy the session id, `d` pick a calendar day. |
 
 `m` moves an item by navigation rather than by typing a title. It lifts the item and everything
-under it out of the tree, leaving the tree as it will be after the move: `j` `k` walk it, `h` / `l`
+under it out of the tree, leaving the tree as it will be after the move: `↑` `↓` walk it, `←` / `→`
 fold and unfold, `enter` drops the item on the row under the cursor and `esc` abandons the move. The
 picker opens on the item's current parent, with a `── top level ──` row above the roots for an item
 that belongs under nothing. It opens with the roots and the rows filed directly under them on screen
 and anything deeper folded away. Since the item's own subtree has left the tree, there is no
 destination on screen the move could be refused for.
 
-Keys that work everywhere: `j` `k` — or `↑` / `↓` — to move, `g` / `G` for first and last, `enter`
-to fold and `h` / `l` — or `←` / `→` — to collapse and expand the fold under the cursor, `/` to
+Keys that work everywhere: `↑` / `↓` to move, `g` / `G` for first and last, `enter`
+to fold and `←` / `→` to collapse and expand the fold under the cursor, `/` to
 filter (`esc` clears), `s` to cycle the tab's segmented row — Loops' statuses, Repos' kinds,
 Agents' today/yesterday/week/last week plus whatever day `d` picked — `a` to add an item beside the
 row under the cursor and `A` to add one under it, which is how a tier of the tree is made, `r` to

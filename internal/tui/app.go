@@ -67,7 +67,7 @@ var tabTitles = [numTabs]string{"Loops", "Repos", "Agents"}
 // tabFooters are the key hints each tab keeps in the footer — the keys worth having in front of you
 // while working the tab, as opposed to the full table `?` opens.
 var tabFooters = [numTabs]string{
-	tabLoops:  "x done · w waiting · e edit · t tags · m move · n note · y copy id · a add · / filter · s status · S headings · P heading · ? keys",
+	tabLoops:  "x done · w waiting · e edit · t tags · m move · n note · y copy id · a add · / filter · s status · h headings · H heading · ? keys",
 	tabScan:   "p promote · d dismiss · o open in browser · r refresh · / filter · ? keys",
 	tabReview: "space preview · R resume · o open repo · y copy id · s range · d date · ? keys",
 }
@@ -90,10 +90,10 @@ var globalBindings = []binding{
 	// that switches tabs on two tabs and jumps a filter on the third is a mode to keep track of, and the
 	// segmented rows Repos and Agents draw have no digits either — `s` cycles all three.
 	{[]string{"1", "2", "3", "tab", "shift+tab"}, "1 2 3 / tab", "switch tab, from any tab"},
-	{[]string{"j", "k", "up", "down"}, "j k ↑ ↓", "move the cursor, stepping over a project heading"},
+	{[]string{"up", "down"}, "↑ ↓", "move the cursor, stepping over a project heading"},
 	{[]string{"g", "G"}, "g / G", "first / last row"},
 	{[]string{"enter"}, "enter", "expand or collapse the fold under the cursor"},
-	{[]string{"h", "l", "left", "right"}, "h l ← →", "collapse / expand the fold under the cursor"},
+	{[]string{"left", "right"}, "← →", "collapse / expand the fold under the cursor"},
 	{[]string{"/", "esc"}, "/", "filter; esc clears"},
 	{[]string{"a"}, "a", "add an item beside the row under the cursor"},
 	{[]string{"A"}, "A", "add one under it, which is how a tier is made"},
@@ -129,10 +129,10 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"t"}, "t", "edit the tags — commit an empty answer to take them all off"},
 		{[]string{"m"}, "m", "move under another item — enter drops, esc cancels"},
 		{[]string{"y"}, "y", "copy the item id"},
-		{[]string{"P"}, "P", "mark the item a heading, or take the mark off it"},
+		{[]string{"H"}, "H", "mark the item a heading, or take the mark off it"},
 		{[]string{"s"}, "s", "cycle the status filter — open, waiting, done, all"},
-		{[]string{"S"}, "S", "show the headings holding nothing"},
-		{[]string{"p"}, "p", "toggle the detail pane"},
+		{[]string{"h"}, "h", "show the headings holding nothing"},
+		{[]string{" "}, "space", "toggle the detail pane"},
 	},
 	tabScan: {
 		{[]string{"p"}, "p", "promote"},

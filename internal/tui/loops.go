@@ -67,11 +67,11 @@ type loopsModel struct {
 
 	// headings is whether a heading with nothing visible under it is drawn. It is an axis of its own
 	// rather than a segment of the status row, so it composes with every status; the zero value hides
-	// them, and `S` flips it for the length of the session (§3).
+	// them, and `h` flips it for the length of the session (§3).
 	headings bool
 
 	// collapsed is whether the detail pane has been folded away. The pane is open otherwise: §1.1 draws
-	// it under the list, and `p` collapses it when density matters more.
+	// it under the list, and `space` collapses it when density matters more.
 	collapsed bool
 
 	cursor   int
@@ -118,9 +118,9 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 	tree := m.loopsTree(m.viewWidth())
 
 	switch pressed {
-	case "j", "down":
+	case "down":
 		tree.Down()
-	case "k", "up":
+	case "up":
 		tree.Up()
 	case "g":
 		tree.First()
@@ -128,18 +128,18 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		tree.Last()
 	case "enter":
 		tree.Toggle()
-	case "h", "left":
+	case "left":
 		tree.Collapse()
-	case "l", "right":
+	case "right":
 		tree.Expand()
-	case "p":
+	case " ":
 		m.loops.collapsed = !m.loops.collapsed
 		return m, nil, true
 	case "s":
 		m.loops.status = nextLoopsStatus(m.loops.status)
 		m.loops.cursor = 0
 		return m, nil, true
-	case "S":
+	case "h":
 		m.loops.headings = !m.loops.headings
 		m.loops.cursor = 0
 		return m, nil, true
@@ -160,7 +160,7 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		return m.startMove(tree)
 	case "y":
 		return m.copyItemId(tree)
-	case "P":
+	case "H":
 		return m.headingSelected(tree)
 	default:
 		return m, nil, false

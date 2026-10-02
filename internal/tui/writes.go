@@ -58,7 +58,7 @@ func (m Model) doneSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
 // the log is a history of what was asked for, the fold is idempotent, and a key that sometimes wrote
 // and sometimes did not would make `u` guess.
 func (m Model) headingSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
-	m, item, ok := m.loopTarget(tree, "P marks an item a heading")
+	m, item, ok := m.loopTarget(tree, "H marks an item a heading")
 	if !ok {
 		return m, nil, true
 	}

@@ -265,7 +265,7 @@ func TestOpenSignalInBrowser(t *testing.T) {
 		t.Errorf("o on a signal with a page left the hint %q, want none", m.hint)
 	}
 
-	local, cmd := press(t, m, "j", "j", "j", "o")
+	local, cmd := press(t, m, "down", "down", "down", "o")
 	messages(cmd)
 	if len(opened) != 1 {
 		t.Errorf("o opened %v from a local signal, want nothing opened", opened)
@@ -305,21 +305,21 @@ func TestScanFoldsAProject(t *testing.T) {
 
 // h and l fold the tree here the way they do on Loops, arrows included: the tabs draw one component,
 // so the keys that walk it are the same wherever it is drawn.
-func TestScanFoldsWithHAndL(t *testing.T) {
+func TestScanFoldsWithLeftAndRight(t *testing.T) {
 	m := scanned(t, 140, scanFixture())
 
-	// The cursor opens inside an expanded project, so h closes the fold it hangs under.
-	m, _ = press(t, m, "h")
+	// The cursor opens inside an expanded project, so ← closes the fold it hangs under.
+	m, _ = press(t, m, "left")
 	if view := plain(m.View()); strings.Contains(view, "#6886") {
-		t.Errorf("h left the folded project's signals on screen:\n%s", view)
+		t.Errorf("← left the folded project's signals on screen:\n%s", view)
 	}
 	if !m.scanTree(m.viewWidth()).OnHeading() {
-		t.Fatal("h did not leave the cursor on the fold it closed")
+		t.Fatal("← did not leave the cursor on the fold it closed")
 	}
 
-	m, _ = press(t, m, "l")
+	m, _ = press(t, m, "right")
 	if view := plain(m.View()); !strings.Contains(view, "#6886") {
-		t.Errorf("l did not reopen the fold under the cursor:\n%s", view)
+		t.Errorf("→ did not reopen the fold under the cursor:\n%s", view)
 	}
 
 	m, _ = press(t, m, "left")
@@ -385,7 +385,7 @@ func TestScanBuildsFlatRows(t *testing.T) {
 // signal, and a project on one line is still a project to file against (§7).
 func TestScanAddsAgainstACollapsedProject(t *testing.T) {
 	m, _ := adding(t, tabScan)
-	m, _ = press(t, m, "j", "j", "enter")
+	m, _ = press(t, m, "down", "down", "enter")
 
 	if !m.scanTree(m.viewWidth()).OnHeading() {
 		t.Fatal("enter did not leave the cursor on the fold it closed")

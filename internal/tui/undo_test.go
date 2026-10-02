@@ -49,7 +49,7 @@ func TestUndoOfADismissAppendsAnUndismiss(t *testing.T) {
 func TestUndoOfAPromoteClosesTheItemAndRestoresTheKey(t *testing.T) {
 	m, path := triaging(t)
 
-	m, _ = press(t, m, "j", "j", "p")
+	m, _ = press(t, m, "down", "down", "p")
 	m, _ = press(t, m, "u")
 
 	ts := stamped()
@@ -185,7 +185,7 @@ func TestUndoOnAnEmptyStackSaysSo(t *testing.T) {
 func TestPromoteReceiptOffersRenameAndEditsTheTitle(t *testing.T) {
 	m, path := triaging(t)
 
-	m, _ = press(t, m, "j", "j", "p")
+	m, _ = press(t, m, "down", "down", "p")
 	view := plain(m.View())
 	for _, want := range []string{"u undo", "e rename"} {
 		if !strings.Contains(view, want) {
@@ -227,7 +227,7 @@ func TestPromoteReceiptOffersRenameAndEditsTheTitle(t *testing.T) {
 func TestEscAbandonsTheRenamePrompt(t *testing.T) {
 	m, path := triaging(t)
 
-	m, _ = press(t, m, "j", "j", "p", "e", "Nope", "esc")
+	m, _ = press(t, m, "down", "down", "p", "e", "Nope", "esc")
 	if m.prompt.kind != promptNone {
 		t.Error("esc left the prompt open")
 	}

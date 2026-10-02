@@ -76,7 +76,7 @@ func TestDismissWritesTheKeyAndDropsTheRow(t *testing.T) {
 func TestPromoteWritesTheAddAndDismissPair(t *testing.T) {
 	m, path := triaging(t)
 
-	m, cmd := press(t, m, "j", "j", "p")
+	m, cmd := press(t, m, "down", "down", "p")
 	if cmd != nil {
 		t.Error("p issued a command, want the write made on the keypress")
 	}

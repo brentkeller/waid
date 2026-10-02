@@ -122,7 +122,7 @@ func TestWaitingAsksWhoAndWritesTheUpdate(t *testing.T) {
 	m, path := working(t)
 
 	// j steps off the heading the tab opens on and onto the first row folded under it.
-	m, _ = press(t, m, "j", "w")
+	m, _ = press(t, m, "down", "w")
 	if m.prompt.kind != promptWaiting {
 		t.Fatalf("w opened no prompt for who the item waits on")
 	}
@@ -152,7 +152,7 @@ func TestWaitingAsksWhoAndWritesTheUpdate(t *testing.T) {
 func TestUndoOfAWaitingReopensTheItem(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "w", "maria", "enter", "u")
+	m, _ = press(t, m, "down", "w", "maria", "enter", "u")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
@@ -173,7 +173,7 @@ func TestUndoOfAWaitingReopensTheItem(t *testing.T) {
 func TestEditRewritesTheTitle(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "e")
+	m, _ = press(t, m, "down", "e")
 	if view := plain(m.View()); !strings.Contains(view, "edit sga9") {
 		t.Errorf("e opened no prompt for the title:\n%s", view)
 	}
@@ -230,7 +230,7 @@ func TestNoteAppendsToTheItemUnderTheCursor(t *testing.T) {
 func TestANoteLeavesNothingToUndo(t *testing.T) {
 	m, _ := working(t)
 
-	m, _ = press(t, m, "j", "x")
+	m, _ = press(t, m, "down", "x")
 	if !strings.Contains(plain(m.View()), "u undo") {
 		t.Fatalf("the close does not offer an undo:\n%s", plain(m.View()))
 	}
@@ -248,7 +248,7 @@ func TestLoopsWritesAreInertOnTheBucket(t *testing.T) {
 
 	// The bucket is the row under the heading's two children, and the cursor rests on it like any
 	// other row.
-	folded, _ := press(t, m, "j", "j", "j")
+	folded, _ := press(t, m, "down", "down", "down")
 
 	for _, pressed := range []string{"x", "w", "e", "n"} {
 		next, _ := press(t, folded, pressed)
@@ -360,7 +360,7 @@ func TestAddDeclaresAnItemFromAnyTab(t *testing.T) {
 		logged string
 	}{
 		{"Loops", tabLoops, nil, topLevel, addedLine("", "")},
-		{"Repos", tabScan, []string{"j", "j"}, "waid", addedLine("", `"C:\\dev\\waid"`)},
+		{"Repos", tabScan, []string{"down", "down"}, "waid", addedLine("", `"C:\\dev\\waid"`)},
 		{"Repos without a checkout", tabScan, nil, noProject, addedLine("", "")},
 		{"Agents", tabReview, nil, "devresults", addedLine("", `"C:\\dev\\dr\\devresults\\devresults"`)},
 	}
@@ -402,9 +402,9 @@ func TestAddKeysFileBesideAndUnderTheRow(t *testing.T) {
 		parent  string
 	}{
 		{"a at the top level", nil, "a", topLevel, ""},
-		{"a under a parent", []string{"j"}, "a", "Localized notifications", "vq2n"},
+		{"a under a parent", []string{"down"}, "a", "Localized notifications", "vq2n"},
 		{"A on a parent", nil, "A", "Localized notifications", "vq2n"},
-		{"A on a leaf", []string{"j"}, "A", "Design template", "sga9"},
+		{"A on a leaf", []string{"down"}, "A", "Design template", "sga9"},
 	}
 
 	for _, c := range cases {
@@ -428,7 +428,7 @@ func TestAddKeysFileBesideAndUnderTheRow(t *testing.T) {
 func TestAddChildTurnsALeafIntoAParent(t *testing.T) {
 	m, _ := adding(t, tabLoops)
 
-	m, _ = press(t, m, "j", "A", "Ship the add key", "enter")
+	m, _ = press(t, m, "down", "A", "Ship the add key", "enter")
 
 	view := plain(m.View())
 	if !listed(view, "7k3m") {
@@ -446,7 +446,7 @@ func TestAddOnTheUnassignedBucketFilesUnderWhatGathersIt(t *testing.T) {
 	for _, pressed := range []string{"a", "A"} {
 		m, path := adding(t, tabLoops)
 
-		m, _ = press(t, m, "j", "j", "j", pressed)
+		m, _ = press(t, m, "down", "down", "down", pressed)
 		if view := plain(m.View()); !strings.Contains(view, "add "+topLevel) {
 			t.Errorf("%s on the bucket does not land at the top level:\n%s", pressed, view)
 		}
@@ -651,15 +651,15 @@ func headingLine(id string, heading bool) string {
 	return fmt.Sprintf(`{"ts":"%s","ev":"update","id":"%s","heading":%t}`, loopsStamped(), id, heading)
 }
 
-// P marks the row under the cursor a heading on the keypress, and the flag is written whatever the
+// H marks the row under the cursor a heading on the keypress, and the flag is written whatever the
 // item already held — the log is a history of what was asked for, which is how `waid heading` writes
 // it too (§6).
 func TestHeadingMarksTheItemUnderTheCursor(t *testing.T) {
 	m, path := working(t)
 
-	m, cmd := press(t, m, "P")
+	m, cmd := press(t, m, "H")
 	if cmd != nil {
-		t.Error("P issued a command, want the write made on the keypress")
+		t.Error("H issued a command, want the write made on the keypress")
 	}
 
 	assertLog(t, path, []string{headingLine("vq2n", true)})
@@ -677,7 +677,7 @@ func TestHeadingMarksTheItemUnderTheCursor(t *testing.T) {
 func TestHeadingUnmarksAnItemAlreadyMarked(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "P", "P")
+	m, _ = press(t, m, "H", "H")
 
 	assertLog(t, path, []string{headingLine("vq2n", true), headingLine("vq2n", false)})
 
@@ -694,7 +694,7 @@ func TestHeadingUnmarksAnItemAlreadyMarked(t *testing.T) {
 func TestUndoOfAHeadingRestoresThePriorValue(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "P", "u")
+	m, _ = press(t, m, "H", "u")
 
 	assertLog(t, path, []string{headingLine("vq2n", true), headingLine("vq2n", false)})
 
@@ -706,39 +706,39 @@ func TestUndoOfAHeadingRestoresThePriorValue(t *testing.T) {
 	}
 }
 
-// The (unassigned) bucket holds no item, so P is inert there and the footer says which row it was
+// The (unassigned) bucket holds no item, so H is inert there and the footer says which row it was
 // pressed on rather than staying silent (§6).
 func TestHeadingIsInertOnTheUnassignedBucket(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "j", "j", "j")
+	m, _ = press(t, m, "down", "down", "down")
 	if item, ok := m.loopsTree(m.viewWidth()).SelectedItem(); ok {
 		t.Fatalf("the cursor is on %v, want the (unassigned) bucket", item.Id)
 	}
 
-	m, _ = press(t, m, "P")
+	m, _ = press(t, m, "H")
 
 	if log := written(t, path); len(log) != 0 {
-		t.Errorf("P on the bucket wrote %v", log)
+		t.Errorf("H on the bucket wrote %v", log)
 	}
-	if !strings.Contains(m.hint, "P marks an item a heading") {
-		t.Errorf("P on the bucket left the hint %q, want it to name what the key does", m.hint)
+	if !strings.Contains(m.hint, "H marks an item a heading") {
+		t.Errorf("H on the bucket left the hint %q, want it to name what the key does", m.hint)
 	}
 }
 
-// P is a Loops key, so pressing it on Repos or Agents is inert and the footer names the tab that
+// H is a Loops key, so pressing it on Repos or Agents is inert and the footer names the tab that
 // owns it, as every other tab key already does (§6).
 func TestHeadingIsALoopsKey(t *testing.T) {
 	m, path := working(t)
 
 	for _, c := range []struct{ digit, title string }{{"2", "Repos"}, {"3", "Agents"}} {
-		elsewhere, _ := press(t, m, c.digit, "P")
+		elsewhere, _ := press(t, m, c.digit, "H")
 
 		if !strings.Contains(elsewhere.hint, "Loops") {
-			t.Errorf("P on %s left the hint %q, want it to name the tab that owns the key", c.title, elsewhere.hint)
+			t.Errorf("H on %s left the hint %q, want it to name the tab that owns the key", c.title, elsewhere.hint)
 		}
 		if log := written(t, path); len(log) != 0 {
-			t.Errorf("P on %s wrote %v", c.title, log)
+			t.Errorf("H on %s wrote %v", c.title, log)
 		}
 	}
 }
@@ -751,7 +751,7 @@ func TestHeadingIsNamedInTheDetailPane(t *testing.T) {
 		t.Errorf("the pane names a heading on an item nobody marked one:\n%s", pane)
 	}
 
-	marked, _ := press(t, m, "P")
+	marked, _ := press(t, m, "H")
 	if pane := detailPane(t, marked.View()); !strings.Contains(pane, "open · heading") {
 		t.Errorf("the pane does not name the heading beside the status:\n%s", pane)
 	}

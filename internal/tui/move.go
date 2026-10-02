@@ -31,7 +31,7 @@ const (
 )
 
 // moveKeys are the picker's hints, in place of the tab's own while it holds the keyboard.
-const moveKeys = "j k move · h l fold · enter drops · esc cancels"
+const moveKeys = "↑ ↓ move · ← → fold · enter drops · esc cancels"
 
 // moveModel is the picker's state: what is being moved, and the cursor and folds over what is left.
 // subject is empty when the mode is closed, which is the zero value.
@@ -155,17 +155,17 @@ func (m Model) moveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		return m.commitMove(t)
-	case "j", "down":
+	case "down":
 		t.Down()
-	case "k", "up":
+	case "up":
 		t.Up()
 	case "g":
 		t.First()
 	case "G":
 		t.Last()
-	case "h", "left":
+	case "left":
 		t.Collapse()
-	case "l", "right":
+	case "right":
 		t.Expand()
 	default:
 		return m, nil

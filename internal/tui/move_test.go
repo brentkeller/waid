@@ -71,7 +71,7 @@ func TestMoveLiftsTheItemAndItsDescendantsOutOfTheTree(t *testing.T) {
 	m, _ := filing(t)
 
 	// j puts the cursor on nktt, the branch's middle row, which carries 4h2k beneath it.
-	m, _ = press(t, m, "j", "m")
+	m, _ = press(t, m, "down", "m")
 
 	view := plain(m.View())
 	if strings.Contains(view, blockedTitle) {
@@ -90,7 +90,7 @@ func TestMoveLiftsTheItemAndItsDescendantsOutOfTheTree(t *testing.T) {
 func TestMoveOffersNeitherTheItemNorItsDescendants(t *testing.T) {
 	m, _ := filing(t)
 
-	m, _ = press(t, m, "j", "m")
+	m, _ = press(t, m, "down", "m")
 
 	offered := destinations(m)
 	for _, gone := range []string{"nktt", "4h2k"} {
@@ -109,7 +109,7 @@ func TestMoveOffersNeitherTheItemNorItsDescendants(t *testing.T) {
 // have one, so an empty heading is a destination whether or not the list is showing it.
 func TestMoveOffersAnEmptyHeadingWhicheverWayTheToggleIsSet(t *testing.T) {
 	base := looped(t, 140, loopsWithShelf())
-	revealed, _ := press(t, base, "S")
+	revealed, _ := press(t, base, "h")
 
 	for _, c := range []struct {
 		toggle string
@@ -165,7 +165,7 @@ func TestMoveOpensAlongThePathToADeepCurrentParent(t *testing.T) {
 func TestMoveOffersTheLooseRootsAsRowsOfTheirOwn(t *testing.T) {
 	m, _ := filing(t)
 
-	m, _ = press(t, m, "j", "j", "m")
+	m, _ = press(t, m, "down", "down", "m")
 
 	view := plain(m.View())
 	if !strings.Contains(view, spikeTitle) {
@@ -183,7 +183,7 @@ func TestMoveOffersTheLooseRootsAsRowsOfTheirOwn(t *testing.T) {
 func TestMoveOpensOnTheCurrentParentAndCommitsNothing(t *testing.T) {
 	m, path := filing(t)
 
-	m, _ = press(t, m, "j", "j", "m")
+	m, _ = press(t, m, "down", "down", "m")
 	if got := focused(t, m); got != "nktt" {
 		t.Errorf("the cursor opened on %q, want the item's current parent", got)
 	}
@@ -218,7 +218,7 @@ func TestMoveOpensOnTheTopLevelRowForAnItemWithNoParent(t *testing.T) {
 func TestMoveDropsOnTheTopLevelRow(t *testing.T) {
 	m, path := filing(t)
 
-	m, _ = press(t, m, "j", "j", "m", "g", "enter")
+	m, _ = press(t, m, "down", "down", "m", "g", "enter")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{`{"ts":"` + ts + `","ev":"update","id":"4h2k","parent":null}`})
@@ -237,7 +237,7 @@ func TestMoveDropsOntoALeafAndMakesItAParent(t *testing.T) {
 
 	// The picker opens on nktt, a leaf itself once 4h2k has left it; the row above is the branch's
 	// other leaf.
-	m, _ = press(t, m, "j", "j", "m", "k")
+	m, _ = press(t, m, "down", "down", "m", "up")
 	if got := focused(t, m); got != "sga9" {
 		t.Fatalf("the cursor is on %q, want the leaf beside the item's parent", got)
 	}
@@ -263,7 +263,7 @@ func TestMoveRefusesTheUnassignedBucket(t *testing.T) {
 
 	// Moving the fixture's last row leaves the branch whole, so the bucket under it is the one level
 	// still holding parents and leaves side by side: three rows down from the top-level row.
-	m, _ = press(t, m, "G", "m", "j", "j", "j")
+	m, _ = press(t, m, "G", "m", "down", "down", "down")
 	if got := focused(t, m); !strings.HasSuffix(got, tree.UnassignedTitle) {
 		t.Fatalf("the cursor is on %q, want the branch's bucket", got)
 	}
@@ -279,20 +279,20 @@ func TestMoveRefusesTheUnassignedBucket(t *testing.T) {
 	}
 }
 
-// l opens a fold and h closes it again, so a destination behind a closed branch is reached without
+// → opens a fold and ← closes it again, so a destination behind a closed branch is reached without
 // enter — which cannot toggle here, because it commits.
 func TestMoveExpandsAndCollapsesWithoutCommitting(t *testing.T) {
 	m, path := filing(t)
 
 	// Two rows down from the top-level row is nktt, which the picker opened closed over 4h2k.
-	m, _ = press(t, m, "G", "m", "j", "j", "l")
+	m, _ = press(t, m, "G", "m", "down", "down", "right")
 	if view := plain(m.View()); !strings.Contains(view, blockedTitle) {
-		t.Errorf("l did not open the fold under the cursor:\n%s", view)
+		t.Errorf("→ did not open the fold under the cursor:\n%s", view)
 	}
 
-	m, _ = press(t, m, "h")
+	m, _ = press(t, m, "left")
 	if view := plain(m.View()); strings.Contains(view, blockedTitle) {
-		t.Errorf("h did not close the fold under the cursor:\n%s", view)
+		t.Errorf("← did not close the fold under the cursor:\n%s", view)
 	}
 	assertLog(t, path, nil)
 }
@@ -301,7 +301,7 @@ func TestMoveExpandsAndCollapsesWithoutCommitting(t *testing.T) {
 func TestMoveEscapesWithoutWriting(t *testing.T) {
 	m, path := filing(t)
 
-	m, _ = press(t, m, "j", "j", "m", "esc")
+	m, _ = press(t, m, "down", "down", "m", "esc")
 
 	assertLog(t, path, nil)
 	if m.loops.moving.active() {
@@ -316,7 +316,7 @@ func TestMoveEscapesWithoutWriting(t *testing.T) {
 func TestUndoOfAMoveRestoresTheParentTheItemHeld(t *testing.T) {
 	m, path := filing(t)
 
-	m, _ = press(t, m, "j", "j", "m", "g", "enter", "u")
+	m, _ = press(t, m, "down", "down", "m", "g", "enter", "u")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
@@ -340,7 +340,7 @@ func goldenMove(t *testing.T, width int) {
 	t.Helper()
 
 	// Two rows down is 4h2k, the deepest row of the three-deep fixture.
-	m, _ := press(t, looped(t, width, loopsNested()), "j", "j", "m")
+	m, _ := press(t, looped(t, width, loopsNested()), "down", "down", "m")
 	teatest.RequireEqualOutput(t, []byte(plain(m.View())))
 }
 
@@ -357,7 +357,7 @@ func TestUndoOfAMoveOffTheTopLevelPutsItBack(t *testing.T) {
 		t.Fatalf("the picker opened on %q, want the top-level row", got)
 	}
 
-	m, _ = press(t, m, "j", "enter")
+	m, _ = press(t, m, "down", "enter")
 	if got := parentOf(t, m, "p0rt"); got == nil || *got != "vq2n" {
 		t.Fatalf("the item sits under %v, want it moved under vq2n", got)
 	}

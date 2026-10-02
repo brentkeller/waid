@@ -123,18 +123,18 @@ func TestReviewCollapsesProjectsWithCountsOnTheFold(t *testing.T) {
 
 // l and h fold the tree here the way they do on Loops, arrows included: the tabs draw one component,
 // so the keys that walk it are the same wherever it is drawn.
-func TestReviewFoldsWithHAndL(t *testing.T) {
+func TestReviewFoldsWithLeftAndRight(t *testing.T) {
 	const session = "Wire -i into the CLI"
 
-	// The projects open closed, so the cursor is on a fold and l is what opens it.
-	m, _ := press(t, reviewed(t, 140, reviewFixture()), "j", "l")
+	// The projects open closed, so the cursor is on a fold and → is what opens it.
+	m, _ := press(t, reviewed(t, 140, reviewFixture()), "down", "right")
 	if view := plain(m.View()); !strings.Contains(view, session) {
-		t.Errorf("l did not open the fold under the cursor:\n%s", view)
+		t.Errorf("→ did not open the fold under the cursor:\n%s", view)
 	}
 
-	m, _ = press(t, m, "h")
+	m, _ = press(t, m, "left")
 	if view := plain(m.View()); strings.Contains(view, session) {
-		t.Errorf("h did not close the fold the cursor was in:\n%s", view)
+		t.Errorf("← did not close the fold the cursor was in:\n%s", view)
 	}
 
 	m, _ = press(t, m, "right")
@@ -151,7 +151,7 @@ func TestReviewFoldsWithHAndL(t *testing.T) {
 // enter opens a fold, and the session rows carry their start time, their title and their prompt
 // count, oldest first.
 func TestReviewExpandsAProjectIntoItsSessions(t *testing.T) {
-	m, _ := press(t, reviewed(t, 140, reviewFixture()), "j", "enter")
+	m, _ := press(t, reviewed(t, 140, reviewFixture()), "down", "enter")
 
 	view := plain(m.View())
 	order := []string{"14:22", "Wire -i into the CLI", "12 prompts", "15:04", "15:58", "Show PR title and branch"}
@@ -303,7 +303,7 @@ func previewing(t *testing.T, width int) Model {
 		return turns, nil
 	}
 
-	m, _ = press(t, m, "j", "enter")
+	m, _ = press(t, m, "down", "enter")
 	return m
 }
 
@@ -433,7 +433,7 @@ func TestReviewPreviewFollowsTheCursor(t *testing.T) {
 	m, cmd := press(t, previewing(t, 140), " ")
 	m = deliver(t, m, cmd)
 
-	moved, cmd := press(t, m, "j")
+	moved, cmd := press(t, m, "down")
 	if cmd == nil {
 		t.Fatal("moving the cursor with the preview open issued no read for the row it landed on")
 	}
@@ -448,13 +448,13 @@ func TestReviewPreviewFollowsTheCursor(t *testing.T) {
 	}
 
 	// The last session of the project was never in the fixture's cache, so its transcript cannot be read.
-	missing, cmd := press(t, moved, "j")
+	missing, cmd := press(t, moved, "down")
 	view = plain(deliver(t, missing, cmd).View())
 	if !strings.Contains(view, "no transcript") {
 		t.Errorf("a session with no transcript on record does not say so:\n%s", view)
 	}
 
-	heading, cmd := press(t, moved, "k", "k")
+	heading, cmd := press(t, moved, "up", "up")
 	view = plain(deliver(t, heading, cmd).View())
 	if !strings.Contains(view, "select a session") {
 		t.Errorf("the pane on a project heading does not say there is nothing to preview:\n%s", view)
@@ -466,7 +466,7 @@ func TestReviewPreviewFollowsTheCursor(t *testing.T) {
 func onSession(t *testing.T, msg reviewLoadedMsg) Model {
 	t.Helper()
 
-	m, _ := press(t, reviewed(t, 140, msg), "j", "enter")
+	m, _ := press(t, reviewed(t, 140, msg), "down", "enter")
 	return m
 }
 
@@ -577,7 +577,7 @@ func TestReviewOpenRepo(t *testing.T) {
 		Started: stamp(17, 12, 0), Ended: stamp(17, 12, 5), Prompts: 2,
 	})
 
-	loose, cmd := press(t, reviewed(t, 140, msg), "j", "j", "enter", "o")
+	loose, cmd := press(t, reviewed(t, 140, msg), "down", "down", "enter", "o")
 	messages(cmd)
 	if len(opened) != 1 {
 		t.Errorf("o opened %v from a session with no project, want nothing opened", opened)
@@ -783,7 +783,7 @@ func scrolling(t *testing.T, turns int) Model {
 	m := reviewed(t, 140, reviewFixture())
 	m.review.readTurns = func(string) ([]sessions.Turn, error) { return longTranscript(turns), nil }
 
-	opened, cmd := press(t, m, "j", "enter", " ")
+	opened, cmd := press(t, m, "down", "enter", " ")
 	return deliver(t, opened, cmd)
 }
 
@@ -862,7 +862,7 @@ func TestReviewPreviewKeepsItsHeadingWhileScrolling(t *testing.T) {
 func TestReviewPreviewStartsEachSessionAtItsTop(t *testing.T) {
 	scrolled, _ := press(t, scrolling(t, 30), "end")
 
-	moved, cmd := press(t, scrolled, "j")
+	moved, cmd := press(t, scrolled, "down")
 	view := plain(deliver(t, moved, cmd).View())
 	if !strings.Contains(view, "turn 00") {
 		t.Errorf("the pane opened the next session where the last one was scrolled to:\n%s", view)

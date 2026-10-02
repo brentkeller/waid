@@ -322,7 +322,7 @@ func (t *Tree[T]) Toggle() {
 }
 
 // Expand opens the fold under the cursor, leaving the cursor on it. A row with nothing folded under
-// it, and one whose fold is already open, are left alone: `l` reads down into a branch rather than
+// it, and one whose fold is already open, are left alone: `→` reads down into a branch rather than
 // walking into it, so the cursor never moves under a key that only reveals rows.
 func (t *Tree[T]) Expand() {
 	rows := t.rows()
@@ -339,7 +339,7 @@ func (t *Tree[T]) Expand() {
 }
 
 // Collapse closes the fold the cursor is in — its own if it is open, and otherwise the one it hangs
-// under — and lands the cursor on the fold it closed. Repeated presses of `h` therefore walk out of
+// under — and lands the cursor on the fold it closed. Repeated presses of `←` therefore walk out of
 // a branch a level at a time, and one at the top level with nothing open is inert.
 func (t *Tree[T]) Collapse() {
 	rows := t.rows()

@@ -47,7 +47,7 @@ func listed(view, id string) bool {
 	return false
 }
 
-// x closes the item under the cursor on the keypress, with no confirm step, and the row leaves the
+// d closes the item under the cursor on the keypress, with no confirm step, and the row leaves the
 // list the moment it is written (§3).
 func TestDoneClosesTheItemUnderTheCursor(t *testing.T) {
 	m, path := working(t)
@@ -55,9 +55,9 @@ func TestDoneClosesTheItemUnderTheCursor(t *testing.T) {
 	// G puts the cursor on the last row of the list, which is the fixture's waiting item.
 	m, _ = press(t, m, "G")
 
-	m, cmd := press(t, m, "x")
+	m, cmd := press(t, m, "d")
 	if cmd != nil {
-		t.Error("x issued a command, want the write made on the keypress")
+		t.Error("d issued a command, want the write made on the keypress")
 	}
 
 	ts := loopsStamped()
@@ -80,7 +80,7 @@ func TestDoneClosesTheItemUnderTheCursor(t *testing.T) {
 func TestUndoOfADoneRestoresTheItemItClosed(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "G", "x", "u")
+	m, _ = press(t, m, "G", "d", "u")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
@@ -101,19 +101,19 @@ func TestUndoOfADoneRestoresTheItemItClosed(t *testing.T) {
 	}
 }
 
-// The done and all segments list items that are already closed, so x says so there rather than
+// The done and all segments list items that are already closed, so d says so there rather than
 // writing a second close (§4).
 func TestDoneIsInertOnAnAlreadyClosedItem(t *testing.T) {
 	m, path := working(t)
 
 	// Two presses of s put the status row on done, which is the fixture's one closed item.
-	m, _ = press(t, m, "s", "s", "x")
+	m, _ = press(t, m, "s", "s", "d")
 
 	if log := written(t, path); len(log) != 0 {
-		t.Errorf("x on a closed item wrote %v", log)
+		t.Errorf("d on a closed item wrote %v", log)
 	}
 	if !strings.Contains(m.hint, "already closed") {
-		t.Errorf("x on a closed item left the hint %q, want it to say the item is closed", m.hint)
+		t.Errorf("d on a closed item left the hint %q, want it to say the item is closed", m.hint)
 	}
 }
 
@@ -230,7 +230,7 @@ func TestNoteAppendsToTheItemUnderTheCursor(t *testing.T) {
 func TestANoteLeavesNothingToUndo(t *testing.T) {
 	m, _ := working(t)
 
-	m, _ = press(t, m, "down", "x")
+	m, _ = press(t, m, "down", "d")
 	if !strings.Contains(plain(m.View()), "u undo") {
 		t.Fatalf("the close does not offer an undo:\n%s", plain(m.View()))
 	}
@@ -250,7 +250,7 @@ func TestLoopsWritesAreInertOnTheBucket(t *testing.T) {
 	// other row.
 	folded, _ := press(t, m, "down", "down", "down")
 
-	for _, pressed := range []string{"x", "w", "e", "n"} {
+	for _, pressed := range []string{"d", "w", "e", "n"} {
 		next, _ := press(t, folded, pressed)
 		if log := written(t, path); len(log) != 0 {
 			t.Errorf("%s on the bucket wrote %v", pressed, log)
@@ -273,7 +273,7 @@ func TestLoopsWritesSayWhenThereIsNothingToActOn(t *testing.T) {
 	m := offline(chrome(t, 140), detect.Result{})
 	m.opts.Cfg.EventsPath = path
 
-	for _, pressed := range []string{"x", "w", "e", "n"} {
+	for _, pressed := range []string{"d", "w", "e", "n"} {
 		next, _ := press(t, m, pressed)
 		if !strings.Contains(next.hint, noItems) {
 			t.Errorf("%s on an empty list left the hint %q, want %q", pressed, next.hint, noItems)
@@ -585,7 +585,7 @@ func TestCtrlUClearsAnAddInProgress(t *testing.T) {
 	}
 }
 
-// x obeys the same guard `waid done` does: a heading with open work beneath it does not close, and
+// d obeys the same guard `waid done` does: a heading with open work beneath it does not close, and
 // the footer says what is holding it open (§5).
 func TestDoneRefusesAnItemWithOpenDescendants(t *testing.T) {
 	msg := loopsFixture()
@@ -601,10 +601,10 @@ func TestDoneRefusesAnItemWithOpenDescendants(t *testing.T) {
 		t.Fatalf("the cursor is on %v, want the parent %s", item, parent.Id)
 	}
 
-	m, _ = press(t, m, "x")
+	m, _ = press(t, m, "d")
 
 	if log := written(t, path); len(log) != 0 {
-		t.Errorf("x on a parent with open work wrote %v", log)
+		t.Errorf("d on a parent with open work wrote %v", log)
 	}
 	if !strings.Contains(m.hint, "cannot close "+parent.Id) {
 		t.Errorf("hint = %q, want it to refuse the close", m.hint)
@@ -754,5 +754,16 @@ func TestHeadingIsNamedInTheDetailPane(t *testing.T) {
 	marked, _ := press(t, m, "H")
 	if pane := detailPane(t, marked.View()); !strings.Contains(pane, "open · heading") {
 		t.Errorf("the pane does not name the heading beside the status:\n%s", pane)
+	}
+}
+
+// x is no longer the close: a press of it writes nothing.
+func TestXNoLongerCloses(t *testing.T) {
+	m, path := working(t)
+
+	press(t, m, "G", "x")
+
+	if log := written(t, path); len(log) != 0 {
+		t.Errorf("x wrote %v, want nothing", log)
 	}
 }

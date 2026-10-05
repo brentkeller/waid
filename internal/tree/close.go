@@ -8,7 +8,7 @@ import (
 )
 
 // GuardClose reports whether an item may be closed, refusing while anything filed beneath it is
-// still open. Both `waid done` and the app's `x` call it: two surfaces that disagreed about when a
+// still open. Both `waid done` and the app's `d` call it: two surfaces that disagreed about when a
 // parent may close would be worse than either rule on its own.
 //
 // Refusal was chosen over a cascading close, so the point of a heading holds — a closed parent

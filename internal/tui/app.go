@@ -67,7 +67,7 @@ var tabTitles = [numTabs]string{"Loops", "Repos", "Agents"}
 // tabFooters are the key hints each tab keeps in the footer — the keys worth having in front of you
 // while working the tab, as opposed to the full table `?` opens.
 var tabFooters = [numTabs]string{
-	tabLoops:  "x done · w waiting · e edit · t tags · m move · n note · y copy id · a add · / filter · s status · h headings · H heading · P dock · ? keys",
+	tabLoops:  "d done · w waiting · e edit · t tags · m move · n note · y copy id · a add · / filter · s status · h headings · H heading · P dock · ? keys",
 	tabScan:   "p promote · d dismiss · o open in browser · r refresh · / filter · ? keys",
 	tabReview: "space preview · P dock · R resume · o open repo · y copy id · s range · d date · ? keys",
 }
@@ -122,7 +122,7 @@ var promptBindings = []binding{
 // elsewhere is inert, and the footer names the tab that owns it.
 var tabBindings = [numTabs][]binding{
 	tabLoops: {
-		{[]string{"x"}, "x", "done"},
+		{[]string{"d"}, "d", "done"},
 		{[]string{"w"}, "w", "waiting"},
 		{[]string{"e"}, "e", "edit title"},
 		{[]string{"n"}, "n", "note"},

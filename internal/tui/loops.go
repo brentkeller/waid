@@ -158,7 +158,7 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 	case "r":
 		m, cmd := m.refreshLoops()
 		return m, cmd, true
-	case "x":
+	case "d":
 		return m.doneSelected(tree)
 	case "w":
 		return m.waitingSelected(tree)

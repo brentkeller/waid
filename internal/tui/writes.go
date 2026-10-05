@@ -23,7 +23,7 @@ import (
 
 // doneSelected closes the item under the cursor, which is the only way out of the list (§1.1).
 func (m Model) doneSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
-	m, item, ok := m.loopTarget(tree, "x closes an item")
+	m, item, ok := m.loopTarget(tree, "d closes an item")
 	if !ok {
 		return m, nil, true
 	}

@@ -323,7 +323,7 @@ func TestFooterHintsFitTheTerminal(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimRight(hints, " "), "? keys") {
 		t.Errorf("the hints are %q, want the key table still offered", hints)
 	}
-	if !strings.Contains(hints, "x done") {
+	if !strings.Contains(hints, "d done") {
 		t.Errorf("the hints are %q, want the first of them kept", hints)
 	}
 }
@@ -333,7 +333,7 @@ func TestFooterHintsAreWholeWhenTheyFit(t *testing.T) {
 	m := chrome(t, 140)
 
 	hints := strings.Split(plain(m.footer()), "\n")[1]
-	for _, want := range []string{"x done", "m move", "s status", "? keys"} {
+	for _, want := range []string{"d done", "m move", "s status", "? keys"} {
 		if !strings.Contains(hints, want) {
 			t.Errorf("the hints are %q, want %q kept at 140 columns", hints, want)
 		}

@@ -17,8 +17,8 @@ import (
 // the two keys that change it.
 const markKeys = "m move · d done · w waiting · t tag · x mark · X clear"
 
-// toggleMark sets or clears the mark on the row under the cursor and steps down a row, so a run of
-// rows is marked by repeating the key. A row holding no item takes no mark, and the footer says so.
+// toggleMark sets or clears the mark on the row under the cursor, and leaves the cursor where it is.
+// A row holding no item takes no mark, and the footer says so.
 //
 // The set is replaced rather than written through: Model is copied by value through the update loop,
 // and two copies sharing one map would see each other's marks.
@@ -36,9 +36,6 @@ func (m Model) toggleMark(t Tree[events.Item]) (Model, tea.Cmd, bool) {
 		marked[item.Id] = true
 	}
 	m.loops.marked = marked
-
-	t.Down()
-	m.loops.cursor = t.Cursor
 	return m, nil, true
 }
 

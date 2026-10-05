@@ -8,7 +8,7 @@ const (
 	colorAccent  = lipgloss.Color("6") // cyan: the cursor, the active tab, the selected filter
 	colorMuted   = lipgloss.Color("8") // bright black: counts, rules, notes, hints
 	colorSuccess = lipgloss.Color("2") // green: a write that landed
-	colorWork    = lipgloss.Color("3") // yellow: work in flight
+	colorWork    = lipgloss.Color("3") // yellow: work in flight, and a row carrying a mark
 )
 
 // Theme is the app's whole palette. Every style any view renders with is a field here, so a colour
@@ -25,11 +25,12 @@ type Theme struct {
 	FilterInactive lipgloss.Style
 	Count          lipgloss.Style
 
-	// The tree: a project heading, its child rows, the row under the cursor, and the secondary
-	// columns a row carries — branch, waiting-on, age.
+	// The tree: a project heading, its child rows, the row under the cursor, a row carrying a mark,
+	// and the secondary columns a row carries — branch, waiting-on, age.
 	Heading    lipgloss.Style
 	Row        lipgloss.Style
 	RowFocused lipgloss.Style
+	RowMarked  lipgloss.Style
 	Meta       lipgloss.Style
 
 	// Everything below the list: the rules, the degradation strip (§7), the receipt left by the
@@ -58,6 +59,7 @@ func NewTheme() Theme {
 		Heading:    lipgloss.NewStyle().Bold(true),
 		Row:        lipgloss.NewStyle(),
 		RowFocused: lipgloss.NewStyle().Bold(true).Foreground(colorAccent),
+		RowMarked:  lipgloss.NewStyle().Foreground(colorWork),
 		Meta:       muted,
 
 		Divider: muted,

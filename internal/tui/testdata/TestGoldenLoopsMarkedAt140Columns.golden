@@ -4,8 +4,8 @@
  ‹open›  waiting  done  all  │  headings                                                                                 2 marked · 6 items
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ●▾ Localized notifications                                                                                                            2 open
-●    sga9  open     Design template + args persistence for localized persisted strings                                                   19m
-   ▸ nktt  open     Background workers speak the requester's language                                                        [promoted]   2d
+●  ▸ sga9  open     Design template + args persistence for localized persisted strings                                                   19m
+     nktt  open     Background workers speak the requester's language                                                        [promoted]   2d
  ▾ (unassigned)                                                                                                                       3 open
      9xz1  open     TUI design spike                                                                                                      1h
      p0rt  open     Read the port design once more                                                                                        2h
@@ -23,12 +23,12 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- nktt · devresults · open · created 2d ago
+ sga9 · devresults · open · created 19m ago
 
- Background workers speak the requester's language
- tags  promoted
+ Design template + args persistence for localized persisted strings
 
-
+ notes
+   19m  needs to survive a round trip through the queue
 
 
 

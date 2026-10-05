@@ -562,3 +562,14 @@ func TestATreeMarkingNothingRendersUnchanged(t *testing.T) {
 		}
 	}
 }
+
+// A marked line says so, on a fold and on an item, which is what the palette colours it by.
+func TestMarkedLinesCarryTheMark(t *testing.T) {
+	lines := marking(func(row Row[string]) bool { return row.Key != "other" }).Lines(40)
+
+	for i, want := range []bool{true, true, false} {
+		if lines[i].Marked != want {
+			t.Errorf("line %d has Marked = %v, want %v", i, lines[i].Marked, want)
+		}
+	}
+}

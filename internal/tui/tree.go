@@ -111,6 +111,7 @@ type Line struct {
 	Text    string
 	Heading bool
 	Focused bool
+	Marked  bool
 }
 
 // IsExpanded reports whether the named fold is open.
@@ -486,10 +487,10 @@ func (t Tree[T]) Lines(width int) []Line {
 		// plain row is a heading line without the marker, so it is drawn as one though it heads
 		// nothing.
 		if row.node && !row.HasKids && !row.plain {
-			lines = append(lines, Line{Text: t.itemLine(row, width, focused), Focused: focused})
+			lines = append(lines, Line{Text: t.itemLine(row, width, focused), Focused: focused, Marked: t.marked(row)})
 			continue
 		}
-		lines = append(lines, Line{Text: t.heading(row, width), Heading: true, Focused: focused})
+		lines = append(lines, Line{Text: t.heading(row, width), Heading: true, Focused: focused, Marked: t.marked(row)})
 	}
 	return lines
 }
@@ -502,6 +503,10 @@ func (t Tree[T]) View(width int, theme Theme) string {
 			b.WriteString("\n")
 		}
 		switch {
+		case line.Marked:
+			// A mark outranks the cursor's colour, since it says what a write will take. The cursor
+			// keeps its own glyph and its weight.
+			b.WriteString(theme.RowMarked.Bold(line.Focused || line.Heading).Render(line.Text))
 		case line.Focused:
 			b.WriteString(theme.RowFocused.Render(line.Text))
 		case line.Heading:
@@ -520,9 +525,14 @@ func indent(depth int) string {
 	return strings.Repeat(" ", headingIndent+indentStep*min(depth, maxIndentDepth))
 }
 
+// marked reports whether a row carries a mark, which no row does in a tree that supplies no Marked.
+func (t Tree[T]) marked(row Row[T]) bool {
+	return t.Marked != nil && t.Marked(row)
+}
+
 // gutter is a row's prefix with the mark drawn in its first column when the row carries one.
 func (t Tree[T]) gutter(row Row[T], prefix string) string {
-	if t.Marked == nil || !t.Marked(row) {
+	if !t.marked(row) {
 		return prefix
 	}
 	return markGlyph + strings.TrimPrefix(prefix, " ")

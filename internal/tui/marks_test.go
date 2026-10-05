@@ -20,11 +20,11 @@ func markedIds(m Model) []string {
 	return ids
 }
 
-// x marks the row under the cursor and steps down, so a run of rows is marked by repeating the key.
-func TestXMarksTheRowAndStepsDown(t *testing.T) {
+// x marks the row under the cursor, so rows are marked one at a time as the cursor reaches them.
+func TestXMarksTheRowUnderTheCursor(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "down", "x", "x")
+	m, _ = press(t, m, "down", "x", "down", "x")
 
 	if got, want := markedIds(m), []string{"nktt", "sga9"}; !slices.Equal(got, want) {
 		t.Errorf("marked %v, want %v", got, want)
@@ -44,22 +44,22 @@ func TestXMarksTheRowAndStepsDown(t *testing.T) {
 	}
 }
 
-// A second press on a marked row takes the mark off, and steps down all the same.
+// A second press on a marked row takes the mark off, and the cursor has not moved between them.
 func TestXTakesTheMarkOffAMarkedRow(t *testing.T) {
 	m, _ := working(t)
 
-	m, _ = press(t, m, "down", "x", "up", "x")
+	m, _ = press(t, m, "down", "x", "x")
 
 	if got := markedIds(m); len(got) != 0 {
 		t.Errorf("marked %v, want nothing", got)
 	}
-	if item, _ := m.loopsTree(m.viewWidth()).SelectedItem(); item.Id != "nktt" {
-		t.Errorf("the cursor is on %q, want it stepped down to nktt", item.Id)
+	if item, _ := m.loopsTree(m.viewWidth()).SelectedItem(); item.Id != "sga9" {
+		t.Errorf("the cursor is on %q, want it left on sga9", item.Id)
 	}
 }
 
-// The last row has nowhere to step to, so the cursor stays on it.
-func TestXStaysOnTheLastRow(t *testing.T) {
+// Marking the last row leaves the cursor on it.
+func TestXOnTheLastRowLeavesTheCursorThere(t *testing.T) {
 	m, _ := working(t)
 
 	m, _ = press(t, m, "G", "x")
@@ -104,7 +104,7 @@ func TestXIsInertOnTheBucket(t *testing.T) {
 func TestShiftXClearsTheMarks(t *testing.T) {
 	m, _ := working(t)
 
-	m, _ = press(t, m, "down", "x", "x", "X")
+	m, _ = press(t, m, "down", "x", "down", "x", "X")
 
 	if got := markedIds(m); len(got) != 0 {
 		t.Errorf("marked %v after X, want nothing", got)
@@ -154,7 +154,7 @@ func TestMarksChangeTheHeaderAndTheFooter(t *testing.T) {
 		t.Errorf("an unmarked list mentions marks:\n%s", bare)
 	}
 
-	m, _ = press(t, m, "down", "x", "x")
+	m, _ = press(t, m, "down", "x", "down", "x")
 	view := plain(m.View())
 	if !strings.Contains(view, "2 marked · 6 items") {
 		t.Errorf("the header does not count the marks:\n%s", view)
@@ -185,7 +185,7 @@ func TestGoldenLoopsMarkedAt140Columns(t *testing.T) { goldenMarked(t, 140) }
 func goldenMarked(t *testing.T, width int) {
 	t.Helper()
 
-	m, _ := press(t, looped(t, width, loopsFixture()), "x", "x")
+	m, _ := press(t, looped(t, width, loopsFixture()), "x", "down", "x")
 	teatest.RequireEqualOutput(t, []byte(plain(m.View())))
 }
 
@@ -193,8 +193,8 @@ func goldenMarked(t *testing.T, width int) {
 func TestSingleItemKeysIgnoreTheMarks(t *testing.T) {
 	m, _ := working(t)
 
-	// Marking sga9 steps the cursor onto nktt.
-	m, _ = press(t, m, "down", "x", "e")
+	// sga9 is marked and the cursor is then moved off it, onto nktt.
+	m, _ = press(t, m, "down", "x", "down", "e")
 
 	if m.prompt.kind != promptRename || m.prompt.subject != "nktt" {
 		t.Errorf("e opened prompt %d on %q, want the title of the cursor row nktt", m.prompt.kind, m.prompt.subject)
@@ -206,7 +206,7 @@ func TestSingleItemKeysIgnoreTheMarks(t *testing.T) {
 func TestDoneClosesEveryMarkedItem(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "down", "x", "x", "d")
+	m, _ = press(t, m, "down", "x", "down", "x", "d")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
@@ -235,7 +235,7 @@ func TestDoneClosesEveryMarkedItem(t *testing.T) {
 func TestUndoOfABatchDoneReopensEveryItem(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "down", "x", "x", "d", "u")
+	m, _ = press(t, m, "down", "x", "down", "x", "d", "u")
 
 	ts := loopsStamped()
 	assertLog(t, path, []string{
@@ -261,7 +261,7 @@ func TestUndoOfABatchDoneReopensEveryItem(t *testing.T) {
 func TestDoneClosesAHeadingMarkedWithItsDescendants(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "x", "x", "x", "d")
+	m, _ = press(t, m, "x", "down", "x", "down", "x", "d")
 
 	if log := written(t, path); len(log) != 3 {
 		t.Errorf("the batch wrote %v, want the heading and both items closed", log)
@@ -273,7 +273,7 @@ func TestDoneClosesAHeadingMarkedWithItsDescendants(t *testing.T) {
 func TestDoneRefusesAMarkedHeadingWithADescendantLeftOut(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "x", "x", "d")
+	m, _ = press(t, m, "x", "down", "x", "d")
 
 	if log := written(t, path); len(log) != 0 {
 		t.Errorf("a refused batch wrote %v", log)
@@ -319,7 +319,7 @@ func TestDoneClosesAMarkedItemTheFilterHides(t *testing.T) {
 // A write that cannot land says so, records nothing, and leaves the marks standing for a retry.
 func TestAFailedBatchKeepsItsMarks(t *testing.T) {
 	m, _ := working(t)
-	m, _ = press(t, m, "down", "x", "x")
+	m, _ = press(t, m, "down", "x", "down", "x")
 
 	// A directory is not a file a line can be appended to.
 	m.opts.Cfg.EventsPath = t.TempDir()
@@ -340,7 +340,7 @@ func TestAFailedBatchKeepsItsMarks(t *testing.T) {
 func TestWaitingWritesEveryMarkedItem(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "down", "x", "x", "w")
+	m, _ = press(t, m, "down", "x", "down", "x", "w")
 	if view := plain(m.View()); !strings.Contains(view, "waiting on (2 items)") {
 		t.Fatalf("the prompt does not say how many items it is asking about:\n%s", view)
 	}
@@ -371,7 +371,7 @@ func TestWaitingWritesEveryMarkedItem(t *testing.T) {
 func TestAnAbandonedBatchWaitingKeepsItsMarks(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "down", "x", "x", "w", "esc")
+	m, _ = press(t, m, "down", "x", "down", "x", "w", "esc")
 
 	if log := written(t, path); len(log) != 0 {
 		t.Errorf("an abandoned prompt wrote %v", log)
@@ -386,7 +386,7 @@ func TestAnAbandonedBatchWaitingKeepsItsMarks(t *testing.T) {
 func TestTagAddsToEveryMarkedItem(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "down", "x", "x", "t")
+	m, _ = press(t, m, "down", "x", "down", "x", "t")
 	if got := m.prompt.text(); got != "" {
 		t.Errorf("the batch prompt opened on %q, want it empty", got)
 	}
@@ -426,7 +426,7 @@ func TestABlankBatchTagAnswerWritesNothing(t *testing.T) {
 	for _, answer := range [][]string{{"enter"}, {", ,", "enter"}} {
 		m, path := working(t)
 
-		m, _ = press(t, m, "down", "x", "x", "t")
+		m, _ = press(t, m, "down", "x", "down", "x", "t")
 		m, _ = press(t, m, answer...)
 
 		if log := written(t, path); len(log) != 0 {

@@ -170,7 +170,8 @@ that belongs under nothing. It opens with the roots and the rows filed directly 
 and anything deeper folded away. Since the item's own subtree has left the tree, there is no
 destination on screen the move could be refused for.
 
-`x` marks a row and steps down, so a run of rows is marked by repeating it; `X` clears the marks.
+`x` marks the row under the cursor and leaves the cursor on it, and a marked row is drawn in yellow;
+`X` clears the marks.
 While any row is marked, `m`, `d`, `w` and `t` act on every marked item instead of the row under the
 cursor: `m` drops them all on one destination, `d` closes them, `w` asks once who they wait on, and
 `t` adds the tags typed to each. Marks follow the item rather than the row, so they hold while the

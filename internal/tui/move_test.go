@@ -384,7 +384,7 @@ func TestMoveFilesEveryMarkedItem(t *testing.T) {
 
 	// Four rows down is 9xz1, and the row under it is p0rt: both sit at the top level, so the picker
 	// opens on the row that means it and one step down is the fold.
-	m, _ = press(t, m, "down", "down", "down", "down", "x", "x", "m")
+	m, _ = press(t, m, "down", "down", "down", "down", "x", "down", "x", "m")
 	if view := plain(m.View()); !strings.Contains(view, "moving  2 items") {
 		t.Fatalf("the header does not count what is being moved:\n%s", view)
 	}
@@ -469,7 +469,7 @@ func TestMoveSkipsAMarkedItemAlreadyAtTheDestination(t *testing.T) {
 func TestMoveOntoTheSharedParentWritesNothing(t *testing.T) {
 	m, path := working(t)
 
-	m, _ = press(t, m, "down", "x", "x", "m")
+	m, _ = press(t, m, "down", "x", "down", "x", "m")
 	if got := focused(t, m); got != "vq2n" {
 		t.Fatalf("the picker opened on %q, want the parent the items share", got)
 	}
@@ -491,7 +491,7 @@ func TestMoveOntoTheSharedParentWritesNothing(t *testing.T) {
 func TestEscOutOfTheMoveKeepsTheMarks(t *testing.T) {
 	m, _ := working(t)
 
-	m, _ = press(t, m, "down", "x", "x", "m", "esc")
+	m, _ = press(t, m, "down", "x", "down", "x", "m", "esc")
 
 	if m.loops.moving.active() {
 		t.Error("the picker is still open after esc")

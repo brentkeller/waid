@@ -20,8 +20,7 @@ marked is made against all of them.
 
 - **Not on Repos or Agents.** The tree component learns to draw a mark, and only Loops hands it any.
 - **Not a CLI change.** `waid move` keeps taking one id. `waid done <id>...` already takes several.
-- **Not a range select.** A mark is one row. A contiguous run is marked a row at a time, which the
-  step-down in §1 makes one key per row.
+- **Not a range select.** A mark is one row. A contiguous run is marked a row at a time.
 - **Not a batch for every key.** Four writes take the marked set (§2); the rest stay on the cursor.
 - **Not a new event.** A batch is the events the same writes already append, one per item.
 
@@ -33,11 +32,11 @@ query, the status row, the headings toggle.
 
 | Key | Effect |
 |-----|--------|
-| `x` | Toggle the mark on the row under the cursor, then step the cursor down a row. |
+| `x` | Toggle the mark on the row under the cursor. |
 | `X` | Clear every mark. |
 
-- **`x` steps down** so a run of rows is marked by holding one key. It steps whether the press set
-  the mark or took it off, and stays put on the last row.
+- **`x` leaves the cursor where it is.** A key that marked and moved felt unnatural in use: the row
+  just marked slid out from under the cursor. A run of rows is marked with `x` and `↓` in turn.
 - **`x` on the `(unassigned)` bucket is inert** with a reason in the footer, as every other write
   is there: the bucket is not an item.
 - **A mark covers the item it is on and nothing else.** Marking a fold does not mark what is filed
@@ -64,6 +63,10 @@ A marked row draws `●` in column 0. `indent` always leaves that column blank �
 `headingIndent` before a depth-0 marker — so the glyph collides with neither the cursor mark nor
 the fold marker, sits in one vertical gutter at every depth, and costs the row no width. An unmarked
 tree renders byte for byte what it renders today, so no golden moves until something is marked.
+
+A marked row is also drawn in yellow — the palette's `colorWork` — in place of its usual colour,
+so the set reads at a glance down a long list. The mark outranks the cursor's colour on a row that
+is both; the cursor keeps its glyph and its weight.
 
 The header row carries the count while there is one, ahead of the item count on the right edge:
 
@@ -201,7 +204,7 @@ prompt (replace against add) and the footer summary (none for one item).
 
 - **Tree:** a marked row draws the glyph in column 0 at every depth, on an item row and on a fold; a
   tree with no `Marked` renders unchanged.
-- **Marks:** `x` sets, clears and steps down; it stays on the last row; it is inert on the bucket;
+- **Marks:** `x` sets and clears and leaves the cursor in place; it is inert on the bucket;
   `X` clears; marks hold across a reload, a fold, a query typed and cleared, `s` and `h`; the header
   counts them, including one the filter hides.
 - **Move:** several subjects are lifted with their subtrees; a subject under another subject is not

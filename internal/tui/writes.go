@@ -13,7 +13,7 @@ import (
 	itemtree "github.com/brentkeller/waid/internal/tree"
 )
 
-// The writes made against items: the four Loops binds to the row under the cursor — close an item,
+// The writes made against items: the ones Loops binds to the row under the cursor or to the rows carrying a mark — close an item,
 // mark it waiting on someone, correct its title, note something against it — and the add every tab
 // offers. They follow the rule Repos' triage already does (§3) — the write lands on the keypress with
 // no confirm step, and the footer's receipt is what says a press did anything.
@@ -21,36 +21,100 @@ import (
 // Each one edits the loaded copy of the item beside appending to the log, so the row moves in the
 // frame the key was pressed in rather than waiting for the next read to catch up with it.
 
-// doneSelected closes the item under the cursor, which is the only way out of the list (§1.1).
+// itemWrite is one item's share of a write: the event appended for it, the item as the write leaves
+// it, the receipt it is recorded by, and the entry that reverses it.
+type itemWrite struct {
+	event   events.WaidEvent
+	after   events.Item
+	receipt receipt
+	inverse undoEntry
+}
+
+// commit lands a write against one item or several. Each item's event is appended in turn, its
+// loaded copy replaced and its receipt recorded, and the inverses are pushed as a single entry so one
+// undo reverses the whole of it. A write against several also records summary, which is what the
+// footer shows in place of the last item's own receipt.
+//
+// An append that fails stops the write there. What landed is kept and can be undone, the hint names
+// the failure, and the marks are left standing so the rest can be tried again.
+func (m Model) commit(action string, writes []itemWrite, summary receipt) (Model, tea.Cmd) {
+	var inverses []undoEntry
+	failed := ""
+	for _, write := range writes {
+		ts, err := events.Append(m.opts.Cfg.EventsPath, write.event, m.now())
+		if err != nil {
+			failed = writeFailed(action, err)
+			break
+		}
+
+		landed := write.after
+		landed.Updated = ts
+		m = m.applyItem(landed).record(write.receipt)
+		inverses = append(inverses, write.inverse)
+	}
+
+	if len(inverses) > 0 {
+		m = m.pushUndo(mergeUndo(inverses))
+	}
+	if failed != "" {
+		m.hint = failed
+		return m, nil
+	}
+
+	if len(writes) > 1 {
+		summary.summary = true
+		m = m.record(summary)
+	}
+	m.loops.marked = nil
+	return m, nil
+}
+
+// doneSelected closes the marked items, or the item under the cursor when nothing is marked — which
+// is the only way out of the list (§1.1).
 func (m Model) doneSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
-	m, item, ok := m.loopTarget(tree, "d closes an item")
+	m, items, ok := m.targets(tree, "d closes an item")
 	if !ok {
 		return m, nil, true
 	}
+
 	// The done and all segments show items that are already closed, and a second close would be a log
-	// line and a receipt for nothing (§4).
-	if item.Status == events.StatusDone {
-		m.hint = item.Id + " is already closed"
+	// line and a receipt for nothing (§4). A set holding some is closed around them.
+	var open []events.Item
+	for _, item := range items {
+		if item.Status != events.StatusDone {
+			open = append(open, item)
+		}
+	}
+	if len(open) == 0 {
+		m.hint = "every marked item is already closed"
+		if len(items) == 1 {
+			m.hint = items[0].Id + " is already closed"
+		}
 		return m, nil, true
 	}
+
 	// A heading closes only once the work beneath it is finished (§5). The guard is the one `waid
-	// done` calls, so the two surfaces cannot disagree about when that is.
-	if err := itemtree.GuardClose(events.State{Items: m.loops.items}, item.Id); err != nil {
+	// done` calls, so the two surfaces cannot disagree about when that is, and it judges the set as
+	// one: a heading marked alongside everything open beneath it closes with it.
+	if err := itemtree.GuardCloses(events.State{Items: m.loops.items}, idsOf(open)); err != nil {
 		m.hint = err.Error()
 		return m, nil, true
 	}
 
-	ts, err := events.Append(m.opts.Cfg.EventsPath, events.CloseEvent{Ev: "close", Id: item.Id}, m.now())
-	if err != nil {
-		m.hint = writeFailed("done", err)
-		return m, nil, true
+	writes := make([]itemWrite, 0, len(open))
+	for _, item := range open {
+		closed := item
+		closed.Status = events.StatusDone
+		writes = append(writes, itemWrite{
+			event:   events.CloseEvent{Ev: "close", Id: item.Id},
+			after:   closed,
+			receipt: receipt{verb: "closed", subject: item.Id, detail: item.Title},
+			inverse: undoDone(item),
+		})
 	}
 
-	closed := item
-	closed.Status, closed.Updated = events.StatusDone, ts
-
-	m = m.applyItem(closed).pushUndo(undoDone(item))
-	return m.record(receipt{verb: "closed", subject: item.Id, detail: item.Title}), nil, true
+	m, cmd := m.commit("done", writes, receipt{verb: "closed", subject: plural(len(writes), "item")})
+	return m, cmd, true
 }
 
 // headingSelected marks the item under the cursor a heading, or takes the mark off one that already

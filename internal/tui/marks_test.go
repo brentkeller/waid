@@ -200,3 +200,138 @@ func TestSingleItemKeysIgnoreTheMarks(t *testing.T) {
 		t.Errorf("e opened prompt %d on %q, want the title of the cursor row nktt", m.prompt.kind, m.prompt.subject)
 	}
 }
+
+// d closes every marked item in the order the log holds them, leaves a line per item for the replay
+// and a count for the footer, and clears the marks it answered.
+func TestDoneClosesEveryMarkedItem(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "down", "x", "x", "d")
+
+	ts := loopsStamped()
+	assertLog(t, path, []string{
+		`{"ts":"` + ts + `","ev":"close","id":"nktt"}`,
+		`{"ts":"` + ts + `","ev":"close","id":"sga9"}`,
+	})
+
+	view := plain(m.View())
+	if listed(view, "sga9") || listed(view, "nktt") {
+		t.Errorf("a closed item is still in the list:\n%s", view)
+	}
+	if !strings.Contains(view, "closed 2 items") {
+		t.Errorf("the footer carries no summary of the batch:\n%s", view)
+	}
+	if got := markedIds(m); len(got) != 0 {
+		t.Errorf("marked %v after the batch, want the marks cleared", got)
+	}
+
+	replayed := replay(m.receipts)
+	if !strings.Contains(replayed, "nktt") || !strings.Contains(replayed, "sga9") || strings.Contains(replayed, "2 items") {
+		t.Errorf("the replay is\n%s\nwant a line per item and no summary", replayed)
+	}
+}
+
+// One u reverses the whole batch, and does not put the marks back.
+func TestUndoOfABatchDoneReopensEveryItem(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "down", "x", "x", "d", "u")
+
+	ts := loopsStamped()
+	assertLog(t, path, []string{
+		`{"ts":"` + ts + `","ev":"close","id":"nktt"}`,
+		`{"ts":"` + ts + `","ev":"close","id":"sga9"}`,
+		`{"ts":"` + ts + `","ev":"reopen","id":"nktt"}`,
+		`{"ts":"` + ts + `","ev":"reopen","id":"sga9"}`,
+	})
+
+	view := plain(m.View())
+	if !listed(view, "sga9") || !listed(view, "nktt") {
+		t.Errorf("a reopened item did not come back:\n%s", view)
+	}
+	if !strings.Contains(view, "restored 2 items") {
+		t.Errorf("the footer carries no receipt for the undo:\n%s", view)
+	}
+	if got := markedIds(m); len(got) != 0 {
+		t.Errorf("the undo put back the marks %v", got)
+	}
+}
+
+// The close guard judges the set as one: a heading marked with everything open beneath it closes.
+func TestDoneClosesAHeadingMarkedWithItsDescendants(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "x", "x", "x", "d")
+
+	if log := written(t, path); len(log) != 3 {
+		t.Errorf("the batch wrote %v, want the heading and both items closed", log)
+	}
+}
+
+// A heading marked with a descendant left out is refused whole: nothing is written, and the marks
+// stand so the set can be put right.
+func TestDoneRefusesAMarkedHeadingWithADescendantLeftOut(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "x", "x", "d")
+
+	if log := written(t, path); len(log) != 0 {
+		t.Errorf("a refused batch wrote %v", log)
+	}
+	if !strings.Contains(m.hint, "cannot close vq2n") {
+		t.Errorf("hint = %q, want the guard's refusal", m.hint)
+	}
+	if got := markedIds(m); len(got) != 2 {
+		t.Errorf("marked %v after a refusal, want both marks standing", got)
+	}
+}
+
+// An item already closed is skipped, and a set holding nothing else is a hint and no write.
+func TestDoneSkipsMarkedItemsAlreadyClosed(t *testing.T) {
+	m, path := working(t)
+
+	m.loops.marked = map[string]bool{"shut": true, "p0rt": true}
+	mixed, _ := press(t, m, "d")
+	assertLog(t, path, []string{`{"ts":"` + loopsStamped() + `","ev":"close","id":"p0rt"}`})
+	if view := plain(mixed.View()); !strings.Contains(view, "closed p0rt") {
+		t.Errorf("a batch that closed one item did not receipt it as one:\n%s", view)
+	}
+
+	m.loops.marked = map[string]bool{"shut": true}
+	closed, _ := press(t, m, "d")
+	if log := written(t, path); len(log) != 1 {
+		t.Errorf("a set of closed items wrote %v", log[1:])
+	}
+	if !strings.Contains(closed.hint, "already closed") {
+		t.Errorf("hint = %q, want it to say the item is closed", closed.hint)
+	}
+}
+
+// A mark the query is hiding is still part of the set, so the batch closes it.
+func TestDoneClosesAMarkedItemTheFilterHides(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "down", "x", "/", "s", "p", "i", "k", "e", "enter", "d")
+
+	assertLog(t, path, []string{`{"ts":"` + loopsStamped() + `","ev":"close","id":"sga9"}`})
+}
+
+// A write that cannot land says so, records nothing, and leaves the marks standing for a retry.
+func TestAFailedBatchKeepsItsMarks(t *testing.T) {
+	m, _ := working(t)
+	m, _ = press(t, m, "down", "x", "x")
+
+	// A directory is not a file a line can be appended to.
+	m.opts.Cfg.EventsPath = t.TempDir()
+	m, _ = press(t, m, "d")
+
+	if !strings.Contains(m.hint, "done failed") {
+		t.Errorf("hint = %q, want it to say the write failed", m.hint)
+	}
+	if len(m.receipts) != 0 {
+		t.Errorf("a failed batch left %d receipts", len(m.receipts))
+	}
+	if got := markedIds(m); len(got) != 2 {
+		t.Errorf("marked %v after a failed batch, want both marks standing", got)
+	}
+}

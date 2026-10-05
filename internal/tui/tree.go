@@ -15,6 +15,10 @@ const (
 	foldClosed = "▸"
 	cursorMark = "▸"
 
+	// markGlyph is drawn in the first column of a row that carries a mark. indent always leaves that
+	// column blank, so the glyph meets neither the cursor mark nor the fold marker.
+	markGlyph = "●"
+
 	// headingIndent leaves a column before a top-level row's marker, and indentStep is what each
 	// level below it moves in by. rowIndent is where a depth-1 child's text starts: one step past
 	// the heading, plus the marker column and the space after it.
@@ -96,6 +100,9 @@ type Tree[T any] struct {
 	// whose children are on screen chrome; Loops selects everything, since its headings are items
 	// (§7).
 	Selectable func(row Row[T]) bool
+
+	// Marked reports whether a row carries a mark. A tree supplying none draws none.
+	Marked func(row Row[T]) bool
 }
 
 // Line is one printed line, already laid out, with what the caller needs to style it. Keeping the
@@ -513,6 +520,14 @@ func indent(depth int) string {
 	return strings.Repeat(" ", headingIndent+indentStep*min(depth, maxIndentDepth))
 }
 
+// gutter is a row's prefix with the mark drawn in its first column when the row carries one.
+func (t Tree[T]) gutter(row Row[T], prefix string) string {
+	if t.Marked == nil || !t.Marked(row) {
+		return prefix
+	}
+	return markGlyph + strings.TrimPrefix(prefix, " ")
+}
+
 // heading is a fold line: the marker, the project, and the count pushed to the right edge.
 func (t Tree[T]) heading(row Row[T], width int) string {
 	marker := foldClosed
@@ -523,7 +538,7 @@ func (t Tree[T]) heading(row Row[T], width int) string {
 		marker = foldOpen
 	}
 
-	prefix := indent(row.Depth) + marker + " "
+	prefix := t.gutter(row, indent(row.Depth)+marker+" ")
 	if width <= 0 {
 		return prefix + row.Title
 	}
@@ -549,7 +564,7 @@ func (t Tree[T]) itemLine(row Row[T], width int, focused bool) string {
 	if focused {
 		marker = cursorMark
 	}
-	prefix := indent(row.Depth) + marker + " "
+	prefix := t.gutter(row, indent(row.Depth)+marker+" ")
 
 	room := width - lipgloss.Width(prefix)
 	if width <= 0 {

@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // A tree of three projects, expanded the way Scan shows them, with items whose rendered text is
@@ -516,5 +518,47 @@ func TestExpandOpensOneLevel(t *testing.T) {
 	}
 	if tree.IsExpanded("mid") {
 		t.Error("expanding a leaf opened a fold elsewhere")
+	}
+}
+
+// marking is a tree two levels deep whose fold and first leaf carry a mark.
+func marking(marked func(Row[string]) bool) Tree[string] {
+	return Tree[string]{
+		Rows: []Row[string]{
+			{Node: "root", Depth: 0, Key: "root", Title: "root", node: true},
+			{Node: "leaf", Depth: 1, Key: "leaf", node: true},
+			{Node: "other", Depth: 1, Key: "other", node: true},
+		},
+		ExpandedByDefault: true,
+		Selectable:        func(Row[string]) bool { return true },
+		Marked:            marked,
+	}
+}
+
+// A marked row draws the glyph in the gutter at any depth, on a fold and on an item alike, and the
+// row is no wider for it.
+func TestMarkedRowsDrawTheGlyphInTheGutter(t *testing.T) {
+	marked := marking(func(row Row[string]) bool { return row.Key != "other" }).Lines(40)
+	bare := marking(nil).Lines(40)
+
+	for i, want := range []bool{true, true, false} {
+		if got := strings.HasPrefix(marked[i].Text, markGlyph); got != want {
+			t.Errorf("line %d is %q, marked = %v, want %v", i, marked[i].Text, got, want)
+		}
+		if got, want := lipgloss.Width(marked[i].Text), lipgloss.Width(bare[i].Text); got != want {
+			t.Errorf("line %d is %d columns marked and %d bare", i, got, want)
+		}
+	}
+}
+
+// A tree that marks nothing renders what a tree with no notion of marks renders.
+func TestATreeMarkingNothingRendersUnchanged(t *testing.T) {
+	none := marking(func(Row[string]) bool { return false }).Lines(40)
+	bare := marking(nil).Lines(40)
+
+	for i := range bare {
+		if none[i].Text != bare[i].Text {
+			t.Errorf("line %d is %q, want %q", i, none[i].Text, bare[i].Text)
+		}
 	}
 }

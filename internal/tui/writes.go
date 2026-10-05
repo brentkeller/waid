@@ -152,39 +152,55 @@ func headingReceipt(item events.Item) receipt {
 	return receipt{verb: verb, subject: item.Id, detail: item.Title}
 }
 
-// waitingSelected asks who the item is waiting on. The name is what the status is for — an item
-// waiting on nobody is just open — so it is collected before anything is written.
+// promptSubject is what a prompt's label names: the id of the one item it is asking about, or how
+// many it is asking about at once.
+func promptSubject(items []events.Item) string {
+	if len(items) == 1 {
+		return items[0].Id
+	}
+	return "(" + plural(len(items), "item") + ")"
+}
+
+// waitingSelected asks who the marked items — or the item under the cursor — are waiting on. The
+// name is what the status is for, since an item waiting on nobody is just open, so it is collected
+// before anything is written.
 func (m Model) waitingSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
-	m, item, ok := m.loopTarget(tree, "w marks an item waiting")
+	m, items, ok := m.targets(tree, "w marks an item waiting")
 	if !ok {
 		return m, nil, true
 	}
 
-	m.prompt = m.open(prompt{kind: promptWaiting, label: "waiting on", subject: item.Id})
+	m.prompt = m.open(prompt{
+		kind: promptWaiting, label: "waiting on", subject: promptSubject(items), subjects: idsOf(items),
+	})
 	return m, nil, true
 }
 
-// waitOn writes the status and the name together, since an update carrying one without the other
-// would leave the item describing half a state.
-func (m Model) waitOn(id, who string) (Model, tea.Cmd) {
-	item, loaded := m.loadedItem(id)
-	if !loaded {
+// waitOn writes the status and the name together to each item, since an update carrying one without
+// the other would leave the item describing half a state.
+func (m Model) waitOn(ids []string, who string) (Model, tea.Cmd) {
+	var writes []itemWrite
+	for _, id := range ids {
+		item, loaded := m.loadedItem(id)
+		if !loaded {
+			continue
+		}
+
+		waiting := item
+		waiting.Status, waiting.WaitingOn = events.StatusWaiting, &who
+		writes = append(writes, itemWrite{
+			event:   events.UpdateEvent{Ev: "update", Id: id, Status: events.StatusWaiting, WaitingOn: &who},
+			after:   waiting,
+			receipt: receipt{verb: "waiting", subject: id, detail: who},
+			inverse: undoWaiting(item),
+		})
+	}
+	if len(writes) == 0 {
 		m.hint = noItems
 		return m, nil
 	}
 
-	event := events.UpdateEvent{Ev: "update", Id: id, Status: events.StatusWaiting, WaitingOn: &who}
-	ts, err := events.Append(m.opts.Cfg.EventsPath, event, m.now())
-	if err != nil {
-		m.hint = writeFailed("waiting", err)
-		return m, nil
-	}
-
-	waiting := item
-	waiting.Status, waiting.WaitingOn, waiting.Updated = events.StatusWaiting, &who, ts
-
-	m = m.applyItem(waiting).pushUndo(undoWaiting(item))
-	return m.record(receipt{verb: "waiting", subject: id, detail: who}), nil
+	return m.commit("waiting", writes, receipt{verb: "waiting", subject: plural(len(writes), "item"), detail: who})
 }
 
 // editSelected corrects the title of the item under the cursor. Repos' `e` acts on the receipt of the

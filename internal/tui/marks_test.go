@@ -335,3 +335,48 @@ func TestAFailedBatchKeepsItsMarks(t *testing.T) {
 		t.Errorf("marked %v after a failed batch, want both marks standing", got)
 	}
 }
+
+// w asks once who the marked items are waiting on and writes the answer to each.
+func TestWaitingWritesEveryMarkedItem(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "down", "x", "x", "w")
+	if view := plain(m.View()); !strings.Contains(view, "waiting on (2 items)") {
+		t.Fatalf("the prompt does not say how many items it is asking about:\n%s", view)
+	}
+
+	m, _ = press(t, m, "maria", "enter")
+
+	ts := loopsStamped()
+	assertLog(t, path, []string{
+		`{"ts":"` + ts + `","ev":"update","id":"nktt","status":"waiting","waitingOn":"maria"}`,
+		`{"ts":"` + ts + `","ev":"update","id":"sga9","status":"waiting","waitingOn":"maria"}`,
+	})
+
+	view := plain(m.View())
+	for _, id := range []string{"sga9", "nktt"} {
+		if row := rowFor(t, view, id); !strings.Contains(row, "@maria") {
+			t.Errorf("the row for %s is %q, want it waiting on maria", id, row)
+		}
+	}
+	if !strings.Contains(view, "waiting 2 items  maria") {
+		t.Errorf("the footer carries no summary of the batch:\n%s", view)
+	}
+	if got := markedIds(m); len(got) != 0 {
+		t.Errorf("marked %v after the batch, want the marks cleared", got)
+	}
+}
+
+// An abandoned prompt writes nothing and leaves the marks standing.
+func TestAnAbandonedBatchWaitingKeepsItsMarks(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "down", "x", "x", "w", "esc")
+
+	if log := written(t, path); len(log) != 0 {
+		t.Errorf("an abandoned prompt wrote %v", log)
+	}
+	if got := markedIds(m); len(got) != 2 {
+		t.Errorf("marked %v, want both marks standing", got)
+	}
+}

@@ -38,6 +38,11 @@ type prompt struct {
 	label   string
 	subject string
 
+	// subjects are the items a waiting or a tags answer is written to: one for a prompt opened on the
+	// row under the cursor, and every marked item otherwise. subject is what the footer prints for
+	// them, which is an id for one and a count for several.
+	subjects []string
+
 	// prior is what the answer replaces, kept for the inverse the write pushes onto the undo stack.
 	// It is also what the input opens on, since a prompt that replaces something opens on it.
 	prior string
@@ -164,7 +169,7 @@ func (m Model) commitPrompt() (Model, tea.Cmd) {
 	case promptRename:
 		return m.rename(answered.subject, answered.prior, value)
 	case promptWaiting:
-		return m.waitOn(answered.subject, value)
+		return m.waitOn(answered.subjects, value)
 	case promptNote:
 		return m.addNote(answered.subject, value)
 	case promptTags:

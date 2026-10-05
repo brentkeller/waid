@@ -525,7 +525,7 @@ func TestExpandOpensOneLevel(t *testing.T) {
 func marking(marked func(Row[string]) bool) Tree[string] {
 	return Tree[string]{
 		Rows: []Row[string]{
-			{Node: "root", Depth: 0, Key: "root", Title: "root", node: true},
+			{Node: "root", Depth: 0, Key: "root", Title: "root", node: true, HasKids: true},
 			{Node: "leaf", Depth: 1, Key: "leaf", node: true},
 			{Node: "other", Depth: 1, Key: "other", node: true},
 		},

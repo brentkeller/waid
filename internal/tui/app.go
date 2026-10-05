@@ -122,14 +122,14 @@ var promptBindings = []binding{
 // elsewhere is inert, and the footer names the tab that owns it.
 var tabBindings = [numTabs][]binding{
 	tabLoops: {
-		{[]string{"d"}, "d", "done"},
+		{[]string{"d"}, "d", "done — the row, or every marked item"},
 		{[]string{"x"}, "x", "mark the row, for a write against several"},
 		{[]string{"X"}, "X", "clear the marks"},
-		{[]string{"w"}, "w", "waiting"},
+		{[]string{"w"}, "w", "waiting — the row, or every marked item"},
 		{[]string{"e"}, "e", "edit title"},
 		{[]string{"n"}, "n", "note"},
-		{[]string{"t"}, "t", "edit the tags — commit an empty answer to take them all off"},
-		{[]string{"m"}, "m", "move under another item — enter drops, esc cancels"},
+		{[]string{"t"}, "t", "edit the tags, or add tags to every marked item — commit an empty answer to take one item's off"},
+		{[]string{"m"}, "m", "move the row, or every marked item, under another — enter drops, esc cancels"},
 		{[]string{"y"}, "y", "copy the item id"},
 		{[]string{"H"}, "H", "mark the item a heading, or take the mark off it"},
 		{[]string{"s"}, "s", "cycle the status filter — open, waiting, done, all"},

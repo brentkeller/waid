@@ -339,3 +339,15 @@ func TestFooterHintsAreWholeWhenTheyFit(t *testing.T) {
 		}
 	}
 }
+
+// The key table names the mark keys and says which writes take the marked set.
+func TestTheKeyTableDocumentsMarks(t *testing.T) {
+	m, _ := press(t, chrome(t, 140), "?")
+
+	view := plain(m.View())
+	for _, want := range []string{"mark the row", "clear the marks", "or every marked item"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the key table does not say %q:\n%s", want, view)
+		}
+	}
+}

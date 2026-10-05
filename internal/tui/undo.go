@@ -28,16 +28,16 @@ type undoEntry struct {
 	// key is the signal a retired row is restored by, empty for a write no signal was retired by.
 	key string
 
-	// item is the loaded copy the list is left showing once the inverse has been written, put back
-	// beside the log so the row moves in the frame the undo was pressed in — the state before the write
+	// items are the loaded copies the list is left showing once the inverse has been written, put back
+	// beside the log so the rows move in the frame the undo was pressed in — the state before the write
 	// for one that changed an item, and the closed item for an add, which nothing removes. A write on
-	// an item no tab has loaded leaves it nil.
-	item *events.Item
+	// an item no tab has loaded leaves none, and a write against several items leaves one for each.
+	items []events.Item
 }
 
 // restoring attaches the item a write acted on, so undoing it moves the list as well as the log.
 func (e undoEntry) restoring(item events.Item) undoEntry {
-	e.item = &item
+	e.items = []events.Item{item}
 	return e
 }
 
@@ -74,7 +74,7 @@ func undoAdd(item events.Item) undoEntry {
 	return undoEntry{
 		events:  []events.WaidEvent{events.CloseEvent{Ev: "close", Id: item.Id}},
 		receipt: receipt{verb: "closed", subject: item.Id, detail: item.Title},
-		item:    &closed,
+		items:   []events.Item{closed},
 	}
 }
 
@@ -83,7 +83,7 @@ func undoDone(item events.Item) undoEntry {
 	return undoEntry{
 		events:  restore(item),
 		receipt: receipt{verb: "reopened", subject: item.Id, detail: item.Title},
-		item:    &item,
+		items:   []events.Item{item},
 	}
 }
 
@@ -92,7 +92,7 @@ func undoWaiting(item events.Item) undoEntry {
 	return undoEntry{
 		events:  restore(item),
 		receipt: receipt{verb: "restored", subject: item.Id, detail: item.Title},
-		item:    &item,
+		items:   []events.Item{item},
 	}
 }
 
@@ -123,7 +123,7 @@ func undoHeading(item events.Item) undoEntry {
 	return undoEntry{
 		events:  []events.WaidEvent{events.HeadingEvent{Ev: "update", Id: item.Id, Heading: item.Heading}},
 		receipt: headingReceipt(item),
-		item:    &item,
+		items:   []events.Item{item},
 	}
 }
 
@@ -134,7 +134,7 @@ func undoTags(item events.Item) undoEntry {
 	return undoEntry{
 		events:  []events.WaidEvent{events.TagsEvent{Ev: "update", Id: item.Id, Tags: item.Tags}},
 		receipt: tagsReceipt(item),
-		item:    &item,
+		items:   []events.Item{item},
 	}
 }
 
@@ -154,8 +154,24 @@ func undoRefile(item events.Item, label string) undoEntry {
 	return undoEntry{
 		events:  []events.WaidEvent{events.ParentEvent{Ev: "update", Id: item.Id, Parent: item.Parent}},
 		receipt: receipt{verb: verbFiled, subject: item.Id, detail: label},
-		item:    &item,
+		items:   []events.Item{item},
 	}
+}
+
+// mergeUndo is the one entry a write against several items leaves, so a single undo reverses the
+// whole of it: every inverse event in the order the writes were made, every item put back, and a
+// receipt that counts them. A batch of one is the entry it was built from.
+func mergeUndo(entries []undoEntry) undoEntry {
+	if len(entries) == 1 {
+		return entries[0]
+	}
+
+	merged := undoEntry{receipt: receipt{verb: "restored", subject: plural(len(entries), "item")}}
+	for _, entry := range entries {
+		merged.events = append(merged.events, entry.events...)
+		merged.items = append(merged.items, entry.items...)
+	}
+	return merged
 }
 
 // pushUndo records the inverse of a write just made. The append is capped to the stack's own length
@@ -196,8 +212,8 @@ func (m Model) undo() (Model, tea.Cmd) {
 	if entry.key != "" {
 		m = m.unhide(entry.key)
 	}
-	if entry.item != nil {
-		restored := *entry.item
+	for _, item := range entry.items {
+		restored := item
 		restored.Updated = ts
 		m = m.applyItem(restored)
 	}

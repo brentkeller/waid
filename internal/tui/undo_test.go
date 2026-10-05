@@ -265,3 +265,32 @@ func assertLog(t *testing.T, path string, want []string) {
 		}
 	}
 }
+
+// A batch leaves one entry, so one press of u reverses every write in it and leaves one receipt.
+func TestUndoOfABatchReversesEveryWriteInIt(t *testing.T) {
+	m, path := working(t)
+
+	first, _ := m.loadedItem("sga9")
+	second, _ := m.loadedItem("nktt")
+	m = m.pushUndo(mergeUndo([]undoEntry{undoHeading(first), undoHeading(second)}))
+
+	m, _ = press(t, m, "u")
+
+	assertLog(t, path, []string{headingLine("sga9", false), headingLine("nktt", false)})
+	if view := plain(m.View()); !strings.Contains(view, "restored 2 items") {
+		t.Errorf("the footer carries no receipt for the undo:\n%s", view)
+	}
+	if len(m.undos) != 0 {
+		t.Errorf("the undo stack holds %d entries after the undo, want it empty", len(m.undos))
+	}
+}
+
+// A batch of one is the entry it was built from, receipt and all.
+func TestABatchOfOneUndoIsThatUndo(t *testing.T) {
+	m, _ := working(t)
+	item, _ := m.loadedItem("sga9")
+
+	if got, want := mergeUndo([]undoEntry{undoDone(item)}).receipt.line(), undoDone(item).receipt.line(); got != want {
+		t.Errorf("the merged receipt is %q, want %q", got, want)
+	}
+}

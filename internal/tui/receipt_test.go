@@ -124,3 +124,17 @@ func TestNothingIsReplayedWhenNothingWasWritten(t *testing.T) {
 		t.Errorf("the replay printed %q, want %q", got, want)
 	}
 }
+
+// A summary is what the footer says about a batch. The replay already holds a line for every item
+// the batch wrote, so it leaves the summary out.
+func TestTheReplayLeavesOutASummary(t *testing.T) {
+	receipts := []receipt{
+		{verb: "closed", subject: "sga9", detail: "one"},
+		{verb: "closed", subject: "nktt", detail: "two"},
+		{verb: "closed", subject: "2 items", summary: true},
+	}
+
+	if got, want := replay(receipts), "closed   sga9  one\nclosed   nktt  two"; got != want {
+		t.Errorf("replay =\n%s\nwant\n%s", got, want)
+	}
+}

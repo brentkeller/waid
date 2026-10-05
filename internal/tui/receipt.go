@@ -13,6 +13,10 @@ type receipt struct {
 	verb    string
 	subject string
 	detail  string
+
+	// summary marks the receipt a write against several items leaves for the footer. Each item's own
+	// receipt is recorded ahead of it, so the replay prints those and skips this.
+	summary bool
 }
 
 // The two verbs the footer's rename affordance keys off, since what `e` offers depends on what the
@@ -73,6 +77,9 @@ func (m Model) lastReceipt() (receipt, bool) {
 func replay(receipts []receipt) string {
 	lines := make([]string, 0, len(receipts))
 	for _, r := range receipts {
+		if r.summary {
+			continue
+		}
 		line := fmt.Sprintf("%-*s %s", receiptVerbColumn, r.verb, r.rest())
 		lines = append(lines, strings.TrimRight(line, " "))
 	}

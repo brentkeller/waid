@@ -380,3 +380,73 @@ func TestAnAbandonedBatchWaitingKeepsItsMarks(t *testing.T) {
 		t.Errorf("marked %v, want both marks standing", got)
 	}
 }
+
+// With several items marked, t opens empty and adds what is typed to the tags each item already
+// carries, since no one line could stand for several different sets.
+func TestTagAddsToEveryMarkedItem(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "down", "x", "x", "t")
+	if got := m.prompt.text(); got != "" {
+		t.Errorf("the batch prompt opened on %q, want it empty", got)
+	}
+	if view := plain(m.View()); !strings.Contains(view, "add tags (2 items)") {
+		t.Fatalf("the prompt does not say it adds to several items:\n%s", view)
+	}
+
+	m, _ = press(t, m, "bug", "enter")
+
+	ts := loopsStamped()
+	assertLog(t, path, []string{
+		`{"ts":"` + ts + `","ev":"update","id":"nktt","tags":["promoted","bug"]}`,
+		`{"ts":"` + ts + `","ev":"update","id":"sga9","tags":["bug"]}`,
+	})
+
+	view := plain(m.View())
+	if !strings.Contains(view, "tagged 2 items  bug") {
+		t.Errorf("the footer carries no summary of the batch:\n%s", view)
+	}
+	if got := markedIds(m); len(got) != 0 {
+		t.Errorf("marked %v after the batch, want the marks cleared", got)
+	}
+
+	m, _ = press(t, m, "u")
+	view = plain(m.View())
+	if row := rowFor(t, view, "nktt"); !strings.Contains(row, "[promoted]") {
+		t.Errorf("the undone row is %q, want only the tag it carried before", row)
+	}
+	if row := rowFor(t, view, "sga9"); strings.Contains(row, "bug") {
+		t.Errorf("the undone row is %q, want the added tag gone", row)
+	}
+}
+
+// A blank answer to the batch prompt is an abandoned edit — it must not clear every item's tags the
+// way a blank answer clears one item's — and so is an answer holding only separators.
+func TestABlankBatchTagAnswerWritesNothing(t *testing.T) {
+	for _, answer := range [][]string{{"enter"}, {", ,", "enter"}} {
+		m, path := working(t)
+
+		m, _ = press(t, m, "down", "x", "x", "t")
+		m, _ = press(t, m, answer...)
+
+		if log := written(t, path); len(log) != 0 {
+			t.Errorf("the answer %v wrote %v", answer, log)
+		}
+		if got := markedIds(m); len(got) != 2 {
+			t.Errorf("the answer %v left the marks %v, want both standing", answer, got)
+		}
+	}
+}
+
+// One marked item is edited the way the cursor row is: the prompt opens on its set and replaces it.
+func TestTagOnOneMarkedItemReplacesItsSet(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "down", "down", "x", "g", "t")
+	if got, want := m.prompt.text(), "promoted"; got != want {
+		t.Fatalf("the prompt opened on %q, want the marked item's tags %q", got, want)
+	}
+
+	press(t, m, "ctrl+u", "bug", "enter")
+	assertLog(t, path, []string{`{"ts":"` + loopsStamped() + `","ev":"update","id":"nktt","tags":["bug"]}`})
+}

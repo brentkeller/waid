@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -218,48 +219,72 @@ func (m Model) editSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
 	return m, nil, true
 }
 
-// tagSelected edits the tags on the item under the cursor. The input opens on the set the item
-// already carries, so the whole set is in front of whoever is editing it — which is what makes a
-// replacement safe here and not on the command line, where `waid tag` names a change instead (§7).
+// tagSelected edits the tags on the item under the cursor, or adds tags to the marked items.
+//
+// For one item the input opens on the set it already carries, so the whole set is in front of
+// whoever is editing it — which is what makes a replacement safe here and not on the command line,
+// where `waid tag` names a change instead (§7). Several items carry several sets and no one line can
+// stand for them, so that input opens empty and what is typed is added to each.
 func (m Model) tagSelected(tree Tree[events.Item]) (Model, tea.Cmd, bool) {
-	m, item, ok := m.loopTarget(tree, "t tags an item")
+	m, items, ok := m.targets(tree, "t tags an item")
 	if !ok {
 		return m, nil, true
 	}
 
-	// The set is seeded with a space after each comma, since it is being read as well as typed. The
-	// spaces are trimmed back off on the way to the log.
-	m.prompt = m.open(prompt{
-		kind: promptTags, label: "tags", subject: item.Id, prior: strings.Join(item.Tags, ", "),
-	})
+	asked := prompt{kind: promptTags, label: "add tags", subject: promptSubject(items), subjects: idsOf(items)}
+	if len(items) == 1 {
+		// The set is seeded with a space after each comma, since it is being read as well as typed. The
+		// spaces are trimmed back off on the way to the log.
+		asked.label, asked.prior = "tags", strings.Join(items[0].Tags, ", ")
+	}
+
+	m.prompt = m.open(asked)
 	return m, nil, true
 }
 
-// setTags replaces the tags on an item with the set that was typed. The event carries the whole set
-// rather than what changed, so the fold reads one line and `waid tag` writes the same shape (§1).
+// setTags writes the typed tags: one item has its set replaced by them, and several each have them
+// added to the set they carry. Either way the event carries the item's whole set rather than what
+// changed, so the fold reads one line and `waid tag` writes the same shape (§1).
 //
 // The write is made whatever the item already held, for the reason the heading toggle is: the log is
 // a history of what was asked for, and a key that sometimes wrote and sometimes did not would leave
-// `u` guessing which press it was reversing.
-func (m Model) setTags(id, answer string) (Model, tea.Cmd) {
-	item, loaded := m.loadedItem(id)
-	if !loaded {
+// `u` guessing which press it was reversing. An answer that adds nothing to several items is the
+// exception, since it asked for nothing.
+func (m Model) setTags(ids []string, answer string) (Model, tea.Cmd) {
+	typed := events.NormalizeTags(strings.Split(answer, ","))
+	adding := len(ids) > 1
+	if adding && len(typed) == 0 {
+		return m, nil
+	}
+
+	var writes []itemWrite
+	for _, id := range ids {
+		item, loaded := m.loadedItem(id)
+		if !loaded {
+			continue
+		}
+
+		tags := typed
+		if adding {
+			tags = events.NormalizeTags(slices.Concat(item.Tags, typed))
+		}
+
+		tagged := item
+		tagged.Tags = tags
+		writes = append(writes, itemWrite{
+			event:   events.TagsEvent{Ev: "update", Id: id, Tags: tags},
+			after:   tagged,
+			receipt: tagsReceipt(tagged),
+			inverse: undoTags(item),
+		})
+	}
+	if len(writes) == 0 {
 		m.hint = noItems
 		return m, nil
 	}
 
-	tags := events.NormalizeTags(strings.Split(answer, ","))
-	ts, err := events.Append(m.opts.Cfg.EventsPath, events.TagsEvent{Ev: "update", Id: id, Tags: tags}, m.now())
-	if err != nil {
-		m.hint = writeFailed("tags", err)
-		return m, nil
-	}
-
-	tagged := item
-	tagged.Tags, tagged.Updated = tags, ts
-
-	m = m.applyItem(tagged).pushUndo(undoTags(item))
-	return m.record(tagsReceipt(tagged)), nil
+	summary := receipt{verb: "tagged", subject: plural(len(writes), "item"), detail: strings.Join(typed, ", ")}
+	return m.commit("tags", writes, summary)
 }
 
 // tagsReceipt is what a tag write says it did, read off the item as it stands afterwards so the

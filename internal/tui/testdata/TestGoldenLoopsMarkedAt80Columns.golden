@@ -1,31 +1,18 @@
 ╭──────────╮
 │ Loops  6 │ Repos │ Agents │                                         ⠋ scanning
 ┴──────────┴───────┴────────┴───────────────────────────────────────────────────
- ‹open›  waiting  done  all  │  headings                                6 items
+ ‹open›  waiting  done  all  │  headings                     2 marked · 6 items
 ────────────────────────────────────────────────────────────────────────────────
- ▾ Localized notifications                                                2 open
-   ▾ Background workers speak the requester's language                    1 open
-       4h2k  waiting  Deploy blocked until the migration is approv…  @maria   5d
-   ▾ (unassigned)                                                         1 open
-       sga9  open     Design template + args persistence for local…          19m
- ▾ (unassigned)                                                           2 open
+●▾ Localized notifications                                                2 open
+●    sga9  open     Design template + args persistence for loc…              19m
+   ▸ nktt  open     Background workers speak the requester's l…  [promoted]   2d
+ ▾ (unassigned)                                                           3 open
      9xz1  open     TUI design spike                                          1h
      p0rt  open     Read the port design once more                            2h
+     4h2k  waiting  Deploy blocked until the migration is appr…  @maria       5d
 
 
 
-
-
-
-
-
-
-
-
-────────────────────────────────────────────────────────────────────────────────
- vq2n · devresults · open · created 3d ago
-
- Localized notifications
 
 
 
@@ -36,5 +23,18 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────
+ nktt · devresults · open · created 2d ago
 
- d done · w waiting · e edit · t tags · m move · x mark · n note · ? keys
+ Background workers speak the requester's language
+ tags  promoted
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+
+ m move · d done · w waiting · t tag · x mark · X clear

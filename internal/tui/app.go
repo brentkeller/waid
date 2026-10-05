@@ -67,7 +67,7 @@ var tabTitles = [numTabs]string{"Loops", "Repos", "Agents"}
 // tabFooters are the key hints each tab keeps in the footer — the keys worth having in front of you
 // while working the tab, as opposed to the full table `?` opens.
 var tabFooters = [numTabs]string{
-	tabLoops:  "d done · w waiting · e edit · t tags · m move · n note · y copy id · a add · / filter · s status · h headings · H heading · P dock · ? keys",
+	tabLoops:  "d done · w waiting · e edit · t tags · m move · x mark · n note · y copy id · a add · / filter · s status · h headings · H heading · P dock · ? keys",
 	tabScan:   "p promote · d dismiss · o open in browser · r refresh · / filter · ? keys",
 	tabReview: "space preview · P dock · R resume · o open repo · y copy id · s range · d date · ? keys",
 }
@@ -123,6 +123,8 @@ var promptBindings = []binding{
 var tabBindings = [numTabs][]binding{
 	tabLoops: {
 		{[]string{"d"}, "d", "done"},
+		{[]string{"x"}, "x", "mark the row, for a write against several"},
+		{[]string{"X"}, "X", "clear the marks"},
 		{[]string{"w"}, "w", "waiting"},
 		{[]string{"e"}, "e", "edit title"},
 		{[]string{"n"}, "n", "note"},
@@ -598,10 +600,13 @@ func (m Model) keyTable() string {
 // it has anything to say, so the list above it does not shift as messages come and go.
 func (m Model) footer() string {
 	// The move picker owns the keyboard while it is open, so it owns the hints too: the tab's keys
-	// are all inert until the item has been dropped or the move abandoned (§7.1).
+	// are all inert until the item has been dropped or the move abandoned (§7.1). Marked rows change
+	// what four of the tab's keys act on, so the hints name those keys while any row is marked.
 	hints := tabFooters[m.tab]
 	if m.loops.moving.active() {
 		hints = moveKeys
+	} else if m.tab == tabLoops && len(m.loops.marked) > 0 {
+		hints = markKeys
 	}
 	return m.status() + "\n" + m.theme.Footer.Render(" "+fitHints(hints, m.viewWidth()-1))
 }

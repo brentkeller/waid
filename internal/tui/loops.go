@@ -82,6 +82,10 @@ type loopsModel struct {
 	cursor   int
 	expanded map[string]bool
 
+	// marked is the ids of the rows carrying a mark, which a move, a close, a waiting or a tag is made
+	// against while it holds any. It is keyed by id so a reload or a filter cannot move a mark.
+	marked map[string]bool
+
 	// top is the first line of the list on screen once it holds more than its rows.
 	top int
 
@@ -113,6 +117,7 @@ func (m Model) refreshLoops() (Model, tea.Cmd) {
 // loopsLoaded takes a finished read, moving the tab's badge with it and pulling the cursor back into
 // range in case the log came back holding fewer items than the list was showing.
 func (m Model) loopsLoaded(msg loopsLoadedMsg) Model {
+	m.loops.marked = m.keptMarks(msg.items)
 	m.loops.items, m.loops.loadedAt = msg.items, msg.at
 	m.counts[tabLoops] = len(m.owed())
 
@@ -160,6 +165,11 @@ func (m Model) loopsKey(pressed string) (Model, tea.Cmd, bool) {
 		return m, cmd, true
 	case "d":
 		return m.doneSelected(tree)
+	case "x":
+		return m.toggleMark(tree)
+	case "X":
+		m.loops.marked = nil
+		return m, nil, true
 	case "w":
 		return m.waitingSelected(tree)
 	case "e":
@@ -332,6 +342,7 @@ func (m Model) loopsTree(width int) Tree[events.Item] {
 		// Loops selects every row, headings included: its headings are items, and everything the keys
 		// ask of a row — close it, note against it, retitle it — is something an item answers (§7).
 		Selectable: func(Row[events.Item]) bool { return true },
+		Marked:     func(row Row[events.Item]) bool { return row.node && m.loops.marked[row.Node.Id] },
 		Render: func(item events.Item, width int, _ bool) string {
 			return loopsRow(item, columns, now, width)
 		},
@@ -681,9 +692,14 @@ func (m Model) loopsSegment() int {
 }
 
 // loopsCounts is what the header says on the right: how many rows the list is showing, headings
-// counted with the rest since a heading is an item like any other (§1).
+// counted with the rest since a heading is an item like any other (§1). While anything is marked the count of marks
+// leads it, since a mark can be on a row the list is not showing.
 func (m Model) loopsCounts() string {
-	return plural(len(m.loopsVisible()), "item")
+	items := plural(len(m.loopsVisible()), "item")
+	if marked := len(m.loops.marked); marked > 0 {
+		return fmt.Sprintf("%d marked · %s", marked, items)
+	}
+	return items
 }
 
 // copyItemId puts the id on the system clipboard, which is what the CLI takes to address the item —

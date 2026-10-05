@@ -13,8 +13,9 @@ import (
 )
 
 // Moving an item is navigation rather than typing: the tree is already on screen, and making someone
-// type a title they can see is worse than letting them point at it. `m` lifts the item — or every marked item — and its
-// descendants out of the tree, and what is left is the tree as it will be after the move, browsed
+// type a title they can see is worse than letting them point at it. `m` lifts the item — or every
+// marked item — and its descendants out of the tree, and what is left is the tree as it will be
+// after the move, browsed
 // with the ordinary keys. `enter` drops, `esc` cancels (§7.1).
 //
 // Lifting the subtree is what makes this safe rather than merely convenient: the app never has to
@@ -197,9 +198,9 @@ func (m Model) moveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// commitMove drops what is being moved on the row the cursor is on. The top-level row writes a null parent, and
-// every row holding an item writes that item's id — leaves included, since dropping onto a leaf makes
-// it a parent and there is no reason to forbid it.
+// commitMove drops what is being moved on the row the cursor is on. The top-level row writes a null
+// parent, and every row holding an item writes that item's id — leaves included, since dropping onto
+// a leaf makes it a parent and there is no reason to forbid it.
 //
 // The `(unassigned)` bucket is not an item and so is not a destination, as everywhere else: dropping
 // into it is dropping onto the fold it hangs under, which is already a row of its own. The picker

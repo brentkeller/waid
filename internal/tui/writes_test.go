@@ -757,8 +757,8 @@ func TestHeadingIsNamedInTheDetailPane(t *testing.T) {
 	}
 }
 
-// x is no longer the close: a press of it writes nothing.
-func TestXNoLongerCloses(t *testing.T) {
+// x marks a row and appends nothing to the log.
+func TestXWritesNoEvent(t *testing.T) {
 	m, path := working(t)
 
 	press(t, m, "G", "x")

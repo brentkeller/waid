@@ -128,7 +128,7 @@ var tabBindings = [numTabs][]binding{
 		{[]string{"w"}, "w", "waiting — the row, or every marked item"},
 		{[]string{"e"}, "e", "edit title"},
 		{[]string{"n"}, "n", "note"},
-		{[]string{"t"}, "t", "edit the tags, or add tags to every marked item — commit an empty answer to take one item's off"},
+		{[]string{"t"}, "t", "edit the tags, or add to every marked item — an empty answer clears one item's"},
 		{[]string{"m"}, "m", "move the row, or every marked item, under another — enter drops, esc cancels"},
 		{[]string{"y"}, "y", "copy the item id"},
 		{[]string{"H"}, "H", "mark the item a heading, or take the mark off it"},

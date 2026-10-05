@@ -328,7 +328,8 @@ func TestFooterHintsFitTheTerminal(t *testing.T) {
 	}
 }
 
-// A terminal with room for every hint keeps every hint.
+// At 140 columns the hints it checks survive: the tail of the footer gives way first, and `? keys`
+// is kept.
 func TestFooterHintsAreWholeWhenTheyFit(t *testing.T) {
 	m := chrome(t, 140)
 

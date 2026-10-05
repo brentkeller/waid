@@ -14,8 +14,9 @@ import (
 	itemtree "github.com/brentkeller/waid/internal/tree"
 )
 
-// The writes made against items: the ones Loops binds to the row under the cursor or to the rows carrying a mark — close an item,
-// mark it waiting on someone, correct its title, note something against it — and the add every tab
+// The writes made against items: the ones Loops binds to the row under the cursor or to the rows
+// carrying a mark — close an item, mark it waiting on someone, correct its title, note something
+// against it — and the add every tab
 // offers. They follow the rule Repos' triage already does (§3) — the write lands on the keypress with
 // no confirm step, and the footer's receipt is what says a press did anything.
 //

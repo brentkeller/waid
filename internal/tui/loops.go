@@ -692,8 +692,8 @@ func (m Model) loopsSegment() int {
 }
 
 // loopsCounts is what the header says on the right: how many rows the list is showing, headings
-// counted with the rest since a heading is an item like any other (§1). While anything is marked the count of marks
-// leads it, since a mark can be on a row the list is not showing.
+// counted with the rest since a heading is an item like any other (§1). While anything is marked
+// the count of marks leads it, since a mark can be on a row the list is not showing.
 func (m Model) loopsCounts() string {
 	items := plural(len(m.loopsVisible()), "item")
 	if marked := len(m.loops.marked); marked > 0 {

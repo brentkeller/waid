@@ -13,8 +13,8 @@ import (
 )
 
 // Moving an item is navigation rather than typing: the tree is already on screen, and making someone
-// type a title they can see is worse than letting them point at it. `m` lifts the item — and its
-// descendants — out of the tree, and what is left is the tree as it will be after the move, browsed
+// type a title they can see is worse than letting them point at it. `m` lifts the item — or every marked item — and its
+// descendants out of the tree, and what is left is the tree as it will be after the move, browsed
 // with the ordinary keys. `enter` drops, `esc` cancels (§7.1).
 //
 // Lifting the subtree is what makes this safe rather than merely convenient: the app never has to
@@ -34,9 +34,10 @@ const (
 const moveKeys = "↑ ↓ move · ← → fold · enter drops · esc cancels"
 
 // moveModel is the picker's state: what is being moved, and the cursor and folds over what is left.
-// subject is empty when the mode is closed, which is the zero value.
+// subjects is empty when the mode is closed, which is the zero value. It never holds an item that
+// sits beneath another of its own, since the one above already carries it.
 type moveModel struct {
-	subject  string
+	subjects []string
 	cursor   int
 	expanded map[string]bool
 
@@ -45,26 +46,33 @@ type moveModel struct {
 }
 
 // active reports whether the picker is open, which is when it holds the keyboard.
-func (mm moveModel) active() bool { return mm.subject != "" }
+func (mm moveModel) active() bool { return len(mm.subjects) > 0 }
 
-// startMove opens the picker on the item under the cursor. A row that holds no item is inert, as it
-// is for every other write, and the footer says which row the key was pressed on (§4).
+// startMove opens the picker on the marked items, or on the item under the cursor when nothing is
+// marked. A row that holds no item is inert, as it is for every other write, and the footer says
+// which row the key was pressed on (§4).
 func (m Model) startMove(t Tree[events.Item]) (Model, tea.Cmd, bool) {
-	m, item, ok := m.loopTarget(t, "m moves an item under another")
+	m, items, ok := m.targets(t, "m moves an item under another")
 	if !ok {
 		return m, nil, true
 	}
 
-	// The subject is set first, since the folds and the cursor are read off the tree the mode draws,
-	// and that tree is the one the subject has already been lifted out of.
-	m.loops.moving = moveModel{subject: item.Id}
-	m.loops.moving.expanded = m.moveFolds(item.Parent)
-	m.loops.moving.cursor = m.moveCursor(item.Parent)
+	// The subjects are set first, since the folds and the cursor are read off the tree the mode draws,
+	// and that tree is the one the subjects have already been lifted out of.
+	subjects := m.topmost(items)
+	if len(subjects) == 0 {
+		// A log whose parents loop leaves every marked item beneath another, and nothing topmost.
+		subjects = items
+	}
+	parent := sharedParent(subjects)
+	m.loops.moving = moveModel{subjects: idsOf(subjects)}
+	m.loops.moving.expanded = m.moveFolds(parent)
+	m.loops.moving.cursor = m.moveCursor(parent)
 	return m, nil, true
 }
 
 // moveFolds are the folds the picker opens on: every root, so the two levels a destination is
-// usually picked from are both on screen, plus the path down to the item's current parent where it
+// usually picked from are both on screen, plus the path down to the parent the subjects share where it
 // sits deeper than that. Anything below stays folded, which keeps a tree worth building to one
 // screen without a search. The parent itself stays closed — it is where the cursor lands, and what
 // it already holds is not the move's business.
@@ -82,9 +90,10 @@ func (m Model) moveFolds(parent *string) map[string]bool {
 	return open
 }
 
-// moveCursor is the row the picker opens on: the item's current parent, so an immediate enter is a
+// moveCursor is the row the picker opens on: the parent the subjects share, so an immediate enter is a
 // no-op rather than a surprise, and a nudge to a sibling project is one keystroke. An item at the
-// top level opens on the row that means one, which is the first.
+// top level opens on the row that means one, which is the first. Subjects sitting under different
+// parents open on the top-level row, as an item at the top level does.
 func (m Model) moveCursor(parent *string) int {
 	if parent == nil {
 		return 0
@@ -98,9 +107,19 @@ func (m Model) moveCursor(parent *string) int {
 	return 0
 }
 
-// moveCandidates are the items left once the subject and everything under it have been lifted out.
+// lifted is everything that leaves the tree while the picker is open: the subjects and whatever
+// hangs beneath each.
+func (m Model) lifted() []string {
+	var lifted []string
+	for _, id := range m.loops.moving.subjects {
+		lifted = append(append(lifted, id), m.descendants(id)...)
+	}
+	return lifted
+}
+
+// moveCandidates are the items left once the subjects and everything under them have been lifted out.
 func (m Model) moveCandidates() []events.Item {
-	lifted := append(m.descendants(m.loops.moving.subject), m.loops.moving.subject)
+	lifted := m.lifted()
 
 	kept := make([]events.Item, 0, len(m.loops.items))
 	for _, item := range m.loops.items {
@@ -178,7 +197,7 @@ func (m Model) moveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// commitMove drops the item on the row the cursor is on. The top-level row writes a null parent, and
+// commitMove drops what is being moved on the row the cursor is on. The top-level row writes a null parent, and
 // every row holding an item writes that item's id — leaves included, since dropping onto a leaf makes
 // it a parent and there is no reason to forbid it.
 //
@@ -202,9 +221,9 @@ func (m Model) commitMove(t Tree[events.Item]) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	subject := m.loops.moving.subject
+	subjects := m.loops.moving.subjects
 	m.loops.moving = moveModel{}
-	return m.refile(subject, parent)
+	return m.refile(subjects, parent)
 }
 
 // moveBody is the picker in place of the list: the header naming what is being moved, the rule under
@@ -221,22 +240,29 @@ func (m Model) moveBody(width, height int) string {
 	return strings.Join(append(head, list...), "\n")
 }
 
-// moveHeader names the item being moved, how much comes with it, and the two keys that end the mode.
-// The title gives way first, since the id and the keys are the parts a narrow terminal cannot infer.
+// moveHeader names what is being moved, how much comes with it, and the two keys that end the mode:
+// one item by its id and title, several by their count. The title gives way first, since the id and
+// the keys are the parts a narrow terminal cannot infer.
 func (m Model) moveHeader(width int) string {
-	item, loaded := m.loadedItem(m.loops.moving.subject)
-	if !loaded {
-		return ""
+	subjects := m.loops.moving.subjects
+
+	head := " moving"
+	lead, title := "  "+plural(len(subjects), "item"), ""
+	if len(subjects) == 1 {
+		item, loaded := m.loadedItem(subjects[0])
+		if !loaded {
+			return ""
+		}
+		lead, title = "  "+item.Id+"  ", item.Title
 	}
 
 	carried := ""
-	if n := len(m.descendants(item.Id)); n > 0 {
+	if n := len(m.lifted()) - len(subjects); n > 0 {
 		carried = "  + " + kin(n)
 	}
 
-	head, lead := " moving", "  "+item.Id+"  "
 	fixed := lipgloss.Width(head+lead+carried) + lipgloss.Width(moveEnders) + 2
-	rest := lead + truncate(item.Title, max(width-fixed, 0)) + carried
+	rest := lead + truncate(title, max(width-fixed, 0)) + carried
 
 	row := m.theme.Heading.Render(head) + m.theme.Row.Render(rest)
 	return m.headerLine(row, lipgloss.Width(head+rest), moveEnders, width)

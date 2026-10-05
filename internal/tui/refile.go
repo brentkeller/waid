@@ -16,29 +16,34 @@ import (
 // that puts it back, and the footer of the add prompt.
 const topLevel = "(top level)"
 
-// refile writes the move in the frame the key was pressed in. A destination that is the parent the
-// item already sits under is not a write — the log would hold a move that moved nothing (§6).
-func (m Model) refile(id string, parent *string) (Model, tea.Cmd) {
-	item, loaded := m.loadedItem(id)
-	if !loaded {
-		m.hint = noItems
-		return m, nil
+// refile writes the move in the frame the key was pressed in, for one item or for several dropped
+// together. A destination that is the parent an item already sits under is not a write for that item
+// — the log would hold a move that moved nothing (§6) — so it is skipped, and a drop that moves
+// nothing at all writes nothing.
+func (m Model) refile(ids []string, parent *string) (Model, tea.Cmd) {
+	label := m.parentLabel(parent)
+
+	var writes []itemWrite
+	for _, id := range ids {
+		item, loaded := m.loadedItem(id)
+		if !loaded || sameRef(parent, item.Parent) {
+			continue
+		}
+
+		moved := item
+		moved.Parent = parent
+		writes = append(writes, itemWrite{
+			event:   events.ParentEvent{Ev: "update", Id: id, Parent: parent},
+			after:   moved,
+			receipt: receipt{verb: verbFiled, subject: id, detail: label},
+			inverse: undoRefile(item, m.parentLabel(item.Parent)),
+		})
 	}
-	if sameRef(parent, item.Parent) {
+	if len(writes) == 0 {
 		return m, nil
 	}
 
-	ts, err := events.Append(m.opts.Cfg.EventsPath, events.ParentEvent{Ev: "update", Id: id, Parent: parent}, m.now())
-	if err != nil {
-		m.hint = writeFailed("parent", err)
-		return m, nil
-	}
-
-	moved := item
-	moved.Parent, moved.Updated = parent, ts
-
-	m = m.applyItem(moved).pushUndo(undoRefile(item, m.parentLabel(item.Parent)))
-	return m.record(receipt{verb: verbFiled, subject: id, detail: m.parentLabel(parent)}), nil
+	return m.commit("parent", writes, receipt{verb: verbFiled, subject: plural(len(writes), "item"), detail: label})
 }
 
 // descendants are the ids hanging beneath an item, however deep. The walk is bounded by the loaded
@@ -82,4 +87,16 @@ func sameRef(left, right *string) bool {
 		return left == right
 	}
 	return *left == *right
+}
+
+// sharedParent is the parent every item of a list sits under, or nil when they sit under different
+// ones — which is also what the top level is, and the same row either way in the picker.
+func sharedParent(items []events.Item) *string {
+	parent := items[0].Parent
+	for _, item := range items[1:] {
+		if !sameRef(item.Parent, parent) {
+			return nil
+		}
+	}
+	return parent
 }

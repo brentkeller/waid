@@ -377,3 +377,135 @@ func TestUndoOfAMoveOffTheTopLevelPutsItBack(t *testing.T) {
 		t.Errorf("the undo receipt does not name the top level:\n%s", view)
 	}
 }
+
+// m with rows marked lifts all of them into one picker and files each under the row it is dropped on.
+func TestMoveFilesEveryMarkedItem(t *testing.T) {
+	m, path := working(t)
+
+	// Four rows down is 9xz1, and the row under it is p0rt: both sit at the top level, so the picker
+	// opens on the row that means it and one step down is the fold.
+	m, _ = press(t, m, "down", "down", "down", "down", "x", "x", "m")
+	if view := plain(m.View()); !strings.Contains(view, "moving  2 items") {
+		t.Fatalf("the header does not count what is being moved:\n%s", view)
+	}
+	if got := focused(t, m); got != moveTopKey {
+		t.Fatalf("the picker opened on %q, want the parent the items share", got)
+	}
+
+	m, _ = press(t, m, "down", "enter")
+
+	ts := loopsStamped()
+	assertLog(t, path, []string{
+		`{"ts":"` + ts + `","ev":"update","id":"9xz1","parent":"vq2n"}`,
+		`{"ts":"` + ts + `","ev":"update","id":"p0rt","parent":"vq2n"}`,
+	})
+	if view := plain(m.View()); !strings.Contains(view, "filed 2 items  "+branchTitle) {
+		t.Errorf("the footer carries no summary of the move:\n%s", view)
+	}
+	if len(m.loops.marked) != 0 {
+		t.Errorf("the marks are %v after the move, want them cleared", m.loops.marked)
+	}
+
+	m, _ = press(t, m, "u")
+	for _, id := range []string{"9xz1", "p0rt"} {
+		if got := parentOf(t, m, id); got != nil {
+			t.Errorf("%s sits under %q after the undo, want it back at the top level", id, *got)
+		}
+	}
+}
+
+// With several subjects lifted, none of them and nothing under any of them is on offer.
+func TestMoveOffersNoMarkedItemNorItsDescendants(t *testing.T) {
+	m, _ := filing(t)
+
+	m.loops.marked = map[string]bool{"nktt": true, "p0rt": true}
+	m, _ = press(t, m, "m")
+
+	offered := destinations(m)
+	for _, gone := range []string{"nktt", "4h2k", "p0rt"} {
+		if slices.Contains(offered, gone) {
+			t.Errorf("the picker offers %q as a destination: %v", gone, offered)
+		}
+	}
+	if view := plain(m.View()); !strings.Contains(view, "moving  2 items  + 1 child") {
+		t.Errorf("the header does not count what comes with the marked items:\n%s", view)
+	}
+}
+
+// A marked item under another marked item travels with it and keeps its place beneath it.
+func TestMoveLeavesAMarkedDescendantUnderItsMarkedAncestor(t *testing.T) {
+	m, path := filing(t)
+
+	m.loops.marked = map[string]bool{"nktt": true, "4h2k": true}
+	m, _ = press(t, m, "m", "g", "enter")
+
+	assertLog(t, path, []string{`{"ts":"` + loopsStamped() + `","ev":"update","id":"nktt","parent":null}`})
+	if got := parentOf(t, m, "4h2k"); got == nil || *got != "nktt" {
+		t.Errorf("the descendant sits under %v, want it still under nktt", got)
+	}
+}
+
+// A marked item already under the destination is skipped rather than written a move that moves
+// nothing, and the one write that is left is receipted as the single move it is.
+func TestMoveSkipsAMarkedItemAlreadyAtTheDestination(t *testing.T) {
+	m, path := working(t)
+
+	m.loops.marked = map[string]bool{"sga9": true, "p0rt": true}
+	m, _ = press(t, m, "m")
+	if got := focused(t, m); got != moveTopKey {
+		t.Fatalf("the picker opened on %q, want the top level for items sharing no parent", got)
+	}
+
+	m, _ = press(t, m, "down", "enter")
+
+	assertLog(t, path, []string{`{"ts":"` + loopsStamped() + `","ev":"update","id":"p0rt","parent":"vq2n"}`})
+	if view := plain(m.View()); !strings.Contains(view, "filed p0rt  "+branchTitle) {
+		t.Errorf("the footer does not receipt the one move made:\n%s", view)
+	}
+}
+
+// Items sharing a parent open the picker on it, so an immediate enter moves nothing — and a drop
+// that moves nothing leaves the marks standing.
+func TestMoveOntoTheSharedParentWritesNothing(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "down", "x", "x", "m")
+	if got := focused(t, m); got != "vq2n" {
+		t.Fatalf("the picker opened on %q, want the parent the items share", got)
+	}
+
+	m, _ = press(t, m, "enter")
+
+	if log := written(t, path); len(log) != 0 {
+		t.Errorf("a drop on the current parent wrote %v", log)
+	}
+	if m.loops.moving.active() {
+		t.Error("the picker is still open after the drop")
+	}
+	if len(m.loops.marked) != 2 {
+		t.Errorf("the marks are %v, want both standing", m.loops.marked)
+	}
+}
+
+// esc abandons the move and leaves the marks as they were.
+func TestEscOutOfTheMoveKeepsTheMarks(t *testing.T) {
+	m, _ := working(t)
+
+	m, _ = press(t, m, "down", "x", "x", "m", "esc")
+
+	if m.loops.moving.active() {
+		t.Error("the picker is still open after esc")
+	}
+	if len(m.loops.marked) != 2 {
+		t.Errorf("the marks are %v, want both standing", m.loops.marked)
+	}
+}
+
+// The picker's header over several subjects, at the narrow width where it has least room.
+func TestGoldenMoveMarkedAt80Columns(t *testing.T) {
+	m := looped(t, 80, loopsNested())
+	m.loops.marked = map[string]bool{"nktt": true, "p0rt": true}
+
+	m, _ = press(t, m, "m")
+	teatest.RequireEqualOutput(t, []byte(plain(m.View())))
+}

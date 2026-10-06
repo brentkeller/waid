@@ -25,7 +25,7 @@ command.**
 
 | Read-only — run freely | Writes — needs approval |
 | --- | --- |
-| `loops` `scan` `list` `show` `today` `week` `transcript` `doctor` `sync` | `add` `done` `reopen` `move` `note` `promote` `dismiss` `undismiss` |
+| `loops` `scan` `list` `show` `today` `week` `transcript` `doctor` `sync` | `add` `done` `reopen` `move` `heading` `tag` `note` `promote` `dismiss` `undismiss` |
 
 `promote` is a write: it appends an `add` and a `dismiss`. `undismiss` is one as well, and only
 accepts a key that is dismissed now. `sync` only rebuilds the disposable cache, so it counts as a
@@ -96,6 +96,8 @@ title, parent or tag, use their version verbatim.
   or `.` for the current directory, which records where the work came from and leaves the item at the
   top level — that is the form to use when the work belongs to a repo rather than under an existing
   item. `move` takes a parent only. On `scan` it still names a repo path.
+- **`--parent <id>`** on `add` and `move` names the parent by id rather than by title, and cannot be
+  ambiguous. Prefer it whenever the parent's id is already in hand; it replaces `-p`, not joins it.
 - **`--origin <fragment>`** narrows `list` and `loops` to items recorded against a path, resolving
   the way project paths always have. It is how you ask "what is tracked for this repo".
 - **Signal keys contain `\` and `#`** — `dirty:C:\dev\waid`, `review:owner/repo#12`. Pass the key

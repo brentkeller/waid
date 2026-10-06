@@ -13,10 +13,11 @@ Usage: waid <command> [options]
   waid scan [-p <project>]            Detected signals only
   waid list [--status s] [--origin <frag>] [--tag t] [--all]
     [--headings]                      Show empty headings alongside the matches
-  waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>]
-    [--heading]                       Create the item as a heading
+  waid add "<title>" [-p <parent>|--parent <id>] [--waiting-on <who>] [--tag <t>]
+    [--session <id>] [--heading]      --heading creates the item as a heading
   waid done <id>...                   Close one or more; waid reopen <id>
-  waid move <id> [-p <parent>|--top]  Refile an item under a parent, or to the top level
+  waid move <id> [-p <parent>|--parent <id>|--top]
+                                      Refile an item under a parent, or to the top level
   waid heading <id> [--off]           Mark an item a heading, or unmark it
   waid tag <id> [-t <t>] [--remove <t>]
     [--off]                           Add or remove tags; --off clears them all
@@ -30,7 +31,8 @@ Usage: waid <command> [options]
 
 -p names a parent: any substring, ignoring case, matching exactly one item's title. An absolute
 path, or . for the current directory, records where the work came from instead and leaves the item
-at the top level. --origin filters list and loops by that recorded path. On scan, -p still names a
+at the top level. On add and move, --parent names the parent by its id instead, which no other item
+can share. --origin filters list and loops by that recorded path. On scan, -p still names a
 repo, since detection is keyed by path.
 
 Global flags:

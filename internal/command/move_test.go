@@ -252,3 +252,79 @@ func TestMoveToTopLevelHumanOutputNamesTheTopLevel(t *testing.T) {
 		t.Errorf("stdout = %q, want %q", got, want)
 	}
 }
+
+// --parent takes an id literally, so a parent whose title other items share is still nameable.
+func TestMoveFilesAnItemUnderAParentNamedById(t *testing.T) {
+	home := makeHome(t)
+	parent := addItem(t, home, "Chart rewrite")
+	addItem(t, home, "Chart legend")
+	child := addItem(t, home, "Legend overflows")
+
+	run := waid(t, home, "move", child, "--parent", parent, "--json")
+
+	if run.code != cli.ExitOK {
+		t.Fatalf("exit code = %d: %s", run.code, run.err)
+	}
+	var record moveRecord
+	run.decode(t, &record)
+	if record.Parent == nil || *record.Parent != parent {
+		t.Errorf("parent = %v, want %s", record.Parent, parent)
+	}
+	if got := item(t, home, child).Parent; got == nil || *got != parent {
+		t.Errorf("folded parent = %v, want %s", got, parent)
+	}
+}
+
+func TestMoveRejectsAnUnknownParentId(t *testing.T) {
+	home := makeHome(t)
+	id := addItem(t, home, "Legend overflows")
+
+	run := waid(t, home, "move", id, "--parent", "zzzz")
+
+	if run.code != cli.ExitUser {
+		t.Fatalf("exit code = %d, want %d: %s", run.code, cli.ExitUser, run.err)
+	}
+	if !strings.Contains(run.err, "zzzz") {
+		t.Errorf("stderr = %q, want it to name the unknown id", run.err)
+	}
+	if got := len(logLines(t, home)); got != 1 {
+		t.Errorf("log lines = %d, want only the add", got)
+	}
+}
+
+func TestMoveRejectsAnItemOntoItselfById(t *testing.T) {
+	home := makeHome(t)
+	id := addItem(t, home, "Chart rewrite")
+
+	run := waid(t, home, "move", id, "--parent", id)
+
+	if run.code != cli.ExitUser {
+		t.Fatalf("exit code = %d, want %d: %s", run.code, cli.ExitUser, run.err)
+	}
+	if !strings.Contains(run.err, "itself") {
+		t.Errorf("stderr = %q, want it to say an item cannot sit under itself", run.err)
+	}
+}
+
+func TestMoveRejectsMoreThanOneDestination(t *testing.T) {
+	home := makeHome(t)
+	parent := addItem(t, home, "Chart rewrite")
+	child := addItem(t, home, "Legend overflows")
+
+	for name, args := range map[string][]string{
+		"fragment and id":  {"-p", "chart", "--parent", parent},
+		"id and top":       {"--parent", parent, "--top"},
+		"fragment and top": {"-p", "chart", "--top"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			run := waid(t, home, append([]string{"move", child}, args...)...)
+
+			if run.code != cli.ExitUser {
+				t.Fatalf("exit code = %d, want %d: %s", run.code, cli.ExitUser, run.err)
+			}
+			if got := len(logLines(t, home)); got != 2 {
+				t.Errorf("log lines = %d, want only the two adds", got)
+			}
+		})
+	}
+}

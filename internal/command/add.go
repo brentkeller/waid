@@ -32,8 +32,7 @@ func runAdd(ctx *cli.Ctx) (AddResult, error) {
 	}
 
 	state := events.Load(ctx.Cfg.EventsPath)
-	requested, _ := ctx.Flags.String("project")
-	target, err := tree.Resolve(requested, state, ctx.Cwd)
+	target, err := filingTarget(ctx, state)
 	if err != nil {
 		return AddResult{}, err
 	}
@@ -87,6 +86,20 @@ func runAdd(ctx *cli.Ctx) (AddResult, error) {
 
 func renderAdd(data AddResult, ctx *cli.Ctx) string {
 	return fmt.Sprintf("added %s  %s", data.Id, data.Title)
+}
+
+// filingTarget reads where an item is to be filed: --parent names the parent by id, -p by a title
+// fragment or as a path. The two are exclusive, since each is a complete answer on its own.
+func filingTarget(ctx *cli.Ctx, state events.State) (tree.Target, error) {
+	requested, _ := ctx.Flags.String("project")
+	id, byId := ctx.Flags.String("parent")
+	switch {
+	case !byId:
+		return tree.Resolve(requested, state, ctx.Cwd)
+	case strings.TrimSpace(requested) != "":
+		return tree.Target{}, errs.Userf("-p and --parent both name where to file: pass one")
+	}
+	return tree.ResolveId(id, state)
 }
 
 // newId draws an id no item in the log already holds.

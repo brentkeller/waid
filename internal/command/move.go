@@ -7,7 +7,6 @@ import (
 	"github.com/brentkeller/waid/internal/cli"
 	"github.com/brentkeller/waid/internal/errs"
 	"github.com/brentkeller/waid/internal/events"
-	"github.com/brentkeller/waid/internal/tree"
 )
 
 // MoveResult is the item as it sits after the move, echoed back so --json callers need no follow-up
@@ -61,24 +60,25 @@ func renderMove(data MoveResult, ctx *cli.Ctx) string {
 	return fmt.Sprintf("moved %s  %s  under %s", data.Id, data.Title, *data.ParentTitle)
 }
 
-// destination reads where the item is being moved to: the item -p named, or nil for --top. A path
-// is rejected rather than filed as an origin, since move reparents and a path is not a place in the
-// tree; an item cannot be moved onto itself, nor onto anything already below it.
+// destination reads where the item is being moved to: the item --parent or -p named, or nil for
+// --top. A path is rejected rather than filed as an origin, since move reparents and a path is not a
+// place in the tree; an item cannot be moved onto itself, nor onto anything already below it.
 func destination(ctx *cli.Ctx, state events.State, item events.Item) (*events.Item, error) {
 	requested, _ := ctx.Flags.String("project")
 	requested = strings.TrimSpace(requested)
+	_, byId := ctx.Flags.String("parent")
 	top := ctx.Flags.Bool("top")
 
 	switch {
-	case top && requested != "":
-		return nil, errs.Userf("move takes -p or --top, not both")
+	case top && (requested != "" || byId):
+		return nil, errs.Userf("move takes one destination: -p, --parent or --top")
 	case top:
 		return nil, nil
-	case requested == "":
-		return nil, errs.Userf("move requires a destination: -p <fragment> or --top")
+	case requested == "" && !byId:
+		return nil, errs.Userf("move requires a destination: -p <fragment>, --parent <id> or --top")
 	}
 
-	target, err := tree.Resolve(requested, state, ctx.Cwd)
+	target, err := filingTarget(ctx, state)
 	if err != nil {
 		return nil, err
 	}

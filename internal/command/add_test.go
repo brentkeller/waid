@@ -376,3 +376,68 @@ func TestAddWithoutHeadingWritesNoKey(t *testing.T) {
 		t.Error("folded heading = true, want it unmarked")
 	}
 }
+
+// --parent takes an id literally, so a parent whose title other items share is still nameable.
+func TestAddFilesUnderAParentNamedById(t *testing.T) {
+	home := makeHome(t)
+	parent := addItem(t, home, "Chart rewrite")
+	addItem(t, home, "Chart legend")
+
+	record := add(t, home, "Legend overflows", "--parent", parent)
+
+	if record.Parent == nil || *record.Parent != parent {
+		t.Errorf("parent = %v, want %s", record.Parent, parent)
+	}
+	if record.Origin != nil {
+		t.Errorf("origin = %v, want null", *record.Origin)
+	}
+	if got := item(t, home, record.Id); got.Parent == nil || *got.Parent != parent {
+		t.Errorf("folded parent = %v, want %s", got.Parent, parent)
+	}
+}
+
+func TestAddRejectsAnUnknownParentId(t *testing.T) {
+	home := makeHome(t)
+	addItem(t, home, "Chart rewrite")
+
+	run := waid(t, home, "add", "Legend overflows", "--parent", "zzzz")
+
+	if run.code != cli.ExitUser {
+		t.Fatalf("exit code = %d, want %d", run.code, cli.ExitUser)
+	}
+	if !strings.Contains(run.err, "zzzz") {
+		t.Errorf("stderr = %q, want it to name the unknown id", run.err)
+	}
+	if got := len(logLines(t, home)); got != 1 {
+		t.Errorf("log lines = %d, want only the parent's add", got)
+	}
+}
+
+// An id is never read as a title fragment, so a title that happens to hold it does not match.
+func TestAddParentDoesNotMatchTitles(t *testing.T) {
+	home := makeHome(t)
+	addItem(t, home, "Chart rewrite")
+
+	run := waid(t, home, "add", "Legend overflows", "--parent", "chart")
+
+	if run.code != cli.ExitUser {
+		t.Fatalf("exit code = %d, want %d", run.code, cli.ExitUser)
+	}
+}
+
+func TestAddRejectsBothParentForms(t *testing.T) {
+	home := makeHome(t)
+	parent := addItem(t, home, "Chart rewrite")
+
+	run := waid(t, home, "add", "Legend overflows", "-p", "chart", "--parent", parent)
+
+	if run.code != cli.ExitUser {
+		t.Fatalf("exit code = %d, want %d", run.code, cli.ExitUser)
+	}
+	if !strings.Contains(run.err, "--parent") {
+		t.Errorf("stderr = %q, want it to name the conflicting flags", run.err)
+	}
+	if got := len(logLines(t, home)); got != 1 {
+		t.Errorf("log lines = %d, want only the parent's add", got)
+	}
+}

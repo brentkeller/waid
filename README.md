@@ -40,9 +40,9 @@ installed path stays proven.
 | `waid loops [-p <parent>] [--origin <frag>] [--headings]` | Declared open items as a tree, then detected signals. The default view. Hides empty headings unless `--headings`. |
 | `waid scan [-p <project>]` | Detected signals only. |
 | `waid list [--status s] [--origin <frag>] [--tag t] [--all] [--headings]` | Declared items as a tree. Hides done unless `--all` or `--status done`, and empty headings unless `--headings`. |
-| `waid add "<title>" [-p <parent>] [--waiting-on <who>] [--tag <t>] [--session <id>] [--heading]` | Record an item, under a parent or with an origin. `--heading` creates it as a heading. |
+| `waid add "<title>" [-p <parent>\|--parent <id>] [--waiting-on <who>] [--tag <t>] [--session <id>] [--heading]` | Record an item, under a parent or with an origin. `--heading` creates it as a heading. |
 | `waid done <id>...` / `waid reopen <id>` | Close one or more items, or reopen one. |
-| `waid move <id> -p <parent>` / `waid move <id> --top` | Refile an item under another, or move it to the top level. |
+| `waid move <id> -p <parent>` / `waid move <id> --parent <id>` / `waid move <id> --top` | Refile an item under another, or move it to the top level. |
 | `waid heading <id>` / `waid heading <id> --off` | Mark an item a heading — a landmark that heads a level whether or not anything is filed under it — or unmark it. |
 | `waid note <id> "<text>"` | Append a note to an item. |
 | `waid show <id>` | Full item with its notes and event history. |
@@ -83,6 +83,10 @@ or `.` for the current directory, is recorded as the item's `origin` instead and
 level — where the work came from rather than where it is filed, which is what `promote` has always
 recorded and what keeps `waid add "<title>" -p <project path>` working unchanged. `move` takes a
 parent only; a path there is a user error rather than a silent no-op.
+
+`--parent <id>` on `add` and `move` names the parent by its id instead. The id is taken literally and
+never matched against titles, so it reaches a parent whose title other items share. An unknown id is
+a user error, as is passing it alongside `-p`.
 
 `--origin <fragment>` filters `list` and `loops` by that recorded path, and resolves the same way
 project paths always have. `-p` on `scan` still names a repo, since detection is keyed by path.

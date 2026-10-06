@@ -56,6 +56,17 @@ func Resolve(input string, state events.State, cwd string) (Target, error) {
 	}
 }
 
+// ResolveId reads a --parent value: an item's id, taken literally and never matched against titles,
+// so it names one item however many share a title. An id no item holds is a errs.UserError.
+func ResolveId(input string, state events.State) (Target, error) {
+	id := strings.TrimSpace(input)
+	item, found := state.Find(id)
+	if !found {
+		return Target{}, errs.Userf("unknown item id: %s", id)
+	}
+	return Target{Parent: &item.Id}, nil
+}
+
 // labels names the ambiguous matches by id and title, since two items may share a title and the id
 // is what tells them apart.
 func labels(items []events.Item) []string {

@@ -180,7 +180,8 @@ While any row is marked, `m`, `d`, `w` and `t` act on every marked item instead 
 cursor: `m` drops them all on one destination, `d` closes them, `w` asks once who they wait on, and
 `t` adds the tags typed to each. Marks follow the item rather than the row, so they hold while the
 list is filtered — filter, mark, clear the filter, mark more — and the header counts them. One `u`
-reverses the whole write.
+reverses the whole write. `e`, `n`, `y`, `H`, `a` and `A` address one item, so they stay on the row
+under the cursor and leave the marks alone.
 
 Keys that work everywhere: `↑` / `↓` to move, `g` / `G` for first and last, `enter`
 to fold and `←` / `→` to collapse and expand the fold under the cursor, `/` to

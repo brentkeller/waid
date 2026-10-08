@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"os"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/exp/teatest"
 
@@ -189,15 +191,89 @@ func goldenMarked(t *testing.T, width int) {
 	teatest.RequireEqualOutput(t, []byte(plain(m.View())))
 }
 
-// The keys that address one item keep addressing the row under the cursor while rows are marked.
+// The keys that address one item keep addressing the row under the cursor while rows are marked, and
+// leave the marks as they found them.
 func TestSingleItemKeysIgnoreTheMarks(t *testing.T) {
-	m, _ := working(t)
+	copied := []string{}
+	restore := copyText
+	copyText = func(text string) error {
+		copied = append(copied, text)
+		return nil
+	}
+	t.Cleanup(func() { copyText = restore })
 
 	// sga9 is marked and the cursor is then moved off it, onto nktt.
-	m, _ = press(t, m, "down", "x", "down", "e")
+	marked := func(t *testing.T) (Model, string) {
+		t.Helper()
 
-	if m.prompt.kind != promptRename || m.prompt.subject != "nktt" {
-		t.Errorf("e opened prompt %d on %q, want the title of the cursor row nktt", m.prompt.kind, m.prompt.subject)
+		m, path := working(t)
+		m, _ = press(t, m, "down", "x", "down")
+		return m, path
+	}
+
+	for _, c := range []struct {
+		pressed string
+		kind    promptKind
+	}{{"e", promptRename}, {"n", promptNote}} {
+		m, _ := marked(t)
+		m, _ = press(t, m, c.pressed)
+
+		if m.prompt.kind != c.kind || m.prompt.subject != "nktt" {
+			t.Errorf("%s opened prompt %d on %q, want prompt %d on the cursor row nktt",
+				c.pressed, m.prompt.kind, m.prompt.subject, c.kind)
+		}
+		if got, want := markedIds(m), []string{"sga9"}; !slices.Equal(got, want) {
+			t.Errorf("%s left the marks %v, want %v", c.pressed, got, want)
+		}
+	}
+
+	// a files beside the cursor row and A beneath it, wherever the marks are.
+	for pressed, parent := range map[string]string{"a": "vq2n", "A": "nktt"} {
+		m, _ := marked(t)
+		m, _ = press(t, m, pressed)
+
+		target := m.prompt.target.parent
+		if m.prompt.kind != promptAdd || target == nil || *target != parent {
+			t.Errorf("%s opened prompt %d filing under %v, want an add under %s", pressed, m.prompt.kind, target, parent)
+		}
+		if got, want := markedIds(m), []string{"sga9"}; !slices.Equal(got, want) {
+			t.Errorf("%s left the marks %v, want %v", pressed, got, want)
+		}
+	}
+
+	m, path := marked(t)
+	m, _ = press(t, m, "H")
+	assertLog(t, path, []string{headingLine("nktt", true)})
+	if got, want := markedIds(m), []string{"sga9"}; !slices.Equal(got, want) {
+		t.Errorf("H left the marks %v, want %v", got, want)
+	}
+
+	m, _ = marked(t)
+	m, cmd := press(t, m, "y")
+	m = deliver(t, m, cmd)
+	if want := []string{"nktt"}; !slices.Equal(copied, want) {
+		t.Errorf("y copied %v, want %v", copied, want)
+	}
+	if got, want := markedIds(m), []string{"sga9"}; !slices.Equal(got, want) {
+		t.Errorf("y left the marks %v, want %v", got, want)
+	}
+}
+
+// A row that is both marked and under the cursor draws the mark in the gutter and keeps the cursor's
+// own glyph beside it.
+func TestAMarkedRowUnderTheCursorDrawsBothGlyphs(t *testing.T) {
+	m, _ := working(t)
+
+	m, _ = press(t, m, "down", "x")
+
+	row := rowFor(t, plain(m.View()), "sga9")
+	if !strings.HasPrefix(row, markGlyph) || !strings.Contains(row, cursorMark) {
+		t.Errorf("the row is %q, want the mark in its gutter and the cursor beside it", row)
+	}
+
+	m, _ = press(t, m, "down")
+	if row := rowFor(t, plain(m.View()), "sga9"); strings.Contains(row, cursorMark) {
+		t.Errorf("the row is %q once the cursor has left it, want the mark alone", row)
 	}
 }
 
@@ -336,6 +412,57 @@ func TestAFailedBatchKeepsItsMarks(t *testing.T) {
 	}
 }
 
+// A batch that fails part way keeps what landed: the item written is closed, receipted and undone by
+// one u, the hint names the failure, and the marks stand so the rest can be tried again.
+func TestABatchFailingPartWayKeepsWhatLanded(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("a read-only file still takes a write from root")
+	}
+
+	m, path := working(t)
+	m, _ = press(t, m, "down", "x", "down", "x")
+
+	// The clock is read for every append, so it is where the log can be shut between two of them.
+	t.Cleanup(func() { os.Chmod(path, 0o644) })
+	m.clock = func() time.Time {
+		if len(events.ReadLines(path)) == 1 {
+			os.Chmod(path, 0o444)
+		}
+		return loopsNow
+	}
+	m, _ = press(t, m, "d")
+
+	ts := loopsStamped()
+	closed := `{"ts":"` + ts + `","ev":"close","id":"nktt"}`
+	assertLog(t, path, []string{closed})
+
+	if !strings.Contains(m.hint, "done failed") {
+		t.Errorf("hint = %q, want it to say the write failed", m.hint)
+	}
+	if item, _ := m.loadedItem("nktt"); item.Status != events.StatusDone {
+		t.Errorf("nktt is %q, want the write that landed applied", item.Status)
+	}
+	if item, _ := m.loadedItem("sga9"); item.Status != events.StatusOpen {
+		t.Errorf("sga9 is %q, want it left open by the write that failed", item.Status)
+	}
+	if replayed := replay(m.receipts); len(m.receipts) != 1 || !strings.Contains(replayed, "nktt") {
+		t.Errorf("the replay is\n%s\nwant the one item that closed", replayed)
+	}
+	if got, want := markedIds(m), []string{"nktt", "sga9"}; !slices.Equal(got, want) {
+		t.Errorf("marked %v after a batch that failed part way, want %v", got, want)
+	}
+
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m.clock = func() time.Time { return loopsNow }
+	m, _ = press(t, m, "u")
+	assertLog(t, path, []string{closed, `{"ts":"` + ts + `","ev":"reopen","id":"nktt"}`})
+	if item, _ := m.loadedItem("nktt"); item.Status != events.StatusOpen {
+		t.Errorf("nktt is %q after the undo, want it reopened", item.Status)
+	}
+}
+
 // w asks once who the marked items are waiting on and writes the answer to each.
 func TestWaitingWritesEveryMarkedItem(t *testing.T) {
 	m, path := working(t)
@@ -364,6 +491,37 @@ func TestWaitingWritesEveryMarkedItem(t *testing.T) {
 	}
 	if got := markedIds(m); len(got) != 0 {
 		t.Errorf("marked %v after the batch, want the marks cleared", got)
+	}
+}
+
+// One u reverses a batch waiting: an item that was open is reopened, one that was already waiting is
+// put back on the name it held, and the marks are not put back.
+func TestUndoOfABatchWaitingRestoresEveryItem(t *testing.T) {
+	m, path := working(t)
+
+	m, _ = press(t, m, "down", "x", "G", "x", "w", "sam", "enter", "u")
+
+	ts := loopsStamped()
+	assertLog(t, path, []string{
+		`{"ts":"` + ts + `","ev":"update","id":"sga9","status":"waiting","waitingOn":"sam"}`,
+		`{"ts":"` + ts + `","ev":"update","id":"4h2k","status":"waiting","waitingOn":"sam"}`,
+		`{"ts":"` + ts + `","ev":"reopen","id":"sga9"}`,
+		`{"ts":"` + ts + `","ev":"reopen","id":"4h2k"}`,
+		`{"ts":"` + ts + `","ev":"update","id":"4h2k","status":"waiting","waitingOn":"maria"}`,
+	})
+
+	view := plain(m.View())
+	if row := rowFor(t, view, "sga9"); strings.Contains(row, "@") {
+		t.Errorf("the undone row is %q, want it waiting on nobody", row)
+	}
+	if row := rowFor(t, view, "4h2k"); !strings.Contains(row, "@maria") {
+		t.Errorf("the undone row is %q, want it back waiting on maria", row)
+	}
+	if !strings.Contains(view, "restored 2 items") {
+		t.Errorf("the footer carries no receipt for the undo:\n%s", view)
+	}
+	if got := markedIds(m); len(got) != 0 {
+		t.Errorf("the undo put back the marks %v", got)
 	}
 }
 

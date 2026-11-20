@@ -31,8 +31,9 @@ command.**
 accepts a key that is dismissed now. `sync` only rebuilds the disposable cache, so it counts as a
 read.
 
-Every flow has the same shape: gather with read-only commands, present a **numbered** proposal,
-stop, and run only what comes back approved. Silence is not approval, and neither is a previous
+Every flow has the same shape: pull the log (see [Syncing across machines](#syncing-across-machines)),
+gather with read-only commands, present a **numbered** proposal, stop, run only what comes back
+approved, then push the log. Silence is not approval, and neither is a previous
 turn's approval — approval covers the list in front of the user and nothing else. If the user
 approves a subset ("1 and 3"), run exactly that subset and say what you skipped. If they correct a
 title, parent or tag, use their version verbatim.
@@ -86,6 +87,31 @@ title, parent or tag, use their version verbatim.
    Where you are unsure, propose `waid note <id> "<what you saw>"` instead, or leave the item
    alone. A wrong closure is worse than a stale item, because the item stops being visible.
 6. Wait. Then run the approved commands and report the results.
+
+## Syncing across machines
+
+The waid home can be a git repository with a remote, so one log follows the user between
+machines. `waid doctor --json` gives the home as `home`; it syncs when
+`git -C <home> remote` prints a remote. Without one, skip this section entirely.
+
+- **Before a flow**, run `git -C <home> pull --ff-only`, falling back to `git -C <home> pull` when
+  the branches have diverged. Pulling only brings in events already recorded elsewhere, so it does
+  not need approval. Do it before the first read, or the proposal is built on a stale log and can
+  duplicate an item the other machine already added or closed.
+- **After the approved writes**, commit and push:
+  `git -C <home> add events.jsonl && git -C <home> commit -m "<flow>: <what changed>" && git -C <home> push`.
+  The user's approval of the writes covers syncing them. Skip the commit when nothing was written.
+- **Merges are line unions.** `.gitattributes` sets `events.jsonl merge=union`, so concurrent
+  appends from two machines merge without conflicts. File order is authoritative when folding, so
+  where both machines changed the same item, the line that lands later wins. Run `waid doctor
+  --json` after a merge that brought in lines and report any `log.problems`.
+- **A conflict anywhere else** (`config.json`, `.gitattributes`) or a failed push is not yours to
+  resolve. Stop and show the user the git output.
+- **Sessions do not sync.** `session` ids point at the local Claude transcripts, so `waid
+  transcript` and the session side of `today` and `week` only see this machine's sessions. Say so
+  when a review would otherwise read as a complete week.
+- Outside the three flows, after any other `waid` write the user asked for, offer to push rather
+  than leaving the log unsynced.
 
 ## Conventions
 

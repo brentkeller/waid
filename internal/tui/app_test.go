@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -280,13 +281,16 @@ func goldenChrome(t *testing.T, width int) {
 // The window title names the live tab, so a `waid ui` window is identifiable from a terminal's tab
 // strip without switching to it.
 func TestSwitchingTabsRetitlesTheWindow(t *testing.T) {
-	_, cmd := press(t, New(Options{}), "2")
+	_, cmd := press(t, offline(New(Options{}), detect.Result{}), "2")
 
-	if cmd == nil {
-		t.Fatal("switching tabs set no window title")
+	titles := []string{}
+	for _, msg := range messages(cmd) {
+		if _, ok := msg.(scanLoadedMsg); !ok {
+			titles = append(titles, fmt.Sprint(msg))
+		}
 	}
-	if got, want := fmt.Sprint(cmd()), "waid · Repos"; got != want {
-		t.Errorf("window title = %q, want %q", got, want)
+	if !slices.Contains(titles, "waid · Repos") {
+		t.Errorf("switching tabs set the titles %q, want one of them %q", titles, "waid · Repos")
 	}
 }
 

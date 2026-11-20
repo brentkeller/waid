@@ -222,14 +222,12 @@ type Model struct {
 	clock func() time.Time
 }
 
-// New builds the root model with the first detection pass already claimed, so the tab bar is turning
-// from the moment the program starts rather than from the moment the pass is issued.
+// New builds the root model. Detection is not started here: it reaches git and the network, so the
+// first pass waits until the Repos tab is first shown.
 func New(opts Options) Model {
 	m := Model{opts: opts, theme: NewTheme(), clock: time.Now}
 	m.loops.load = loopsLoader(opts)
 	m.scan.load = scanLoader(opts)
-	m.scan.loading = true
-	m.progress = m.spinnerText()
 	m.review.load = reviewLoader(opts)
 	m.review.readTurns = readTranscript
 	return m
@@ -241,9 +239,6 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{tea.SetWindowTitle(m.windowTitle())}
 	if m.loops.load != nil {
 		cmds = append(cmds, m.loops.load)
-	}
-	if m.scan.load != nil {
-		cmds = append(cmds, m.scan.load, spinnerTick())
 	}
 	if m.review.load != nil {
 		// The first history read is incremental: it re-parses the transcripts written since the last sync,
@@ -364,7 +359,15 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.tab != was {
-		return m, tea.SetWindowTitle(m.windowTitle())
+		title := tea.SetWindowTitle(m.windowTitle())
+		// The first visit to Repos starts the first detection pass; later visits show what it found
+		// until `r` asks for another.
+		if m.tab == tabScan && !m.scan.requested {
+			var scan tea.Cmd
+			m, scan = m.refreshScan()
+			return m, tea.Batch(title, scan)
+		}
+		return m, title
 	}
 	return m, nil
 }

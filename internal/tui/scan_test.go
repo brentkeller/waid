@@ -228,18 +228,44 @@ func TestRefreshIssuesAScan(t *testing.T) {
 	}
 }
 
-// The app loads the signals as it starts rather than waiting to be asked (§6).
-func TestInitLoadsTheSignals(t *testing.T) {
-	m := offline(New(Options{}), scanFixture())
-
-	found := false
-	for _, msg := range messages(m.Init()) {
+// carriesScan reports whether a command, run, delivers a detection pass.
+func carriesScan(cmd tea.Cmd) bool {
+	for _, msg := range messages(cmd) {
 		if _, ok := msg.(scanLoadedMsg); ok {
-			found = true
+			return true
 		}
 	}
-	if !found {
-		t.Error("Init produced no scanLoadedMsg, want the first pass started")
+	return false
+}
+
+// Detection reaches git and the network, so starting the app does not run it.
+func TestInitDoesNotLoadTheSignals(t *testing.T) {
+	m := offline(New(Options{}), scanFixture())
+
+	if carriesScan(m.Init()) {
+		t.Error("Init produced a scanLoadedMsg, want detection left until Repos is shown")
+	}
+	if m.scan.loading || m.progress != "" {
+		t.Errorf("a new model is loading=%v with progress %q, want nothing in flight", m.scan.loading, m.progress)
+	}
+}
+
+// The first visit to Repos starts a pass; coming back to it later does not start another.
+func TestFirstVisitToReposLoadsTheSignalsOnce(t *testing.T) {
+	m := offline(chrome(t, 140), scanFixture())
+
+	visited, cmd := press(t, m, "2")
+	if !visited.scan.loading || !carriesScan(cmd) {
+		t.Fatal("the first visit to Repos started no pass")
+	}
+	if view := plain(visited.View()); !strings.Contains(view, "scanning…") {
+		t.Errorf("the first pass in flight does not say so in the list:\n%s", view)
+	}
+
+	next, _ := visited.Update(scanLoadedMsg{result: scanFixture(), at: scannedAt})
+	back, cmd := press(t, next.(Model), "1", "2")
+	if back.scan.loading || carriesScan(cmd) {
+		t.Error("a second visit to Repos started another pass, want only r to refresh")
 	}
 }
 

@@ -79,6 +79,10 @@ type scanModel struct {
 	// hangs off the root model, since the history sync turns the same spinner.
 	loading bool
 
+	// requested is whether any pass has been started this session, which keeps a revisit to the tab
+	// from starting another.
+	requested bool
+
 	// failure is why the last pass did not land, standing until one does. The result above it is
 	// whatever was last read successfully.
 	failure string
@@ -123,7 +127,7 @@ func (m Model) refreshScan() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.scan.loading = true
+	m.scan.loading, m.scan.requested = true, true
 	m.progress = m.spinnerText()
 	return m, tea.Batch(m.scan.load, spinnerTick())
 }
@@ -487,7 +491,11 @@ func (m Model) scanBody(width, height int) string {
 	body := []string{m.scanHeader(width), m.theme.Divider.Render(strings.Repeat("─", max(width, 0)))}
 
 	tree := m.scanTree(width)
-	list := []string{m.theme.Dim.Render("  " + tabEmpty[tabScan])}
+	empty := tabEmpty[tabScan]
+	if m.scan.loading && m.scan.loadedAt.IsZero() {
+		empty = "scanning…"
+	}
+	list := []string{m.theme.Dim.Render("  " + empty)}
 	if tree.Len() > 0 {
 		list = strings.Split(tree.View(width, m.theme), "\n")
 	}
